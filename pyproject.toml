@@ -1,0 +1,4 @@
+[project]
+name = "study_companion"
+version = "0.1.0"
+dependencies = []
