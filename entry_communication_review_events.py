@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from .entry_common import (
     Any,
-    asyncio,
     StudyEvent,
     StudyEventBus,
+    asyncio,
 )
 
 

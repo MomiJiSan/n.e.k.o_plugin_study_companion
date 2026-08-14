@@ -3,23 +3,22 @@ from __future__ import annotations
 import uuid
 
 from .entry_common import (
+    LLM_OPERATION_QUESTION_GENERATE,
     Any,
-    asyncio,
     Err,
     Ok,
     SdkError,
     TutorReply,
     _entry_exception_error,
     _validate_optional_vision_image_payload,
+    asyncio,
     plugin_entry,
     time,
     tr,
     ui,
-    LLM_OPERATION_QUESTION_GENERATE,
 )
 from .models import public_current_question_payload
 from .practice_scope import filter_question_params_to_scope, ordered_scope_topics
-
 
 IMAGE_ONLY_QUESTION_PROMPT_EN = "Generate a study question from the pasted image."
 IMAGE_ONLY_QUESTION_PROMPT_ZH_CN = "请根据这张图片生成一道学习题。"

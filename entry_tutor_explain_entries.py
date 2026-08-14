@@ -10,26 +10,25 @@ from ._solution_structure import (
     parse_solution_structure,
     render_solution_structure,
 )
-from .tutor_llm_agent_concept_explain import repair_solution_structure
 from .entry_common import (
+    LLM_OPERATION_CONCEPT_EXPLAIN,
+    MODE_COMPANION,
+    MODE_CONCEPT_EXPLAIN,
     Any,
     Err,
     Ok,
     SdkError,
     _entry_exception_error,
     _normalize_submitted_image_payload,
-    _validate_optional_vision_image_payload,
     _plugin_lock,
+    _validate_optional_vision_image_payload,
     build_tutor_payload,
+    handle_user_intent,
     plugin_entry,
     tr,
     ui,
-    LLM_OPERATION_CONCEPT_EXPLAIN,
-    MODE_COMPANION,
-    MODE_CONCEPT_EXPLAIN,
-    handle_user_intent,
 )
-
+from .tutor_llm_agent_concept_explain import repair_solution_structure
 
 IMAGE_ONLY_EXPLAIN_PROMPT_EN = (
     "First identify the problem in the image, then provide a concise, reproducible "

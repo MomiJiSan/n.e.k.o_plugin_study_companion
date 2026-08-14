@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
-import asyncio
 
 from .constants import LLM_OPERATION_DOCUMENT_ANALYZE
 from .document_analysis import (
@@ -12,7 +12,6 @@ from .document_analysis import (
 )
 from .models import TutorReply, utc_now_iso
 from .tutor_llm_agent_common import SdkError, diagnostic_code_for_exception
-
 
 _DOCUMENT_FALLBACKS = {
     "en": "Document analysis failed. Please try again later.",

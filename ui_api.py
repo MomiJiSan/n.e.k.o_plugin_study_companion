@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-
 STUDY_PANEL_SURFACE_ID = "study-panel"
 
 CORE_EDGE_RELATIONS = {"prerequisite", "procedure_step", "confusable"}

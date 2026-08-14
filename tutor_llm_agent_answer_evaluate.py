@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from .tutor_llm_agent_common import (
-    Any,
+    _ANSWER_VERDICTS,
     LLM_OPERATION_ANSWER_EVALUATE,
     MODE_COMPANION,
-    normalize_mode,
+    Any,
     TutorReply,
-    _ANSWER_VERDICTS,
     _as_list,
     _as_str,
     _clamp_int,
+    normalize_mode,
 )
 
 

@@ -11,18 +11,17 @@ from .constants import (
     LLM_OPERATION_DOCUMENT_MERGE,
 )
 from .document_analysis import (
-    ValidatedDocument,
     _ANALYSIS_STRUCTURES,
     _LOCALE_OUTPUT_RULES,
+    ValidatedDocument,
     contains_full_document_source,
 )
 from .document_chunking import DocumentChunk
-from .tutor_llm_agent_document import (
-    _DocumentModelResult,
-    _call_document_model_result,
-)
 from .tutor_llm_agent_common import SdkError, diagnostic_code_for_exception
-
+from .tutor_llm_agent_document import (
+    _call_document_model_result,
+    _DocumentModelResult,
+)
 
 DOCUMENT_CHUNK_OUTPUT_MAX_TOKENS = 1_200
 DOCUMENT_MERGE_INPUT_MAX_TOKENS = 24_000

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
 import math
+from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
 from .models import PracticeScopeV1, utc_now_iso
-
 
 PRACTICE_SCOPE_SCHEMA_VERSION = 1
 PRACTICE_SCOPE_MODES = frozenset({"explicit_scope", "explicit_topic"})

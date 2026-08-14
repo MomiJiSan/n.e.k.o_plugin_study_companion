@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 DECK_TYPES = {"word", "passage", "formula", "custom"}
 ITEM_TYPES = {"word", "sentence", "paragraph", "cloze", "custom"}
 _SQLITE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

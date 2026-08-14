@@ -3,11 +3,11 @@ from __future__ import annotations
 import re
 
 from .store_common import (
-    json,
-    sqlite3,
-    ensure_memory_schema,
     STORE_CONFIG,
     STORE_STATE,
+    ensure_memory_schema,
+    json,
+    sqlite3,
 )
 
 _SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

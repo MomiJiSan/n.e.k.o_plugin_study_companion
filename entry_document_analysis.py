@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .entry_common import asyncio, Err, Ok, SdkError, plugin_entry, tr, ui
 from .constants import LLM_OPERATION_DOCUMENT_ANALYZE
 from .document_analysis import (
     DOCUMENT_ANALYSIS_KINDS,
@@ -9,6 +8,7 @@ from .document_analysis import (
     validate_document,
 )
 from .document_chunking import DOCUMENT_DIRECT_MAX_TOKENS
+from .entry_common import Err, Ok, SdkError, asyncio, plugin_entry, tr, ui
 
 
 class _DocumentAnalysisEntriesMixin:
