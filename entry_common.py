@@ -9,16 +9,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import math
+import time
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime
-import math
 from pathlib import Path
 from types import SimpleNamespace
-import time
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from plugin.plugins._shared.rapidocr import rapidocr_support
 from plugin.sdk.plugin import (
     Err,
     NekoPluginBase,
@@ -30,7 +31,11 @@ from plugin.sdk.plugin import (
     tr,
     ui,
 )
+from plugin.server.routes._install_task_store import update_install_task_state
 
+from . import tesseract_support
+from ._event_bus import StudyEvent, StudyEventBus
+from .checkin_manager import CheckinManager
 from .constants import (
     LLM_OPERATION_ANSWER_EVALUATE,
     LLM_OPERATION_CONCEPT_EXPLAIN,
@@ -42,10 +47,16 @@ from .constants import (
     MODE_TEACHING,
 )
 from .doc_exporter import DocExporter, normalize_format
-from .checkin_manager import CheckinManager
-from ._event_bus import StudyEvent, StudyEventBus
-from .pomodoro_timer import PomodoroTimer
-from .screen_classifier import classify_screen_from_ocr
+from .knowledge_contribution import PublicGraphContributionBuilder
+from .knowledge_tracker import KnowledgeTracker
+from .memory_deck_store import MemoryDeckStore, MemoryItemNotFoundError
+from .memory_habit_bridge import MemoryHabitBridge
+from .mode_manager import (
+    ModeManager,
+    build_transition_phrase,
+    handle_user_intent,
+    normalize_mode,
+)
 from .models import (
     MODE_CONCEPT_EXPLAIN,
     STATUS_ERROR,
@@ -57,6 +68,8 @@ from .models import (
     build_config,
     utc_now_iso,
 )
+from .pomodoro_timer import PomodoroTimer
+from .screen_classifier import classify_screen_from_ocr
 from .service import (
     build_dependency_status,
     build_explain_payload,
@@ -64,30 +77,19 @@ from .service import (
     build_status_payload,
     build_tutor_payload,
 )
-from .mode_manager import (
-    ModeManager,
-    build_transition_phrase,
-    handle_user_intent,
-    normalize_mode,
-)
-from .knowledge_contribution import PublicGraphContributionBuilder
-from .knowledge_tracker import KnowledgeTracker
-from .memory_deck_store import MemoryDeckStore, MemoryItemNotFoundError
-from .memory_habit_bridge import MemoryHabitBridge
 from .state import build_initial_state
 from .store import StudyStore
 from .study_habit_store import StudyHabitStore
 from .study_ocr_pipeline import StudyOcrPipeline
 from .supervision import SupervisionController
-from .tutor_llm_agent import TutorLLMAgent
-from .tutor_llm_agent import diagnostic_code_for_exception
-from .ui_api import build_open_ui_payload
-from .ui_api import build_contribution_settings_payload, build_knowledge_map_payload
-from .ui_api import build_habit_dashboard_payload, build_pomodoro_status_payload
-from . import tesseract_support
-from plugin.plugins._shared.rapidocr import rapidocr_support
-from plugin.server.routes._install_task_store import update_install_task_state
-
+from .tutor_llm_agent import TutorLLMAgent, diagnostic_code_for_exception
+from .ui_api import (
+    build_contribution_settings_payload,
+    build_habit_dashboard_payload,
+    build_knowledge_map_payload,
+    build_open_ui_payload,
+    build_pomodoro_status_payload,
+)
 
 _MASTERY_THRESHOLDS = (0.3, 0.5, 0.7, 0.85)
 _MAX_SUBMITTED_IMAGE_BASE64_LENGTH = 10 * 1024 * 1024

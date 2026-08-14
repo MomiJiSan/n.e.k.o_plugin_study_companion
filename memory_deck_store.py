@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import csv
 import io
 import json
@@ -20,9 +21,12 @@ from .memory_rows import (
     memory_counts,
     recitation_from_row,
     review_from_row,
-    safe_int,
 )
-from .memory_schema import ensure_memory_schema, normalize_deck_type, normalize_item_type
+from .memory_rows import (
+    safe_int as safe_int,
+)
+from .memory_schema import ensure_memory_schema as ensure_memory_schema
+from .memory_schema import normalize_deck_type, normalize_item_type
 from .memory_text import build_cloze_prompt, diff_recitation, normalize_tags, split_passage_text
 from .models import json_copy
 
@@ -460,8 +464,10 @@ class MemoryDeckStore:
                 self.store._require_conn(), deck_id=deck_id
             )
         item_kind = str(item_type or "").strip().lower()
-        if item_kind and item_kind not in {"word", "sentence", "paragraph", "cloze", "custom"}: raise ValueError("unsupported memory item type")
-        if item_kind: rows = [row for row in rows if str(row["item_type"] or "") == item_kind]
+        if item_kind and item_kind not in {"word", "sentence", "paragraph", "cloze", "custom"}:
+            raise ValueError("unsupported memory item type")
+        if item_kind:
+            rows = [row for row in rows if str(row["item_type"] or "") == item_kind]
         due = self.fsrs.get_due_reviews(
             [self.store._json_loads(row["card_data"], {}) for row in rows]
         )

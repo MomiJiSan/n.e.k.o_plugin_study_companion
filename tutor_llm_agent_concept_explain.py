@@ -2,28 +2,27 @@ from __future__ import annotations
 
 import time
 
-from .tutor_llm_agent_common import (
-    Any,
-    asyncio,
-    STUDY_FALLBACK_EXPLANATION_DEFAULT,
-    SdkError,
-    MODE_COMPANION,
-    MODE_TEACHING,
-    build_concept_explain_messages,
-    build_transition_phrase,
-    normalize_mode,
-    MODE_CONCEPT_EXPLAIN,
-    TutorReply,
-    utc_now_iso,
-    diagnostic_code_for_exception,
-    _bounded_prompt_text,
-)
 from ._solution_structure import (
     SolutionStructure,
     parse_solution_structure,
     structure_from_mapping,
 )
-
+from .tutor_llm_agent_common import (
+    MODE_COMPANION,
+    MODE_CONCEPT_EXPLAIN,
+    MODE_TEACHING,
+    STUDY_FALLBACK_EXPLANATION_DEFAULT,
+    Any,
+    SdkError,
+    TutorReply,
+    _bounded_prompt_text,
+    asyncio,
+    build_concept_explain_messages,
+    build_transition_phrase,
+    diagnostic_code_for_exception,
+    normalize_mode,
+    utc_now_iso,
+)
 
 VISION_FALLBACK_EXPLANATION_EN = (
     "I could not reach the configured vision-capable model, so I cannot "

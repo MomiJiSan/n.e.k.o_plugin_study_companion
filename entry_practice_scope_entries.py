@@ -17,7 +17,6 @@ from .entry_common import (
 from .models import PracticeScopeV1
 from .practice_scope import PracticeScopeError, build_practice_scope
 
-
 _MAX_PRACTICE_SCOPE_TOPICS = 5000
 _PRACTICE_SCOPE_INPUT_PROPERTIES = {
     "schema_version": {"type": "integer", "default": 1},

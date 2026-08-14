@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
-import math
 from typing import Any, Iterable
 
 

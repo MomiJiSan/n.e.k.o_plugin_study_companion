@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import sqlite3
+from contextlib import contextmanager
 from typing import Any, Iterator
-
 
 _PURGE_TABLES = (
     "memory_habit_progress",

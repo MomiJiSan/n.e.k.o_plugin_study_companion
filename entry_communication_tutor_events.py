@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from ._general_narration import prepare_general_narration_content
 from .entry_common import (
     Any,
-    asyncio,
     StudyEvent,
-    _event_ratio,
     _event_nonnegative_float,
+    _event_ratio,
+    asyncio,
 )
-from ._general_narration import prepare_general_narration_content
 
 
 class _CommunicationTutorEventsMixin:

@@ -5,16 +5,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 import io
 import ipaddress
 import os
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 48911

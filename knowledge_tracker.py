@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import logging
 import math
 import re
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .fsrs_bridge import (
@@ -18,14 +18,15 @@ from .fsrs_bridge import (
     retrievability,
 )
 from .knowledge_quality import (
-    KnowledgeCandidateStatus,
+    KnowledgeCandidateStatus as KnowledgeCandidateStatus,
+)
+from .knowledge_quality import (
     KnowledgeCandidateType,
     KnowledgeEvidenceType,
     KnowledgeQualityStore,
 )
 from .memory_text import normalize_tags
 from .models import json_copy
-
 
 _LOGGER = logging.getLogger(__name__)
 

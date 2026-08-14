@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 SOLUTION_NARRATION_MAX_CHARS = 1800
 
 _TARGET_SECTIONS = ("analysis", "answer", "transfer")

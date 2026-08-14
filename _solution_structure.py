@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-
+from dataclasses import dataclass
 
 _SECTION_ORDER = ("analysis", "process", "answer", "transfer")
 _SECTION_ALIASES = {

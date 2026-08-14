@@ -7,7 +7,6 @@ from typing import Any
 from .knowledge_quality import KnowledgeCandidateType, KnowledgeEvidenceType
 from .models import StudyConfig, json_copy
 
-
 _SENSITIVE_KEY_RE = re.compile(
     r"(ocr|raw|reply|feedback|expected_answer|user_answer|answer_text|conversation|transcript|source_text|input_text)",
     re.IGNORECASE,

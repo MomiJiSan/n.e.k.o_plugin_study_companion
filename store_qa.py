@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from .store_common import (
-    Any,
-    uuid,
     _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
+    Any,
     safe_float,
     safe_int,
+    uuid,
 )
 
 

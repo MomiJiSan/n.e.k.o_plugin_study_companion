@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 import inspect
 import logging
 import secrets
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
-
 
 DOCUMENT_JOB_TIMEOUT_SECONDS = 20 * 60.0
 DOCUMENT_JOB_MERGE_RESERVED_SECONDS = 2 * 60.0

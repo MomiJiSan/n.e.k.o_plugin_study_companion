@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from .constants import LLM_OPERATION_DOCUMENT_ANALYZE
 from ._general_narration import prepare_general_narration_content
+from .constants import LLM_OPERATION_DOCUMENT_ANALYZE
 from .document_analysis import DocumentValidationError, validate_document
 from .document_analysis_jobs import DocumentAnalysisJobError, DocumentAnalysisJobManager
 from .document_chunking import (
@@ -11,14 +11,13 @@ from .document_chunking import (
     DocumentChunkingError,
     split_document,
 )
-from .entry_common import asyncio, Ok, SdkError, StudyEvent, plugin_entry, tr, ui
+from .entry_common import Ok, SdkError, StudyEvent, asyncio, plugin_entry, tr, ui
 from .models import TutorReply, utc_now_iso
 from .tutor_llm_agent_document import _DocumentModelResult
 from .tutor_llm_agent_document_chunked import (
     _analyze_document_chunk_result,
     _merge_document_chunks_result,
 )
-
 
 _START_ENTRY_TIMEOUT_SECONDS = 30.0
 _STATUS_ENTRY_TIMEOUT_SECONDS = 10.0

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from .store_common import (
-    Any,
     _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
+    Any,
 )
 
 

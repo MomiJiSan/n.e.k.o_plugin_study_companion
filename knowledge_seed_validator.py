@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-
 REQUIRED_SCALAR_FIELDS = ("id", "name", "subject", "stage", "chapter")
 REQUIRED_LIST_FIELDS = (
     "prerequisites",

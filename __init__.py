@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import base64
+import json
+import threading
+import time
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
-import json
-import math
 from pathlib import Path
-import threading
 from types import SimpleNamespace
-import time
 from typing import Any
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -25,56 +23,117 @@ from plugin.sdk.plugin import (
     get_os_activity_snapshot,
     lifecycle,
     neko_plugin,
-    plugin_entry,
-    tr,
 )
 
-from .constants import (
-    LLM_OPERATION_ANSWER_EVALUATE,
-    LLM_OPERATION_CONCEPT_EXPLAIN,
-    LLM_OPERATION_KNOWLEDGE_TRACK,
-    LLM_OPERATION_QUESTION_GENERATE,
-    LLM_OPERATION_SUMMARIZE_SESSION,
-    MODE_COMPANION,
-    MODE_INTERACTIVE,
-    MODE_TEACHING,
-)
-from .doc_exporter import DocExporter, normalize_format
+from ._event_bus import StudyEvent, StudyEventBus
 from .awareness_buffer import ActivityBuffer
 from .checkin_manager import CheckinManager
-from ._event_bus import StudyEvent, StudyEventBus
-from .pomodoro_timer import PomodoroTimer
-from .screen_classifier import classify_app_from_title, classify_screen_from_ocr
+from .constants import (
+    LLM_OPERATION_ANSWER_EVALUATE as LLM_OPERATION_ANSWER_EVALUATE,
+)
+from .constants import (
+    LLM_OPERATION_CONCEPT_EXPLAIN as LLM_OPERATION_CONCEPT_EXPLAIN,
+)
+from .constants import (
+    LLM_OPERATION_KNOWLEDGE_TRACK as LLM_OPERATION_KNOWLEDGE_TRACK,
+)
+from .constants import (
+    LLM_OPERATION_QUESTION_GENERATE as LLM_OPERATION_QUESTION_GENERATE,
+)
+from .constants import (
+    LLM_OPERATION_SUMMARIZE_SESSION as LLM_OPERATION_SUMMARIZE_SESSION,
+)
+from .constants import (
+    MODE_COMPANION,
+)
+from .constants import (
+    MODE_INTERACTIVE as MODE_INTERACTIVE,
+)
+from .constants import (
+    MODE_TEACHING as MODE_TEACHING,
+)
+from .doc_exporter import DocExporter as DocExporter
+from .doc_exporter import normalize_format as normalize_format
+from .entry_checkin_entries import _CheckinEntriesMixin
+from .entry_communication_pomodoro_events import _CommunicationPomodoroEventsMixin
+from .entry_communication_review_events import _CommunicationReviewEventsMixin
+from .entry_communication_tutor_events import _CommunicationTutorEventsMixin
+from .entry_document_analysis import _DocumentAnalysisEntriesMixin
+from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
+from .entry_export_support import _ExportSupportMixin
+from .entry_goal_entries import _GoalEntriesMixin
+from .entry_knowledge_entries import _KnowledgeEntriesMixin
+from .entry_memory_card_entries import _MemoryCardEntriesMixin
+from .entry_memory_deck_entries import _MemoryDeckEntriesMixin
+from .entry_memory_import_entries import _MemoryImportEntriesMixin
+from .entry_memory_review_entries import _MemoryReviewEntriesMixin
+from .entry_mode_entries import _ModeEntriesMixin
+from .entry_neko_commands import (
+    _INTERRUPT_COMMANDS,
+    _NEKO_COMMAND_HANDLERS,
+    _QUEUE_COMMANDS,
+    _NekoCommandsMixin,
+)
+from .entry_notebook import _NotebookEntriesMixin
+from .entry_ocr_entries import _OcrEntriesMixin
+from .entry_pomodoro_entries import _PomodoroEntriesMixin
+from .entry_practice_scope_entries import _PracticeScopeEntriesMixin
+from .entry_status_entries import _StatusEntriesMixin
+from .entry_supervision_entries import _SupervisionEntriesMixin
+from .entry_tutor_answer_entries import _TutorAnswerEntriesMixin
+from .entry_tutor_context_support import _TutorContextSupportMixin
+from .entry_tutor_explain_entries import _TutorExplainEntriesMixin
+from .entry_tutor_question_entries import _TutorQuestionEntriesMixin
+from .entry_tutor_summary_entries import _TutorSummaryEntriesMixin
+from .knowledge_contribution import PublicGraphContributionBuilder as PublicGraphContributionBuilder
+from .knowledge_tracker import KnowledgeTracker
+from .memory_deck_store import MemoryDeckStore
+from .memory_deck_store import MemoryItemNotFoundError as MemoryItemNotFoundError
+from .memory_habit_bridge import MemoryHabitBridge
+from .mode_manager import (
+    ModeManager,
+    normalize_mode,
+)
+from .mode_manager import (
+    build_transition_phrase as build_transition_phrase,
+)
+from .mode_manager import (
+    handle_user_intent as handle_user_intent,
+)
 from .models import (
-    MODE_CONCEPT_EXPLAIN,
+    MODE_CONCEPT_EXPLAIN as MODE_CONCEPT_EXPLAIN,
+)
+from .models import (
     STATUS_ERROR,
     STATUS_READY,
     STATUS_STOPPED,
     ActivitySnapshot,
     ActivitySummary,
     StudyConfig,
-    StudyState,
-    TutorReply,
     build_config,
     utc_now_iso,
 )
+from .models import (
+    StudyState as StudyState,
+)
+from .models import (
+    TutorReply as TutorReply,
+)
+from .pomodoro_timer import PomodoroTimer
+from .screen_classifier import classify_app_from_title, classify_screen_from_ocr
 from .service import (
     build_dependency_status,
-    build_explain_payload,
-    build_ocr_payload,
     build_status_payload,
-    build_tutor_payload,
 )
-from .mode_manager import (
-    ModeManager,
-    build_transition_phrase,
-    handle_user_intent,
-    normalize_mode,
+from .service import (
+    build_explain_payload as build_explain_payload,
 )
-from .knowledge_contribution import PublicGraphContributionBuilder
-from .knowledge_tracker import KnowledgeTracker
-from .memory_deck_store import MemoryDeckStore, MemoryItemNotFoundError
-from .memory_habit_bridge import MemoryHabitBridge
+from .service import (
+    build_ocr_payload as build_ocr_payload,
+)
+from .service import (
+    build_tutor_payload as build_tutor_payload,
+)
 from .state import build_initial_state
 from .store import StudyStore
 from .store_notebook import NotebookStore
@@ -82,10 +141,25 @@ from .study_habit_store import StudyHabitStore
 from .study_ocr_pipeline import StudyOcrPipeline
 from .supervision import SupervisionController
 from .tutor_llm_agent import TutorLLMAgent
-from .tutor_llm_agent import diagnostic_code_for_exception
-from .ui_api import STUDY_PANEL_SURFACE_ID, build_open_ui_payload
-from .ui_api import build_contribution_settings_payload, build_knowledge_map_payload
-from .ui_api import build_habit_dashboard_payload, build_pomodoro_status_payload
+from .tutor_llm_agent import diagnostic_code_for_exception as diagnostic_code_for_exception
+from .ui_api import (
+    STUDY_PANEL_SURFACE_ID as STUDY_PANEL_SURFACE_ID,
+)
+from .ui_api import (
+    build_contribution_settings_payload as build_contribution_settings_payload,
+)
+from .ui_api import (
+    build_habit_dashboard_payload,
+)
+from .ui_api import (
+    build_knowledge_map_payload as build_knowledge_map_payload,
+)
+from .ui_api import (
+    build_open_ui_payload as build_open_ui_payload,
+)
+from .ui_api import (
+    build_pomodoro_status_payload as build_pomodoro_status_payload,
+)
 from .voice_contracts import (
     VOICE_TRANSCRIPT_EVENT_ID,
     VOICE_TRANSCRIPT_EVENT_TYPE,
@@ -94,7 +168,6 @@ from .voice_contracts import (
     voice_transcript_prime_context,
 )
 from .voice_filter import VoiceFilter, _derive_subject, build_context_for_catgirl
-
 
 _OS_CATEGORY_TO_APP_TYPE: dict[str, str] = {
     "gaming": "game",
@@ -151,39 +224,6 @@ except Exception:  # noqa: BLE001 - route registration should not block package 
 
 
 _REVIEW_DUE_INTERVAL_SECONDS = 1800.0
-
-
-from .entry_tutor_context_support import _TutorContextSupportMixin
-from .entry_communication_pomodoro_events import _CommunicationPomodoroEventsMixin
-from .entry_communication_review_events import _CommunicationReviewEventsMixin
-from .entry_communication_tutor_events import _CommunicationTutorEventsMixin
-from .entry_export_support import _ExportSupportMixin
-from .entry_status_entries import _StatusEntriesMixin
-from .entry_memory_card_entries import _MemoryCardEntriesMixin
-from .entry_memory_deck_entries import _MemoryDeckEntriesMixin
-from .entry_memory_import_entries import _MemoryImportEntriesMixin
-from .entry_memory_review_entries import _MemoryReviewEntriesMixin
-from .entry_pomodoro_entries import _PomodoroEntriesMixin
-from .entry_goal_entries import _GoalEntriesMixin
-from .entry_checkin_entries import _CheckinEntriesMixin
-from .entry_supervision_entries import _SupervisionEntriesMixin
-from .entry_knowledge_entries import _KnowledgeEntriesMixin
-from .entry_practice_scope_entries import _PracticeScopeEntriesMixin
-from .entry_mode_entries import _ModeEntriesMixin
-from .entry_tutor_explain_entries import _TutorExplainEntriesMixin
-from .entry_tutor_question_entries import _TutorQuestionEntriesMixin
-from .entry_tutor_answer_entries import _TutorAnswerEntriesMixin
-from .entry_tutor_summary_entries import _TutorSummaryEntriesMixin
-from .entry_document_analysis import _DocumentAnalysisEntriesMixin
-from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
-from .entry_ocr_entries import _OcrEntriesMixin
-from .entry_neko_commands import (
-    _INTERRUPT_COMMANDS,
-    _NEKO_COMMAND_HANDLERS,
-    _NekoCommandsMixin,
-    _QUEUE_COMMANDS,
-)
-from .entry_notebook import _NotebookEntriesMixin
 
 
 @neko_plugin
