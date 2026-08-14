@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   release:
-    uses: MomiJiSan/N.E.K.O/.github/workflows/plugin-market-release.yml@codex/study-companion-qwen-native
+    uses: Project-N-E-K-O/N.E.K.O/.github/workflows/plugin-market-release.yml@main
     with:
       plugin-id: study_companion
-      neko-repository: MomiJiSan/N.E.K.O
-      neko-ref: codex/study-companion-qwen-native
+      neko-repository: Project-N-E-K-O/N.E.K.O
+      neko-ref: main
