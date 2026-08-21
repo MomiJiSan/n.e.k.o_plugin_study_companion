@@ -5,7 +5,6 @@ from .entry_common import (
     Ok,
     StudyConfig,
     _entry_exception_error,
-    _plugin_lock,
     asyncio,
     build_open_ui_payload,
     plugin_entry,
@@ -316,6 +315,7 @@ class _StatusEntriesMixin:
             )
         )
 
+    @ui.action()
     @plugin_entry(
         id="study_get_settings_config",
         name=tr(
@@ -327,13 +327,25 @@ class _StatusEntriesMixin:
             default="Return the running study companion settings used by the static UI.",
         ),
         input_schema={"type": "object", "properties": {}},
-        llm_result_fields=["config", "communication_status"],
+        llm_result_fields=["config", "communication_status", "model_runtime"],
     )
     async def study_get_settings_config(self, **_):
+        describe_model_runtimes = getattr(
+            self._agent, "describe_model_runtimes", None
+        )
+        model_runtime = {}
+        if callable(describe_model_runtimes):
+            try:
+                model_runtime = await describe_model_runtimes()
+            except Exception as exc:
+                self.logger.warning(
+                    "study model runtime diagnostics unavailable: {}", exc
+                )
         return Ok(
             {
                 "config": _settings_config_payload(self._cfg),
                 "communication_status": _communication_status_payload(self),
+                "model_runtime": model_runtime,
             }
         )
 
@@ -426,12 +438,7 @@ class _StatusEntriesMixin:
     )
     async def study_status(self, locale: str = "", **_):
         try:
-            page_locale = str(locale or "").strip()
-            if page_locale:
-                async with _plugin_lock(self._lock):
-                    self._cfg.language = page_locale
-                    if self._agent is not None:
-                        self._agent.update_config(self._cfg)
+            del locale
             payload = await asyncio.to_thread(self._status_payload)
             return Ok(payload)
         except Exception as exc:

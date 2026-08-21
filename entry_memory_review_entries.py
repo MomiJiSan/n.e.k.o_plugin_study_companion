@@ -79,10 +79,8 @@ class _MemoryReviewEntriesMixin:
         **kwargs,
     ):
         try:
-            due_before = await asyncio.to_thread(
-                self._count_total_due_reviews
-            )
-            payload = await asyncio.to_thread(
+            target_lanlan = self._resolve_study_target_lanlan(kwargs)
+            payload, review_completed = await self._run_serialized_review_transition(
                 self._memory_deck_store.review_item,
                 item_id=item_id,
                 rating=rating,
@@ -107,22 +105,20 @@ class _MemoryReviewEntriesMixin:
                         "error": str(bridge_exc),
                     }
             try:
-                await self._emit_memory_review_answer_event(payload)
-                if due_before > 0:
-                    due_after = await asyncio.to_thread(
-                        self._count_total_due_reviews
+                await self._emit_memory_review_answer_event(
+                    payload, target_lanlan=target_lanlan
+                )
+                if review_completed:
+                    item = payload.get("item") or {}
+                    deck = await asyncio.to_thread(
+                        self._memory_deck_store.get_deck,
+                        str(item.get("deck_id") or ""),
                     )
-                    if due_after == 0:
-                        item = payload.get("item") or {}
-                        deck = await asyncio.to_thread(
-                            self._memory_deck_store.get_deck,
-                            str(item.get("deck_id") or ""),
-                        )
-                        await self._emit_review_session_completed_event(
-                            reviewed_count=1,
-                            deck_name=str((deck or {}).get("name") or ""),
-                            target_lanlan=self._resolve_study_target_lanlan(kwargs),
-                        )
+                    await self._emit_review_session_completed_event(
+                        reviewed_count=1,
+                        deck_name=str((deck or {}).get("name") or ""),
+                        target_lanlan=target_lanlan,
+                    )
             except Exception as emit_exc:
                 self.logger.warning(
                     "memory review event emission degraded: {}", emit_exc
@@ -165,8 +161,8 @@ class _MemoryReviewEntriesMixin:
         **kwargs,
     ):
         try:
-            due_before = await asyncio.to_thread(self._count_total_due_reviews)
-            payload = await asyncio.to_thread(
+            target_lanlan = self._resolve_study_target_lanlan(kwargs)
+            payload, review_completed = await self._run_serialized_review_transition(
                 self._memory_deck_store.add_recitation_attempt,
                 item_id=item_id,
                 user_input_text=user_input_text,
@@ -190,23 +186,21 @@ class _MemoryReviewEntriesMixin:
                         "error": str(bridge_exc),
                     }
             try:
-                await self._emit_recitation_answer_event(payload)
-                if due_before > 0:
-                    due_after = await asyncio.to_thread(
-                        self._count_total_due_reviews
+                await self._emit_recitation_answer_event(
+                    payload, target_lanlan=target_lanlan
+                )
+                if review_completed:
+                    review = payload.get("review") or {}
+                    item = review.get("item") or {}
+                    deck = await asyncio.to_thread(
+                        self._memory_deck_store.get_deck,
+                        str(item.get("deck_id") or ""),
                     )
-                    if due_after == 0:
-                        review = payload.get("review") or {}
-                        item = review.get("item") or {}
-                        deck = await asyncio.to_thread(
-                            self._memory_deck_store.get_deck,
-                            str(item.get("deck_id") or ""),
-                        )
-                        await self._emit_review_session_completed_event(
-                            reviewed_count=1,
-                            deck_name=str((deck or {}).get("name") or ""),
-                            target_lanlan=self._resolve_study_target_lanlan(kwargs),
-                        )
+                    await self._emit_review_session_completed_event(
+                        reviewed_count=1,
+                        deck_name=str((deck or {}).get("name") or ""),
+                        target_lanlan=target_lanlan,
+                    )
             except Exception as emit_exc:
                 self.logger.warning(
                     "memory recitation event emission degraded: {}", emit_exc

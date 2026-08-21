@@ -247,6 +247,40 @@ export const BRAND_CSS = `
     overflow-wrap: anywhere;
   }
 
+  .study-panel__model-runtime {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    gap: 10px;
+    align-items: stretch;
+    padding: 10px;
+    border: 1px solid rgba(47, 125, 87, 0.14);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.68);
+  }
+
+  .study-panel__model-runtime > div:not(.study-panel__model-runtime-actions) {
+    display: grid;
+    gap: 3px;
+  }
+
+  .study-panel__model-runtime span,
+  .study-panel__model-runtime small {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  .study-panel__model-runtime-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .study-panel__model-runtime a {
+    color: var(--brand-strong);
+    font-weight: 700;
+  }
+
   .study-panel textarea,
   .study-panel pre,
   .study-panel__math-reply {
@@ -786,14 +820,14 @@ export const BRAND_CSS = `
       linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 245, 0.90));
   }
 
-  .surface-shell[data-surface="pomodoro-panel"][data-mode="break_short"] {
+  .surface-shell[data-surface="pomodoro-panel"][data-mode="short_break"] {
     --pomodoro-color: var(--pomodoro-break-short);
     --pomodoro-color-strong: #166534;
     --pomodoro-color-soft: rgba(34, 197, 94, 0.10);
     border-left-color: rgba(34, 197, 94, 0.62);
   }
 
-  .surface-shell[data-surface="pomodoro-panel"][data-mode="break_long"] {
+  .surface-shell[data-surface="pomodoro-panel"][data-mode="long_break"] {
     --pomodoro-color: var(--pomodoro-break-long);
     --pomodoro-color-strong: #1d4f91;
     --pomodoro-color-soft: rgba(59, 130, 246, 0.10);
@@ -902,13 +936,13 @@ export const BRAND_CSS = `
 
   .surface-shell[data-surface="pomodoro-panel"][data-state="paused"] .pomodoro-ring__value { opacity: 0.48; stroke-dasharray: 3 2; }
 
-  .pomodoro-ring[data-mode="break_short"] {
+  .pomodoro-ring[data-mode="short_break"] {
     --pomodoro-color: var(--pomodoro-break-short);
     --pomodoro-color-strong: #166534;
     --pomodoro-color-soft: rgba(34, 197, 94, 0.10);
   }
 
-  .pomodoro-ring[data-mode="break_long"] {
+  .pomodoro-ring[data-mode="long_break"] {
     --pomodoro-color: var(--pomodoro-break-long);
     --pomodoro-color-strong: #1d4f91;
     --pomodoro-color-soft: rgba(59, 130, 246, 0.10);
@@ -1318,7 +1352,7 @@ export async function callPlugin<T = Record<string, unknown>>(
 
   let timeoutId = 0;
   let abortHandler: (() => void) | undefined;
-  const pending: Array<Promise<unknown>> = [api.call(entryId, args, { timeoutMs })];
+  const pending: Array<Promise<unknown>> = [api.call(entryId, args, { timeoutMs, signal })];
   if (timeoutMs > 0) {
     pending.push(new Promise((_, reject) => {
       timeoutId = window.setTimeout(() => reject(new Error('Plugin call timed out')), timeoutMs);
@@ -1389,8 +1423,8 @@ export function pomodoroModeLabel(props: PluginSurfaceProps, value: unknown): st
   const normalized = String(value || 'focus').trim().toLowerCase();
   const labels: Record<string, [string, string]> = {
     focus: ['ui.pomodoro.mode.focus', 'Focus'],
-    break_short: ['ui.pomodoro.mode.break_short', 'Short break'],
-    break_long: ['ui.pomodoro.mode.break_long', 'Long break'],
+    short_break: ['ui.pomodoro.mode.break_short', 'Short break'],
+    long_break: ['ui.pomodoro.mode.break_long', 'Long break'],
   };
   const pair = labels[normalized];
   return pair ? text(props, pair[0], pair[1]) : normalized;

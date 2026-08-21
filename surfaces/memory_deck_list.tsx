@@ -1,6 +1,6 @@
 import { useEffect, useState } from '@neko/plugin-ui';
 import type { PluginSurfaceProps } from '@neko/plugin-ui';
-import { callPlugin, errorMessage, text } from './memory_shared';
+import { callPlugin, errorMessage, listAllMemoryDecks, text } from './memory_shared';
 import { deckTypeLabel, ensureBrandCSS, memoryItemTypeLabel, postStudySurfaceMessage, STUDY_SURFACE_MESSAGE_TYPES } from './study_surface_utils';
 import {
   deckGoalSavedMessage,
@@ -24,6 +24,12 @@ type MemoryItem = {
   prompt?: string;
   answer?: string;
   item_type?: string;
+};
+
+type MemoryItemPage = {
+  items?: MemoryItem[];
+  has_more?: boolean;
+  next_offset?: number | null;
 };
 
 function formatText(
@@ -54,10 +60,11 @@ export default function MemoryDeckList(props: PluginSurfaceProps) {
   const [busy, setBusy] = useState(false);
   const [expandedDeckId, setExpandedDeckId] = useState('');
   const [itemsByDeck, setItemsByDeck] = useState<Record<string, MemoryItem[]>>({});
+  const [hasMoreByDeck, setHasMoreByDeck] = useState<Record<string, boolean>>({});
+  const [nextOffsetByDeck, setNextOffsetByDeck] = useState<Record<string, number>>({});
 
   async function refresh(signal?: AbortSignal) {
-    const payload = await callPlugin<{ decks?: MemoryDeck[] }>(props.api, 'study_memory_list_decks', { limit: 100 }, signal);
-    const nextDecks = Array.isArray(payload.decks) ? payload.decks : [];
+    const nextDecks = await listAllMemoryDecks<MemoryDeck>(props.api, signal);
     setDecks(nextDecks);
     postStudySurfaceMessage({
       type: STUDY_SURFACE_MESSAGE_TYPES.memoryDeckUpdated,
@@ -98,29 +105,39 @@ export default function MemoryDeckList(props: PluginSurfaceProps) {
     }
   }
 
-  async function toggleDeckItems(deckId: string) {
-    if (expandedDeckId === deckId) {
-      setExpandedDeckId('');
-      return;
-    }
-    setExpandedDeckId(deckId);
-    if (itemsByDeck[deckId]) return;
+  async function loadDeckItems(deckId: string, append = false) {
     setBusy(true);
     try {
-      const payload = await callPlugin<{ items?: MemoryItem[] }>(
+      const offset = append ? (nextOffsetByDeck[deckId] || 0) : 0;
+      const payload = await callPlugin<MemoryItemPage>(
         props.api,
         'study_memory_list_deck_items',
-        { deck_id: deckId, limit: 500 },
+        { deck_id: deckId, limit: 500, offset },
       );
+      const pageItems = Array.isArray(payload.items) ? payload.items : [];
       setItemsByDeck((current) => ({
         ...current,
-        [deckId]: Array.isArray(payload.items) ? payload.items : [],
+        [deckId]: append ? [...(current[deckId] || []), ...pageItems] : pageItems,
+      }));
+      setHasMoreByDeck((current) => ({ ...current, [deckId]: payload.has_more === true }));
+      setNextOffsetByDeck((current) => ({
+        ...current,
+        [deckId]: Number(payload.next_offset) || offset + pageItems.length,
       }));
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function toggleDeckItems(deckId: string) {
+    if (expandedDeckId === deckId) {
+      setExpandedDeckId('');
+      return;
+    }
+    setExpandedDeckId(deckId);
+    await loadDeckItems(deckId);
   }
 
   async function saveDeckGoal(deckId: string) {
@@ -232,6 +249,11 @@ export default function MemoryDeckList(props: PluginSurfaceProps) {
                 )) : (
                   <p className="study-panel__empty">{text(props, 'ui.memory.empty_deck', 'No cards in this deck')}</p>
                 )}
+                {hasMoreByDeck[deck.id] ? (
+                  <button type="button" disabled={busy} onClick={() => loadDeckItems(deck.id, true)}>
+                    {text(props, 'ui.button.load_more_cards', 'Load more cards')}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

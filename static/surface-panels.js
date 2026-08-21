@@ -134,8 +134,8 @@
     const key = String(value || 'focus');
     const labels = {
       focus: ['ui.pomodoro.mode.focus', 'Focus'],
-      break_short: ['ui.pomodoro.mode.break_short', 'Short break'],
-      break_long: ['ui.pomodoro.mode.break_long', 'Long break'],
+      short_break: ['ui.pomodoro.mode.break_short', 'Short break'],
+      long_break: ['ui.pomodoro.mode.break_long', 'Long break'],
     };
     const pair = labels[key] || [null, key];
     return pair[0] ? t(ctx, pair[0], pair[1]) : pair[1];
@@ -197,6 +197,40 @@
 
   function safeList(payload, key) {
     return Array.isArray(payload?.[key]) ? payload[key] : [];
+  }
+
+  async function listAllMemoryDecks(ctx) {
+    const decks = [];
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const payload = await ctx.callPlugin('study_memory_list_decks', { limit: 100, offset });
+      decks.push(...safeList(payload, 'decks'));
+      hasMore = payload?.has_more === true;
+      if (!hasMore) break;
+      const nextOffset = Number(payload?.next_offset);
+      if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) {
+        throw new Error('Invalid memory deck continuation offset');
+      }
+      offset = nextOffset;
+    }
+    return decks;
+  }
+
+  let initialMemoryDecks = null;
+
+  function loadDecks(ctx, readyTarget) {
+    if (!initialMemoryDecks) {
+      initialMemoryDecks = listAllMemoryDecks(ctx).catch((error) => {
+        initialMemoryDecks = null;
+        throw error;
+      });
+    }
+    const pending = initialMemoryDecks;
+    return pending.finally(() => {
+      if (initialMemoryDecks === pending) initialMemoryDecks = null;
+      if (readyTarget) readyTarget.disabled = false;
+    });
   }
 
   function valid(root, token, allowDetached = false) {
@@ -336,7 +370,7 @@
       refreshing = true;
       try {
         status = await ctx.callPlugin('study_pomodoro_status');
-        if (!durationInitialized) {
+        if (!durationInitialized || status.config?.allow_custom_duration === false) {
           const configuredMinutes = Number(status.config?.focus_minutes);
           focusMinutes = String(Number.isFinite(configuredMinutes) && configuredMinutes >= 1 && configuredMinutes <= 120 ? Math.round(configuredMinutes) : 25);
           durationInitialized = true;
@@ -372,10 +406,14 @@
       const isPaused = stateKey === 'paused';
       const isBreak = stateKey === 'short_break' || stateKey === 'long_break';
       const isRunning = isFocusing || isPaused || isBreak;
-      const selectedMinutes = Math.min(120, Math.max(1, Math.round(Number(focusMinutes) || 25)));
-      const modeMinutes = modeKey === 'break_short'
+      const allowCustomDuration = status.config?.allow_custom_duration !== false;
+      const configuredFocusMinutes = Math.min(120, Math.max(1, Math.round(Number(status.config?.focus_minutes) || 25)));
+      const selectedMinutes = allowCustomDuration
+        ? Math.min(120, Math.max(1, Math.round(Number(focusMinutes) || 25)))
+        : configuredFocusMinutes;
+      const modeMinutes = modeKey === 'short_break'
         ? Number(status.config?.short_break_minutes || 5)
-        : modeKey === 'break_long'
+        : modeKey === 'long_break'
           ? Number(status.config?.long_break_minutes || 15)
           : Number(status.current_focus_session?.planned_minutes || selectedMinutes);
       const totalSeconds = Math.max(60, modeMinutes * 60);
@@ -384,8 +422,8 @@
       const children = [];
       if (errorText) children.push(pre(errorText));
 
-      const durationInput = input(focusMinutes, { type: 'number', min: 1, max: 120, step: 1, inputmode: 'numeric' });
-      durationInput.disabled = isRunning;
+      const durationInput = input(String(selectedMinutes), { type: 'number', min: 1, max: 120, step: 1, inputmode: 'numeric' });
+      durationInput.disabled = isRunning || !allowCustomDuration;
       durationInput.addEventListener('input', () => {
         focusMinutes = durationInput.value;
         if (!isRunning) {
@@ -448,7 +486,7 @@
       }
 
       children.push(actions([
-        action(t(ctx, 'ui.button.start', 'Start'), 'study_pomodoro_start', 'start', !isRunning, !isRunning, false, () => ({ focus_minutes: Math.min(120, Math.max(1, Math.round(Number(focusMinutes) || 25))) })),
+        action(t(ctx, 'ui.button.start', 'Start'), 'study_pomodoro_start', 'start', !isRunning, !isRunning, false, () => (allowCustomDuration ? { focus_minutes: Math.min(120, Math.max(1, Math.round(Number(focusMinutes) || 25))) } : {})),
         action(t(ctx, 'ui.button.pause', 'Pause'), 'study_pomodoro_pause', 'pause', isFocusing, isFocusing),
         action(t(ctx, 'ui.button.resume', 'Resume'), 'study_pomodoro_resume', 'resume', isPaused, isPaused),
         action(t(ctx, 'ui.button.stop', 'Stop'), 'study_pomodoro_stop', 'stop', isRunning, false, true),
@@ -598,10 +636,12 @@
     let status = '';
     let expandedDeckId = '';
     const itemsByDeck = new Map();
+    const hasMoreByDeck = new Map();
+    const nextOffsetByDeck = new Map();
+    const loadingByDeck = new Map();
 
     async function refresh() {
-      const payload = await ctx.callPlugin('study_memory_list_decks', { limit: 100 });
-      decks = safeList(payload, 'decks');
+      decks = await listAllMemoryDecks(ctx);
       draw();
     }
 
@@ -643,6 +683,36 @@
       }
     }
 
+    async function loadDeckItems(deckId, append = false) {
+      if (loadingByDeck.get(deckId)) return;
+      loadingByDeck.set(deckId, true);
+      draw();
+      try {
+        const offset = append ? (nextOffsetByDeck.get(deckId) || 0) : 0;
+        const payload = await ctx.callPlugin('study_memory_list_deck_items', {
+          deck_id: deckId,
+          limit: 500,
+          offset,
+        });
+        const pageItems = safeList(payload, 'items');
+        itemsByDeck.set(
+          deckId,
+          append ? [...(itemsByDeck.get(deckId) || []), ...pageItems] : pageItems,
+        );
+        hasMoreByDeck.set(deckId, payload?.has_more === true);
+        nextOffsetByDeck.set(
+          deckId,
+          Number(payload?.next_offset) || offset + pageItems.length,
+        );
+      } catch (error) {
+        status = errText(error);
+        if (!append) itemsByDeck.set(deckId, []);
+      } finally {
+        loadingByDeck.set(deckId, false);
+        draw();
+      }
+    }
+
     async function toggleDeckItems(deckId) {
       if (expandedDeckId === deckId) {
         expandedDeckId = '';
@@ -651,15 +721,7 @@
       }
       expandedDeckId = deckId;
       draw();
-      if (itemsByDeck.has(deckId)) return;
-      try {
-        const payload = await ctx.callPlugin('study_memory_list_deck_items', { deck_id: deckId, limit: 500 });
-        itemsByDeck.set(deckId, safeList(payload, 'items'));
-      } catch (error) {
-        status = errText(error);
-        itemsByDeck.set(deckId, []);
-      }
-      draw();
+      await loadDeckItems(deckId);
     }
 
     function deckRow(deck) {
@@ -694,6 +756,14 @@
           });
         } else {
           itemList.appendChild(el('p', 'study-panel__empty', t(ctx, 'ui.memory.empty_deck', 'No cards in this deck')));
+        }
+        if (hasMoreByDeck.get(deck.id)) {
+          const loadMore = button(
+            t(ctx, 'ui.button.load_more_cards', 'Load more cards'),
+            () => loadDeckItems(deck.id, true),
+          );
+          loadMore.disabled = loadingByDeck.get(deck.id) === true;
+          itemList.appendChild(loadMore);
         }
         wrapper.appendChild(itemList);
       }
@@ -740,8 +810,7 @@
     let result = '';
 
     async function refresh() {
-      const payload = await ctx.callPlugin('study_memory_list_decks', { limit: 100 });
-      decks = safeList(payload, 'decks');
+      decks = await listAllMemoryDecks(ctx);
       deckId = deckId || decks[0]?.id || '';
       draw();
     }
@@ -928,6 +997,50 @@
     return root;
   }
 
+  function renderKnowledgeContributionSettings(ctx, token) {
+    const root = panel(ctx, 'knowledge-contribution-settings', t(ctx, 'ui.status.loading', 'Loading...'));
+    let optIn = false;
+    let summary = {};
+
+    function draw(subtitle = '') {
+      if (!valid(root, token, true)) return;
+      const toggleButton = button(
+        optIn ? t(ctx, 'ui.button.disable', 'Disable') : t(ctx, 'ui.button.enable', 'Enable'),
+        async () => {
+          try {
+            const payload = await ctx.callPlugin('study_set_knowledge_contribution_opt_in', { opt_in: !optIn });
+            optIn = Boolean(payload?.opt_in);
+            summary = payload?.summary || {};
+            draw();
+          } catch (error) {
+            draw(errText(error));
+          }
+        },
+        true,
+      );
+      toggleButton.dataset.surfaceAction = 'knowledge-contribution-toggle';
+      replace(root, ctx, 'knowledge-contribution-settings', subtitle || (
+        optIn ? t(ctx, 'ui.status.enabled', 'Enabled') : t(ctx, 'ui.status.disabled', 'Disabled')
+      ), [
+        state([
+          [t(ctx, 'ui.label.candidates', 'Candidates'), summary.total || 0],
+          [t(ctx, 'ui.label.queue', 'Queue'), summary.queue_count || 0],
+        ]),
+        actions([toggleButton]),
+      ]);
+    }
+
+    ctx.callPlugin('study_anonymous_knowledge_preview', { limit: 100 })
+      .then((payload) => {
+        if (!valid(root, token)) return;
+        optIn = Boolean(payload?.opt_in);
+        summary = payload?.summary || {};
+        draw();
+      })
+      .catch((error) => replace(root, ctx, 'knowledge-contribution-settings', t(ctx, 'status.state.error', 'Error'), [pre(errText(error))]));
+    return root;
+  }
+
   function render(surfaceId, ctx) {
     panelToken += 1;
     const token = panelToken;
@@ -939,11 +1052,14 @@
     if (surfaceId === 'memory-importer') return renderMemoryImporter(ctx, token);
     if (surfaceId === 'note-exporter') return renderExporter(ctx, token);
     if (surfaceId === 'session-summary') return renderSessionSummary(ctx, token);
+    if (surfaceId === 'knowledge-contribution-settings') return renderKnowledgeContributionSettings(ctx, token);
     return null;
   }
 
   window.StudyCompanionSurfacePanels = {
     render,
+    listAllMemoryDecks,
+    loadDecks,
     close() {
       panelToken += 1;
     },

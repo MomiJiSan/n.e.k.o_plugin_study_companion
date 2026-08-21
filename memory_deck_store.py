@@ -6,7 +6,14 @@ import json
 import uuid
 from typing import Any
 
-from .fsrs_bridge import FSRSBridge, StudyFsrsRating, create_card, rate_answer
+from .fsrs_bridge import (
+    REVIEW_IS_DUE_AFTER_KEY,
+    REVIEW_WAS_DUE_BEFORE_KEY,
+    FSRSBridge,
+    StudyFsrsRating,
+    create_card,
+    rate_answer,
+)
 from .memory_candidates import upsert_memory_candidate
 from .memory_compat import compat_card_payload as build_compat_card_payload
 from .memory_imports import import_word_rows, normalize_csv_fieldnames
@@ -22,10 +29,6 @@ from .memory_rows import (
     recitation_from_row,
     review_from_row,
 )
-from .memory_rows import (
-    safe_int as safe_int,
-)
-from .memory_schema import ensure_memory_schema as ensure_memory_schema
 from .memory_schema import normalize_deck_type, normalize_item_type
 from .memory_text import build_cloze_prompt, diff_recitation, normalize_tags, split_passage_text
 from .models import json_copy
@@ -108,7 +111,9 @@ class MemoryDeckStore:
             )
         return deck_from_row(row)
 
-    def list_decks(self, *, limit: int = 100) -> list[dict[str, Any]]:
+    def list_decks(
+        self, *, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         with self.store._lock:
             rows = (
                 self.store._require_conn()
@@ -119,10 +124,10 @@ class MemoryDeckStore:
                 FROM decks d
                 LEFT JOIN memory_items mi ON mi.deck_id = d.id AND mi.status = 'active'
                 GROUP BY d.id
-                ORDER BY d.updated_at DESC, d.created_at DESC
-                LIMIT ?
+                ORDER BY d.updated_at DESC, d.created_at DESC, d.id DESC
+                LIMIT ? OFFSET ?
                 """,
-                    (max(1, int(limit or 100)),),
+                    (max(1, int(limit or 100)), max(0, int(offset or 0))),
                 )
                 .fetchall()
             )
@@ -413,7 +418,12 @@ class MemoryDeckStore:
         return item
 
     def list_items(
-        self, *, deck_id: str = "", limit: int = 100, include_archived: bool = False
+        self,
+        *,
+        deck_id: str = "",
+        limit: int = 100,
+        offset: int = 0,
+        include_archived: bool = False,
     ) -> list[dict[str, Any]]:
         params: list[Any] = []
         clauses: list[str] = []
@@ -424,6 +434,7 @@ class MemoryDeckStore:
             clauses.append("mi.status = 'active'")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, int(limit or 100)))
+        params.append(max(0, int(offset or 0)))
         with self.store._lock:
             rows = (
                 self.store._require_conn()
@@ -433,8 +444,8 @@ class MemoryDeckStore:
                 FROM memory_items mi
                 LEFT JOIN decks d ON d.id = mi.deck_id
                 {where}
-                ORDER BY mi.updated_at DESC, mi.created_at DESC
-                LIMIT ?
+                ORDER BY mi.updated_at DESC, mi.created_at DESC, mi.id DESC
+                LIMIT ? OFFSET ?
                 """,
                     params,
                 )
@@ -464,7 +475,13 @@ class MemoryDeckStore:
                 self.store._require_conn(), deck_id=deck_id
             )
         item_kind = str(item_type or "").strip().lower()
-        if item_kind and item_kind not in {"word", "sentence", "paragraph", "cloze", "custom"}:
+        if item_kind and item_kind not in {
+            "word",
+            "sentence",
+            "paragraph",
+            "cloze",
+            "custom",
+        }:
             raise ValueError("unsupported memory item type")
         if item_kind:
             rows = [row for row in rows if str(row["item_type"] or "") == item_kind]
@@ -548,9 +565,10 @@ class MemoryDeckStore:
             else:
                 card_data = str(card_row["card_data"])
                 card_id = int(card_row["id"])
-            updated, schedule = rate_answer(
-                self.store._json_loads(card_data, {}), selected
-            )
+            previous_card = self.store._json_loads(card_data, {})
+            was_due_before = bool(self.fsrs.get_due_reviews([previous_card]))
+            updated, schedule = rate_answer(previous_card, selected)
+            is_due_after = bool(self.fsrs.get_due_reviews([updated]))
             conn.execute(
                 """
                 UPDATE memory_fsrs_cards
@@ -609,6 +627,8 @@ class MemoryDeckStore:
             "rating": int(selected),
             "schedule": schedule,
             "review_record": self.get_review_record(review_id),
+            REVIEW_WAS_DUE_BEFORE_KEY: was_due_before,
+            REVIEW_IS_DUE_AFTER_KEY: is_due_after,
         }
 
     def add_recitation_attempt(

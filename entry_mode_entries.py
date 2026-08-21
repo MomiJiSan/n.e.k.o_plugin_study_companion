@@ -11,12 +11,6 @@ from .entry_common import (
     tr,
     ui,
 )
-from .entry_common import (
-    Err as Err,
-)
-from .entry_common import (
-    SdkError as SdkError,
-)
 
 
 class _ModeEntriesMixin:

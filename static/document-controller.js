@@ -48,6 +48,13 @@
     const listeners = [];
     const documentJobStorageKey = 'study_companion.document_analysis_job_id';
     const pendingDocumentJobId = '__pending__';
+    const pendingDocumentJobPrefix = `${pendingDocumentJobId}:`;
+    const pendingStartRecoveryTimeoutMs = 30000;
+
+    function createDocumentStartToken() {
+      if (typeof window.crypto?.randomUUID === 'function') return window.crypto.randomUUID();
+      return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    }
 
     function listen(target, type, listener, options) {
       if (!target) return;
@@ -115,15 +122,32 @@
         document_parse_timeout: 'parse_timeout',
         document_parse_permission_denied: 'parse_permission_denied',
       };
-      const analysisErrors = 'timeout rate_limited authentication_failed model_not_supported provider_unavailable invalid_endpoint invalid_request unsafe_model_output llm_call_failed';
-      return t(`ui.error.document_${analysisErrors.includes(code) ? `analysis_${code}` : validation[code] || code.replace(/^document_/, '') || 'analysis_failed'}`);
+      const analysisErrors = new Set([
+        'timeout', 'rate_limited', 'authentication_failed', 'model_not_supported',
+        'model_unavailable', 'provider_unavailable', 'unsupported_provider',
+        'context_limit_exceeded', 'vision_not_supported', 'agent_quota_exceeded',
+        'invalid_endpoint', 'invalid_request', 'unsafe_model_output', 'llm_call_failed',
+      ]);
+      const analysisAliases = {
+        model_unavailable: 'model_not_supported',
+        document_analysis_window_exhausted: 'timeout',
+        document_chunk_window_exhausted: 'timeout',
+        document_merge_window_exhausted: 'timeout',
+        document_finalize_timeout: 'timeout',
+      };
+      const analysisCode = analysisAliases[code] || code;
+      return t(`ui.error.document_${analysisErrors.has(analysisCode) ? `analysis_${analysisCode}` : validation[code] || code.replace(/^document_/, '') || 'analysis_failed'}`);
     }
 
     const documentJobs = {
       currentId: '',
       cancelRequested: false,
+      pendingStart: false,
+      pendingStartToken: '',
       remember(jobId) {
         this.currentId = String(jobId || '');
+        this.pendingStart = false;
+        this.pendingStartToken = '';
         try {
           if (this.currentId) window.sessionStorage.setItem(documentJobStorageKey, this.currentId);
           else window.sessionStorage.removeItem(documentJobStorageKey);
@@ -133,16 +157,45 @@
       },
       savedId() {
         try {
-          return String(window.sessionStorage.getItem(documentJobStorageKey) || '');
+          return String(window.sessionStorage.getItem(documentJobStorageKey) || '')
+            || (this.pendingStart ? `${pendingDocumentJobPrefix}${this.pendingStartToken}` : '');
         } catch (_error) {
-          return '';
+          return this.pendingStart ? `${pendingDocumentJobPrefix}${this.pendingStartToken}` : '';
         }
       },
-      markPending() {
+      markPending(startToken) {
+        this.currentId = '';
+        this.pendingStart = true;
+        this.pendingStartToken = String(startToken || '');
         try {
-          window.sessionStorage.setItem(documentJobStorageKey, pendingDocumentJobId);
+          window.sessionStorage.setItem(
+            documentJobStorageKey,
+            `${pendingDocumentJobPrefix}${this.pendingStartToken}`,
+          );
         } catch (_error) {
           // Storage may be unavailable in a restricted webview.
+        }
+      },
+      isTerminal(data = {}) {
+        return ['completed', 'succeeded', 'failed', 'canceled', 'timeout'].includes(data.status);
+      },
+      cancellationConfirmed(data = {}) {
+        return data.status === 'canceled'
+          || data.diagnostic === 'document_canceled'
+          || data.diagnostic === 'document_job_not_found';
+      },
+      async acknowledge(data = {}, signal) {
+        const jobId = String(data.job_id || this.currentId || '');
+        if (!jobId || !this.isTerminal(data)) return;
+        try {
+          await callPlugin(
+            'study_document_analysis_status',
+            { job_id: jobId, acknowledge: true },
+            signal,
+          );
+          this.remember('');
+        } catch (_error) {
+          this.remember(jobId);
         }
       },
       render(data = {}) {
@@ -157,14 +210,61 @@
         const stage = data.stage || 'validating';
         studyDocumentState.textContent = t(`ui.document.stage.${stage}`, stage);
       },
+      async poll(jobId, signal, update) {
+        let delay = 1000;
+        let consecutiveFailures = 0;
+        while (!signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          if (signal.aborted) break;
+          let data;
+          try {
+            data = await callPlugin(
+              'study_document_analysis_status',
+              { job_id: jobId },
+              signal,
+            );
+            consecutiveFailures = 0;
+          } catch (error) {
+            if (signal.aborted) break;
+            consecutiveFailures += 1;
+            if (consecutiveFailures < 3) {
+              delay = 2000;
+              continue;
+            }
+            const message = formatPluginError(error);
+            studyDocumentState.textContent = message;
+            setReply(message);
+            delay = Math.min(
+              30000,
+              2000 * (2 ** Math.min(consecutiveFailures - 2, 4)),
+            );
+            continue;
+          }
+          this.render(data);
+          update(data);
+          if (this.isTerminal(data)) {
+            return data;
+          }
+          delay = 2000;
+        }
+        throw new DOMException('Aborted', 'AbortError');
+      },
       async run(args, signal, update) {
         this.cancelRequested = false;
-        this.markPending();
+        const startToken = createDocumentStartToken();
+        this.markPending(startToken);
         let data;
         try {
-          data = await callPlugin('study_start_document_analysis', args, signal);
+          data = await callPlugin(
+            'study_start_document_analysis',
+            { ...args, start_token: startToken },
+            signal,
+          );
         } catch (error) {
-          if (!signal.aborted) this.remember('');
+          if (!signal.aborted) {
+            const recovered = await this.resume(signal, update);
+            if (recovered) return recovered;
+          }
           throw error;
         }
         this.remember(data.job_id || '');
@@ -174,8 +274,12 @@
               job_id: this.currentId,
               cancellation_source: 'user',
             }, signal);
-            this.remember('');
-            return data;
+            if (this.cancellationConfirmed(data)) {
+              await this.acknowledge(data, signal);
+              return data;
+            }
+            this.cancelRequested = false;
+            studyDocumentCancelBtn.disabled = false;
           } catch (error) {
             this.cancelRequested = false;
             studyDocumentCancelBtn.disabled = false;
@@ -185,24 +289,10 @@
         this.render(data);
         update(data);
         const jobId = data.job_id;
-        if (!jobId || ['completed', 'failed', 'canceled'].includes(data.status)) {
-          this.remember('');
+        if (!jobId || this.isTerminal(data)) {
           return data;
         }
-        let delay = 1000;
-        while (!signal.aborted) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          if (signal.aborted) break;
-          data = await callPlugin('study_document_analysis_status', { job_id: jobId }, signal);
-          this.render(data);
-          update(data);
-          if (['completed', 'failed', 'canceled'].includes(data.status)) {
-            this.remember('');
-            return data;
-          }
-          delay = 2000;
-        }
-        throw new DOMException('Aborted', 'AbortError');
+        return this.poll(jobId, signal, update);
       },
       async cancel() {
         this.cancelRequested = true;
@@ -215,8 +305,16 @@
             job_id: jobId,
             cancellation_source: 'user',
           });
+          if (!this.cancellationConfirmed(data)) {
+            this.cancelRequested = false;
+            studyDocumentCancelBtn.disabled = false;
+            studyDocumentState.textContent = this.isTerminal(data)
+              ? String(data.status || '')
+              : formatPluginError(new Error(data.diagnostic || 'document cancellation was not confirmed'));
+            return;
+          }
           documentRequestController?.abort();
-          this.remember('');
+          await this.acknowledge(data);
           studyDocumentState.textContent = formatDocumentDiagnostic(data.diagnostic || 'document_canceled');
         } catch (error) {
           this.cancelRequested = false;
@@ -225,56 +323,137 @@
         }
       },
       async resume(signal, update) {
-        const savedId = this.savedId();
-        if (!savedId) return null;
-        let data = null;
-        if (savedId !== pendingDocumentJobId) {
-          try {
-            data = await callPlugin(
-              'study_document_analysis_status',
-              { job_id: savedId },
-              signal,
-            );
-          } catch (_error) {
-            data = null;
-          }
-        }
-        if (data?.diagnostic === 'document_job_not_found') data = null;
-        if (!data) {
-          data = await callPlugin('study_active_document_analysis', {}, signal);
-        }
-        const jobId = String(data?.job_id || '');
-        if (!jobId || data.status === 'idle') {
-          this.remember('');
-          return null;
-        }
-        this.remember(jobId);
-        this.render(data);
-        update(data);
-        if (['completed', 'failed', 'canceled'].includes(data.status)) {
-          this.remember('');
-          return data;
-        }
-        let delay = 1000;
+        let recoveryFailures = 0;
+        const pendingStartRecoveryDeadline = Date.now() + pendingStartRecoveryTimeoutMs;
         while (!signal.aborted) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          if (signal.aborted) break;
-          data = await callPlugin(
-            'study_document_analysis_status',
-            { job_id: jobId },
-            signal,
-          );
-          this.render(data);
-          update(data);
-          if (['completed', 'failed', 'canceled'].includes(data.status)) {
+          const savedId = this.savedId();
+          if (!savedId) return null;
+          const isPendingStart = savedId === pendingDocumentJobId
+            || savedId.startsWith(pendingDocumentJobPrefix);
+          const hasSavedJobId = Boolean(savedId && !isPendingStart);
+          const startToken = savedId.startsWith(pendingDocumentJobPrefix)
+            ? savedId.slice(pendingDocumentJobPrefix.length)
+            : '';
+          let data = null;
+          let savedJobNotFound = false;
+          let lookupFailed = false;
+          if (hasSavedJobId) {
+            try {
+              data = await callPlugin(
+                'study_document_analysis_status',
+                { job_id: savedId },
+                signal,
+              );
+              if (data?.diagnostic === 'document_job_not_found') {
+                savedJobNotFound = true;
+                data = null;
+              }
+            } catch (error) {
+              if (signal.aborted) break;
+              lookupFailed = true;
+              if (recoveryFailures === 0) {
+                studyDocumentState.textContent = formatPluginError(error);
+                setReply(formatPluginError(error));
+              }
+            }
+          }
+          if (!data && !lookupFailed) {
+            try {
+              const activeArgs = isPendingStart ? { pending_start: true } : {};
+              if (startToken) activeArgs.start_token = startToken;
+              data = await callPlugin('study_active_document_analysis', activeArgs, signal);
+            } catch (error) {
+              if (signal.aborted) break;
+              lookupFailed = true;
+              if (recoveryFailures === 0) {
+                studyDocumentState.textContent = formatPluginError(error);
+                setReply(formatPluginError(error));
+              }
+            }
+          }
+          if (lookupFailed) {
+            recoveryFailures += 1;
+            const delay = Math.min(
+              30000,
+              2000 * (2 ** Math.min(recoveryFailures - 1, 4)),
+            );
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          if (
+            isPendingStart
+            && data?.status === 'idle'
+            && Date.now() < pendingStartRecoveryDeadline
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            continue;
+          }
+          if (data?.status === 'idle') {
             this.remember('');
+            return null;
+          }
+          const jobId = String(
+            data?.job_id || (hasSavedJobId && !savedJobNotFound ? savedId : ''),
+          );
+          if (!jobId) {
+            this.remember('');
+            return null;
+          }
+          this.remember(jobId);
+          this.render(data || {});
+          update(data || {});
+          if (this.isTerminal(data || {})) {
             return data;
           }
-          delay = 2000;
+          if (this.cancelRequested) {
+            try {
+              const canceled = await callPlugin('study_cancel_document_analysis', {
+                job_id: jobId,
+                cancellation_source: 'user',
+              }, signal);
+              if (this.cancellationConfirmed(canceled)) {
+                await this.acknowledge(canceled, signal);
+                return canceled;
+              }
+              this.cancelRequested = false;
+              studyDocumentCancelBtn.disabled = false;
+              this.render(canceled);
+              update(canceled);
+              if (this.isTerminal(canceled)) {
+                this.remember('');
+                return canceled;
+              }
+            } catch (error) {
+              this.cancelRequested = false;
+              studyDocumentCancelBtn.disabled = false;
+              studyDocumentState.textContent = formatPluginError(error);
+            }
+          }
+          return this.poll(jobId, signal, update);
         }
         throw new DOMException('Aborted', 'AbortError');
       },
     };
+
+    function restoreDocumentCardFromJob(data = {}) {
+      const metadata = data?.document;
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return;
+      const name = String(metadata.name || '').trim();
+      if (!name) return;
+      const chars = Math.max(0, Number.parseInt(metadata.chars, 10) || 0);
+      const tokens = Math.max(0, Number.parseInt(metadata.tokens, 10) || 0);
+      if (studyDocumentCard) studyDocumentCard.hidden = false;
+      studyDocumentName.textContent = name;
+      studyDocumentMeta.textContent = tf('ui.document.meta', '', {
+        size: '—',
+        encoding: String(metadata.type || ''),
+        chars: chars.toLocaleString(),
+        tokens: tokens.toLocaleString(),
+      });
+      if (studyDocumentTruncated) {
+        studyDocumentTruncated.hidden = metadata.truncated !== true;
+      }
+    }
 
     function setDocumentBusy(busy) {
       documentBusy = Boolean(busy);
@@ -448,6 +627,14 @@
       }
     }
 
+    async function refreshAfterAnalysisComplete() {
+      try {
+        await onAnalysisComplete({ updateReply: false });
+      } catch (_error) {
+        // A completed analysis must remain visible when the status refresh fails.
+      }
+    }
+
     function acceptDocumentFiles(files) {
       if (documentBusy) return undefined;
       const list = Array.from(files || []);
@@ -469,13 +656,13 @@
       const files = directFiles.length ? directFiles : itemFiles;
       if (!files.length || files.every((file) => String(file.type || '').startsWith('image/'))) return;
       event.preventDefault();
-      Promise.resolve(acceptDocumentFiles(files)).catch(reportDocumentImportError);
+      Promise.resolve().then(() => acceptDocumentFiles(files)).catch(reportDocumentImportError);
     }
 
     function handleDocumentDrop(event) {
       event.preventDefault();
       studyDocumentDropZone.dataset.dragging = 'false';
-      Promise.resolve(acceptDocumentFiles(event.dataTransfer?.files)).catch(reportDocumentImportError);
+      Promise.resolve().then(() => acceptDocumentFiles(event.dataTransfer?.files)).catch(reportDocumentImportError);
     }
 
     async function analyzeDocument() {
@@ -494,23 +681,30 @@
           document_name: importedDocument.name,
           document_type: importedDocument.type,
           document_text: documentSource,
+          document_truncated: Boolean(importedDocument.truncated),
           analysis_kind: documentKind,
           analysis_instruction: studyDocumentInstruction?.value.trim() || '',
           locale: window.I18n?.lang?.() || document.documentElement.lang || '',
         }, controller.signal, () => {});
         if (controller.signal.aborted) return;
         const failed = data.status !== 'completed' || data.degraded;
+        const completedReply = data.diagnostic === 'output_truncated'
+          ? [data.reply || data.summary || '', formatDocumentDiagnostic(data.diagnostic)].filter(Boolean).join('\n\n')
+          : (data.reply || data.summary || '');
         setStatus(failed ? t('ui.status.error', 'Error') : t('ui.status.document_complete'));
-        setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : (data.reply || data.summary || ''));
+        setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : completedReply);
         studyDocumentState.textContent = failed ? formatDocumentDiagnostic(data.diagnostic) : t('ui.status.document_complete');
-        await onAnalysisComplete({ updateReply: false });
+        await refreshAfterAnalysisComplete();
+        await documentJobs.acknowledge(data, controller.signal);
       } catch (error) {
         if (controller.signal.aborted) return;
         setStatus(t('ui.status.error', 'Error'));
         setReply(/timed out|timeout/i.test(error.message) ? t('ui.error.document_analysis_timeout') : formatPluginError(error));
       } finally {
-        if (documentRequestController === controller) documentRequestController = null;
-        setDocumentBusy(false);
+        if (documentRequestController === controller) {
+          documentRequestController = null;
+          setDocumentBusy(false);
+        }
       }
     }
 
@@ -522,19 +716,28 @@
       try {
         const data = await documentJobs.resume(
           controller.signal,
-          () => setDocumentBusy(true),
+          (job) => {
+            restoreDocumentCardFromJob(job);
+            setDocumentBusy(true);
+          },
         );
         if (!data || controller.signal.aborted) return;
         const failed = data.status !== 'completed' || data.degraded;
+        const completedReply = data.diagnostic === 'output_truncated'
+          ? [data.reply || data.summary || '', formatDocumentDiagnostic(data.diagnostic)].filter(Boolean).join('\n\n')
+          : (data.reply || data.summary || '');
         setStatus(failed ? t('ui.status.error', 'Error') : t('ui.status.document_complete'));
-        setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : (data.reply || data.summary || ''));
+        setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : completedReply);
         studyDocumentState.textContent = failed ? formatDocumentDiagnostic(data.diagnostic) : t('ui.status.document_complete');
-        if (!failed) await onAnalysisComplete({ updateReply: false });
+        if (!failed) await refreshAfterAnalysisComplete();
+        await documentJobs.acknowledge(data, controller.signal);
       } catch (error) {
         if (!controller.signal.aborted) setReply(formatPluginError(error));
       } finally {
-        if (documentRequestController === controller) documentRequestController = null;
-        setDocumentBusy(false);
+        if (documentRequestController === controller) {
+          documentRequestController = null;
+          setDocumentBusy(false);
+        }
       }
     }
 
@@ -549,7 +752,7 @@
       listen(studyInput, 'paste', handleDocumentPaste);
       listen(studyDocumentImportBtn, 'click', () => studyDocumentInput.click());
       listen(studyDocumentInput, 'change', () => {
-        Promise.resolve(acceptDocumentFiles(studyDocumentInput.files)).catch(reportDocumentImportError);
+        Promise.resolve().then(() => acceptDocumentFiles(studyDocumentInput.files)).catch(reportDocumentImportError);
       });
       listen(studyDocumentRemoveBtn, 'click', removeImportedDocument);
       listen(studyDocumentCancelBtn, 'click', () => documentJobs.cancel());

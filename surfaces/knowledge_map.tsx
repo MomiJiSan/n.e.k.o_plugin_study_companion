@@ -250,6 +250,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [selectedChapter, setSelectedChapter] = useState('all');
   const [selectedUnit, setSelectedUnit] = useState('all');
   const [canonicalScope, setCanonicalScope] = useState<PracticeScope | null>(null);
+  const [scopeRecoveryFailed, setScopeRecoveryFailed] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
   const [summary, setSummary] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
@@ -279,11 +280,24 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         setEdges(Array.isArray(payload.edges) ? payload.edges : []);
         setSummary(payload.summary || {});
         setSelectedNode(null);
-        setCanonicalScope(null);
         setError('');
       })
       .catch((err) => mounted && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => mounted && setIsLoading(false));
+    callPlugin(props.api, 'study_get_practice_scope')
+      .then((scopePayload: any) => {
+        if (!mounted) return;
+        const nextScope = scopePayload?.scope && typeof scopePayload.scope === 'object'
+          ? scopePayload.scope as PracticeScope
+          : null;
+        setCanonicalScope(nextScope?.display_path?.length ? nextScope : null);
+        setScopeRecoveryFailed(false);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCanonicalScope(null);
+        setScopeRecoveryFailed(true);
+      });
     return () => {
       mounted = false;
     };
@@ -363,6 +377,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       };
       const nextScope = payload?.scope && typeof payload.scope === 'object' ? payload.scope : {};
       setCanonicalScope(nextScope);
+      setScopeRecoveryFailed(false);
       setError('');
       const rawRevision = payload?.scope_revision ?? nextScope.scope_revision ?? 0;
       const activationRevision = typeof rawRevision === 'number'
@@ -377,6 +392,21 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           activationRevision,
         },
       }, props.host?.origin);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScopeBusy(false);
+    }
+  }
+
+  async function clearPracticeScope() {
+    if (scopeBusy) return;
+    setScopeBusy(true);
+    try {
+      await callPlugin(props.api, 'study_clear_practice_scope');
+      setCanonicalScope(null);
+      setScopeRecoveryFailed(false);
+      setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -485,12 +515,15 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           <strong>{activeSubjectLabel}</strong>
         </div>
       </section>
-      {canonicalScope?.display_path?.length ? (
+      {canonicalScope?.display_path?.length || scopeRecoveryFailed ? (
         <section className="study-panel__state" aria-live="polite">
-          <div>
+          {canonicalScope?.display_path?.length ? <div>
             <span>{text(props, 'ui.practice.scope_label', 'Practice scope')}</span>
             <strong>{canonicalScope.display_path.join(' / ')}</strong>
-          </div>
+          </div> : null}
+          <button type="button" disabled={scopeBusy} onClick={() => void clearPracticeScope()}>
+            {text(props, 'ui.button.clear_practice_scope', 'Clear scope')}
+          </button>
         </section>
       ) : null}
       <section className="knowledge-stage-selector">

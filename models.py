@@ -8,18 +8,6 @@ from typing import Any, Literal, TypedDict
 from .constants import (
     MODE_COMPANION,
 )
-from .constants import (
-    MODE_CONCEPT_EXPLAIN as MODE_CONCEPT_EXPLAIN,
-)
-from .constants import (
-    MODE_INTERACTIVE as MODE_INTERACTIVE,
-)
-from .constants import (
-    MODE_TEACHING as MODE_TEACHING,
-)
-from .constants import (
-    SUPPORTED_MODES as SUPPORTED_MODES,
-)
 from .json_utils import json_copy
 from .mode_manager import normalize_mode
 

@@ -4,8 +4,8 @@ import asyncio
 from time import monotonic
 
 from ._general_narration import prepare_general_narration_content
-from ._solution_narration import extract_solution_narration_sections
 from ._solution_structure import (
+    extract_solution_narration_sections,
     is_solution_structure_candidate,
     parse_solution_structure,
     render_solution_structure,
@@ -28,6 +28,7 @@ from .entry_common import (
     tr,
     ui,
 )
+from .entry_tutor_context_support import _TutorFinalizeProgress
 from .tutor_llm_agent_concept_explain import repair_solution_structure
 
 IMAGE_ONLY_EXPLAIN_PROMPT_EN = (
@@ -90,9 +91,11 @@ _SOLUTION_REPAIR_MIN_REMAINING_SECONDS = 10.0
 _FINALIZE_TIMEOUT_SECONDS = 5.0
 
 
-def _build_finalize_failure_payload(reply: Any, *, diagnostic: str) -> dict[str, Any]:
+def _build_finalize_failure_payload(
+    reply: Any, *, diagnostic: str, history_persisted: bool = False
+) -> dict[str, Any]:
     payload = build_tutor_payload(reply)
-    payload["history_persisted"] = False
+    payload["history_persisted"] = history_persisted
     payload["diagnostic"] = diagnostic
     return payload
 
@@ -125,7 +128,7 @@ class _TutorExplainEntriesMixin:
         timeout=105.0,
         llm_result_fields=["summary", "reply", "diagnostic"],
     )
-    async def study_submit_image(self, image_base64: str, text: str = "", **_):
+    async def study_submit_image(self, image_base64: str, text: str = "", **kwargs):
         try:
             image_payload = _normalize_submitted_image_payload(image_base64)
         except ValueError as exc:
@@ -142,6 +145,7 @@ class _TutorExplainEntriesMixin:
         return await self.study_explain_text(
             text=source_text,
             vision_image_base64=image_payload,
+            **kwargs,
         )
 
     @ui.action()
@@ -163,10 +167,11 @@ class _TutorExplainEntriesMixin:
         llm_result_fields=["summary", "reply", "diagnostic"],
     )
     async def study_explain_text(
-        self, text: str = "", vision_image_base64: str = "", **_
+        self, text: str = "", vision_image_base64: str = "", **kwargs
     ):
         if self._agent is None:
             return Err(SdkError("study tutor agent is not initialized"))
+        target_lanlan = self._resolve_study_target_lanlan(kwargs)
         started_monotonic = monotonic()
         primary_deadline_monotonic = (
             started_monotonic + _PRIMARY_EXPLAIN_TIMEOUT_SECONDS
@@ -401,6 +406,7 @@ class _TutorExplainEntriesMixin:
                                     repaired_structure,
                                     language=self._cfg.language,
                                 )
+            finalize_progress = _TutorFinalizeProgress()
             try:
                 payload = await asyncio.wait_for(
                     self._finalize_tutor_call(
@@ -417,27 +423,42 @@ class _TutorExplainEntriesMixin:
                             or {},
                         },
                         extra_context=tutor_context,
+                        finalize_progress=finalize_progress,
                     ),
                     timeout=_FINALIZE_TIMEOUT_SECONDS,
                 )
             except asyncio.TimeoutError:
                 self.logger.warning("study explanation history persistence timed out")
                 payload = _build_finalize_failure_payload(
-                    reply, diagnostic="history_persist_timeout"
+                    reply,
+                    diagnostic="history_persist_timeout",
+                    history_persisted=finalize_progress.history_persisted.is_set(),
                 )
             except Exception:
                 self.logger.warning("study explanation history persistence failed")
                 payload = _build_finalize_failure_payload(
-                    reply, diagnostic="history_persist_failed"
+                    reply,
+                    diagnostic="history_persist_failed",
+                    history_persisted=finalize_progress.history_persisted.is_set(),
                 )
             narration_scheduled = False
             narration_status = "disabled"
             narration_reason = ""
+            live_solution_communication = getattr(self._cfg, "communication", None)
+            live_solution_narration_requested = bool(
+                getattr(live_solution_communication, "enabled", False)
+            ) and bool(
+                getattr(
+                    live_solution_communication,
+                    "solution_narration_enabled",
+                    True,
+                )
+            )
             if not solution_contract_required:
                 narration_status = "not_applicable"
             elif reply.degraded:
                 narration_status = "degraded"
-            elif not narration_requested:
+            elif not live_solution_narration_requested:
                 narration_status = "disabled"
             elif not (solution_candidate or truncated_problem_solution):
                 narration_status = "not_applicable"
@@ -458,7 +479,8 @@ class _TutorExplainEntriesMixin:
                 )
                 if sections is not None:
                     narration_scheduled = await self._emit_solution_completed_event(
-                        sections
+                        sections,
+                        target_lanlan=target_lanlan,
                     )
                 if narration_scheduled:
                     narration_status = "scheduled"
@@ -495,8 +517,12 @@ class _TutorExplainEntriesMixin:
             general_mode_allowed = bool(
                 general_response_mode != "unknown" and not solution_contract_required
             )
+            live_general_communication = getattr(self._cfg, "communication", None)
+            live_general_communication_enabled = bool(
+                getattr(live_general_communication, "enabled", False)
+            )
             general_narration_enabled = bool(
-                getattr(communication, "general_narration_enabled", True)
+                getattr(live_general_communication, "general_narration_enabled", True)
             )
             prepared_general_content = (
                 prepare_general_narration_content(str(payload.get("reply") or ""))
@@ -507,7 +533,7 @@ class _TutorExplainEntriesMixin:
                 if reply.degraded:
                     general_narration_status = "degraded"
                     general_narration_reason = "degraded_reply"
-                elif not bool(getattr(communication, "enabled", False)):
+                elif not live_general_communication_enabled:
                     general_narration_status = "disabled"
                     general_narration_reason = "communication_disabled"
                 elif not general_narration_enabled:
@@ -524,6 +550,7 @@ class _TutorExplainEntriesMixin:
                         await self._emit_general_response_completed_event(
                             response_mode=general_response_mode,
                             content=prepared_general_content,
+                            target_lanlan=target_lanlan,
                         )
                     )
                     if general_narration_scheduled:

@@ -6,6 +6,9 @@ from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Any, Iterable
 
+REVIEW_WAS_DUE_BEFORE_KEY = "_review_was_due_before"
+REVIEW_IS_DUE_AFTER_KEY = "_review_is_due_after"
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)

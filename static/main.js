@@ -8,7 +8,6 @@ const TARGET_DATA_URL_LENGTH = 1000000;
 const DEFAULT_VISION_MAX_IMAGE_PX = 768;
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg']);
 const DEPENDENCY_KEYS = Object.freeze(['rapidocr', 'tesseract', 'dxcam']);
-// Legacy translation key retained for older static UI bundles: ui.settings.dependencies.ready_summary
 const LEARNING_PROFILE_STORAGE_KEY = 'study_companion.learning_profile.v1';
 const LEARNING_STAGE_OPTIONS = ['primary', 'junior_high', 'senior_high', 'college', 'cross_stage', 'postgraduate', 'custom'];
 const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'chemistry', 'biology', 'history', 'geography', 'politics', 'computer_science', 'economics'];
@@ -17,17 +16,17 @@ const ENTRY_TIMEOUT_MS = {
   study_ocr_snapshot: 100000,
   study_set_mode: 15000,
   study_explain_text: 120000,
-  study_analyze_document: 105000,
-  study_generate_question: 70000,
+  study_generate_question: 75000,
   study_question_context: 30000,
-  study_generate_targeted_question: 55000,
-  study_evaluate_answer: 70000,
+  study_generate_targeted_question: 60000,
+  study_evaluate_answer: 75000,
   study_summarize_session: 90000,
   study_memory_card_upsert: 30000,
   study_memory_list_decks: 30000,
   study_memory_create_deck: 30000,
   study_memory_deck: 30000,
   study_memory_card_review: 30000,
+  study_memory_review_item: 30000,
   study_export_notes: 90000,
 };
 const STUDY_SURFACE_MESSAGE_TYPES = Object.freeze({
@@ -86,72 +85,74 @@ const screenType = $id('screenType');
 const questionStatus = $id('questionStatus');
 const evaluationStatus = $id('evaluationStatus');
 const memoryDeckStatus = $id('memoryDeckStatus');
-const memoryFrontInput = document.getElementById('memoryFrontInput');
-const memoryBackInput = document.getElementById('memoryBackInput');
-const memoryDeckSelect = document.getElementById('memoryDeckSelect');
-const memoryItemTypeSelect = document.getElementById('memoryItemTypeSelect');
-const memoryDeckDialog = document.getElementById('memoryDeckDialog');
-const memoryDeckNameInput = document.getElementById('memoryDeckNameInput');
-const memoryDeckTypeSelect = document.getElementById('memoryDeckTypeSelect');
-const memoryDeckCreateBtn = document.getElementById('memoryDeckCreateBtn');
-const memoryDeckSkipBtn = document.getElementById('memoryDeckSkipBtn');
-const memoryRefreshBtn = document.getElementById('memoryRefreshBtn');
-const memoryAddBtn = document.getElementById('memoryAddBtn');
-const memoryDueCard = document.getElementById('memoryDueCard');
-const modeSwitch = document.getElementById('modeSwitch');
-const modeSelect = document.getElementById('modeSelect');
-const summaryMode = document.getElementById('summaryMode');
-const summaryDuration = document.getElementById('summaryDuration');
-const summaryGoal = document.getElementById('summaryGoal');
-const summaryStage = document.getElementById('summaryStage');
-const quickFocusState = document.getElementById('quickFocusState');
-const quickReviewCount = document.getElementById('quickReviewCount');
-const quickCheckinStatus = document.getElementById('quickCheckinStatus');
-const diagnosisTitle = document.getElementById('diagnosisTitle');
-const diagnosisBody = document.getElementById('diagnosisBody');
-const primaryDiagnosis = document.getElementById('primaryDiagnosis');
-const nekoCoachPanel = document.getElementById('nekoCoachPanel');
-const nekoCoachScene = document.getElementById('nekoCoachScene');
-const nekoCoachMessage = document.getElementById('nekoCoachMessage');
-const nekoCoachRecommendation = document.getElementById('nekoCoachRecommendation');
-const nekoCoachMode = document.getElementById('nekoCoachMode');
-const nekoCoachTimer = document.getElementById('nekoCoachTimer');
-const nekoCoachGoal = document.getElementById('nekoCoachGoal');
-const nekoCoachReview = document.getElementById('nekoCoachReview');
-const nekoCoachPrimaryAction = document.getElementById('nekoCoachPrimaryAction');
-const nekoCoachSecondaryAction = document.getElementById('nekoCoachSecondaryAction');
+const memoryFrontInput = $id('memoryFrontInput');
+const memoryBackInput = $id('memoryBackInput');
+const memoryDeckSelect = $id('memoryDeckSelect');
+const memoryItemTypeSelect = $id('memoryItemTypeSelect');
+const memoryDeckDialog = $id('memoryDeckDialog');
+const memoryDeckNameInput = $id('memoryDeckNameInput');
+const memoryDeckTypeSelect = $id('memoryDeckTypeSelect');
+const memoryDeckCreateBtn = $id('memoryDeckCreateBtn');
+const memoryDeckSkipBtn = $id('memoryDeckSkipBtn');
+const memoryRefreshBtn = $id('memoryRefreshBtn');
+const memoryAddBtn = $id('memoryAddBtn');
+const memoryDueCard = $id('memoryDueCard');
+const modeSwitch = $id('modeSwitch');
+const modeSelect = $id('modeSelect');
+const summaryMode = $id('summaryMode');
+const summaryDuration = $id('summaryDuration');
+const summaryGoal = $id('summaryGoal');
+const summaryStage = $id('summaryStage');
+const quickFocusState = $id('quickFocusState');
+const quickReviewCount = $id('quickReviewCount');
+const quickCheckinStatus = $id('quickCheckinStatus');
+const diagnosisTitle = $id('diagnosisTitle');
+const diagnosisBody = $id('diagnosisBody');
+const primaryDiagnosis = $id('primaryDiagnosis');
+const nekoCoachPanel = $id('nekoCoachPanel');
+const nekoCoachScene = $id('nekoCoachScene');
+const nekoCoachMessage = $id('nekoCoachMessage');
+const nekoCoachRecommendation = $id('nekoCoachRecommendation');
+const nekoCoachMode = $id('nekoCoachMode');
+const nekoCoachTimer = $id('nekoCoachTimer');
+const nekoCoachGoal = $id('nekoCoachGoal');
+const nekoCoachReview = $id('nekoCoachReview');
+const nekoCoachPrimaryAction = $id('nekoCoachPrimaryAction');
+const nekoCoachSecondaryAction = $id('nekoCoachSecondaryAction');
 const nekoCoachActionButtons = Array.from(document.querySelectorAll('[data-neko-coach-action]'));
-const firstRunGuide = document.getElementById('firstRunGuide');
-const firstRunSteps = document.getElementById('firstRunSteps');
-const firstRunSkipBtn = document.getElementById('firstRunSkipBtn');
-const advancedToggleBtn = document.getElementById('advancedToggleBtn');
-const advancedSettings = document.getElementById('advancedSettings');
+const firstRunGuide = $id('firstRunGuide');
+const firstRunSteps = $id('firstRunSteps');
+const firstRunSkipBtn = $id('firstRunSkipBtn');
+const advancedToggleBtn = $id('advancedToggleBtn');
+const advancedSettings = $id('advancedSettings');
 const settingsTabs = Array.from(document.querySelectorAll('[data-settings-tab]'));
 const settingsTabPanels = Array.from(document.querySelectorAll('[data-settings-tab-panel]'));
 const surfaceOpenButtons = Array.from(document.querySelectorAll('[data-open-surface]'));
 const featureActionButtons = Array.from(document.querySelectorAll('[data-feature-action]'));
-const surfaceDrawer = document.getElementById('surfaceDrawer');
-const surfaceDrawerTitle = document.getElementById('surfaceDrawerTitle');
-const surfaceDrawerBody = document.getElementById('surfaceDrawerBody');
-const surfaceDrawerCloseBtn = document.getElementById('surfaceDrawerCloseBtn');
-const settingsConfigForm = document.getElementById('settingsConfigForm');
-const settingsSaveBtn = document.getElementById('settingsSaveBtn');
-const settingsConfigStatus = document.getElementById('settingsConfigStatus');
-const settingsDataSaveBtn = document.getElementById('settingsDataSaveBtn');
-const settingsDataConfigStatus = document.getElementById('settingsDataConfigStatus');
-const settingsDocExportEnabled = document.getElementById('settingsDocExportEnabled');
-const settingsDefaultMode = document.getElementById('settingsDefaultMode');
-const settingsLearningProfileSummary = document.getElementById('settingsLearningProfileSummary');
-const settingsLearningStage = document.getElementById('settingsLearningStage');
-const settingsOcrEnabled = document.getElementById('settingsOcrEnabled');
-const settingsOcrLanguages = document.getElementById('settingsOcrLanguages');
-const settingsLlmTimeout = document.getElementById('settingsLlmTimeout');
-const settingsLlmVisionEnabled = document.getElementById('settingsLlmVisionEnabled');
-const settingsCommunicationEnabled = document.getElementById('settingsCommunicationEnabled');
-const settingsSolutionNarrationEnabled = document.getElementById('settingsSolutionNarrationEnabled');
-const settingsGeneralNarrationEnabled = document.getElementById('settingsGeneralNarrationEnabled');
-const settingsCommunicationRequiresEnabled = document.getElementById('settingsCommunicationRequiresEnabled');
-const settingsCommunicationRuntime = document.getElementById('settingsCommunicationRuntime');
+const surfaceDrawer = $id('surfaceDrawer');
+const surfaceDrawerTitle = $id('surfaceDrawerTitle');
+const surfaceDrawerBody = $id('surfaceDrawerBody');
+const surfaceDrawerCloseBtn = $id('surfaceDrawerCloseBtn');
+const settingsConfigForm = $id('settingsConfigForm');
+const settingsSaveBtn = $id('settingsSaveBtn');
+const settingsConfigStatus = $id('settingsConfigStatus');
+const settingsDataSaveBtn = $id('settingsDataSaveBtn');
+const settingsDataConfigStatus = $id('settingsDataConfigStatus');
+const settingsDocExportEnabled = $id('settingsDocExportEnabled');
+const settingsDefaultMode = $id('settingsDefaultMode');
+const settingsLearningProfileSummary = $id('settingsLearningProfileSummary');
+const settingsLearningStage = $id('settingsLearningStage');
+const settingsOcrEnabled = $id('settingsOcrEnabled');
+const settingsOcrLanguages = $id('settingsOcrLanguages');
+const settingsLlmTimeout = $id('settingsLlmTimeout');
+const settingsLlmVisionEnabled = $id('settingsLlmVisionEnabled');
+const settingsModelRefreshBtn = $id('settingsModelRefreshBtn');
+const settingsModelRuntimeCards = Array.from(document.querySelectorAll('[data-model-runtime]'));
+const settingsCommunicationEnabled = $id('settingsCommunicationEnabled');
+const settingsSolutionNarrationEnabled = $id('settingsSolutionNarrationEnabled');
+const settingsGeneralNarrationEnabled = $id('settingsGeneralNarrationEnabled');
+const settingsCommunicationRequiresEnabled = $id('settingsCommunicationRequiresEnabled');
+const settingsCommunicationRuntime = $id('settingsCommunicationRuntime');
 const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
 const memoryReviewButtons = Array.from(document.querySelectorAll('[data-memory-rating]'));
 const MODE_SHORTCUTS=Object.freeze({1:'companion',2:'interactive',3:'teaching'});
@@ -167,6 +168,8 @@ let modeChangeInFlight = false;
 let refreshPending = false;
 let learningProfileModal = null;
 let lastReplyValue = '';
+let ocrN = '';
+let ocrT = '';
 let studyInputImageValue = '';
 let answerInputImageValue = '';
 let pastePendingCount = 0;
@@ -408,13 +411,11 @@ function formatPluginError(error) {
 }
 
 function formatTutorDiagnostic(diagnostic) {
-  const messages={timeout:['ui.error.llm_timeout','Image understanding timed out. Please retry or paste the problem text.'],rate_limited:['ui.error.llm_rate_limited','Qwen is receiving too many requests. Please retry shortly.'],authentication_failed:['ui.error.llm_authentication_failed','The Qwen API credential is invalid. Please check the API key.'],model_not_supported:['ui.error.llm_model_not_supported','The configured Qwen model or native endpoint does not support this request.'],provider_unavailable:['ui.error.llm_provider_unavailable','Qwen is temporarily unavailable. Please retry shortly.'],invalid_image:['ui.error.llm_invalid_image','The image could not be read. Please use a valid JPEG or PNG image.']};
-  const [key,fallback]=messages[String(diagnostic||'').trim()]||['ui.error.llm_call_failed','The Qwen request failed. Please retry.'];
-  return t(key, fallback);
+  return window.StudyModelRuntime.formatDiagnostic(diagnostic, t);
 }
 
 function setPanelBusy(busy) {
-  const mainView = document.getElementById('mainView');
+  const mainView = $id('mainView');
   if (mainView) {
     mainView.dataset.busy = busy ? 'true' : 'false';
   }
@@ -610,6 +611,7 @@ function createImagePasteHandler(options) {
         } else if (item.type === 'text/plain') {
           item.getAsString((pastedText) => {
             if (!controller.signal.aborted) {
+              if (kind === 'study') ocrN = ocrT = '';
               insertPastedText(textarea, pastedText);
             }
           });
@@ -1021,7 +1023,7 @@ function updateStudySummaries(data = {}) {
   const cardCount = Number.isFinite(Number(memoryDeck.card_count)) ? Number(memoryDeck.card_count) : 0;
   const dueCount = Number.isFinite(Number(memoryDeck.due_count)) ? Number(memoryDeck.due_count) : 0;
   const setText = (id, value) => {
-    const node = document.getElementById(id);
+    const node = $id(id);
     if (node) {
       node.textContent = value;
     }
@@ -1030,7 +1032,7 @@ function updateStudySummaries(data = {}) {
     ? tf('ui.settings.ocr.ready_summary', '{ready}/{total} OCR dependencies ready', { ready: readyCount, total: dependencyCount })
     : t('ui.settings.ocr.no_status', 'Dependency status is not loaded yet.'));
   setText('settingsDependencySummary', dependencyCount
-    ? tf('ui.settings.dependencies.component_summary', '{ready}/{total} components installed', { ready: readyCount, total: dependencyCount })
+    ? tf('ui.settings.dependencies.ready_summary', '{ready}/{total} dependencies ready', { ready: readyCount, total: dependencyCount })
     : t('ui.settings.dependencies.no_status', 'Refresh status to inspect OCR backends.'));
   window.StudyDependencyController?.render(deps);
   setText('settingsKnowledgeSummary', topicCount
@@ -1146,6 +1148,7 @@ function setMemoryDeckState(deck = {}) {
     memoryDecks = deck.decks;
     renderMemoryDeckOptions();
   }
+  void loadDeckOptions().catch(() => {});
   currentMemoryCard = dueCards[0] || null;
   if (quickReviewCount) {
     quickReviewCount.textContent = String(dueCount);
@@ -1208,6 +1211,12 @@ function renderMemoryDeckOptions() {
     : String(memoryDecks[0]?.id || '');
 }
 
+async function loadDeckOptions() {
+  memoryDecks = await window.StudyCompanionSurfacePanels.loadDecks({ callPlugin }, memoryAddBtn);
+  renderMemoryDeckOptions();
+  quickCardController?.decorateDeckOptions();
+}
+
 function finishMemoryDeckDialog(value) {
   const resolve = memoryDeckDialogResolve;
   memoryDeckDialogResolve = null;
@@ -1242,12 +1251,7 @@ const quickCardController = window.StudyQuickCardController?.create({
 });
 
 async function chooseDeckForFirstCard() {
-  if (memoryDecks.length) {
-    return memoryDeckSelect?.value || String(memoryDecks[0]?.id || '');
-  }
-  const payload = await callPlugin('study_memory_list_decks', { limit: 100 });
-  memoryDecks = Array.isArray(payload.decks) ? payload.decks : [];
-  renderMemoryDeckOptions();
+  await loadDeckOptions();
   if (memoryDecks.length) {
     return memoryDeckSelect?.value || String(memoryDecks[0]?.id || '');
   }
@@ -1565,7 +1569,7 @@ function openHostedSurface(surfaceId, featureAction = '') {
 }
 
 function openPracticePanel() {
-  const practicePanel=document.getElementById('practicePanel');
+  const practicePanel=$id('practicePanel');
   if(practicePanel)practicePanel.open=true;
   return practicePanel
 }
@@ -1576,9 +1580,9 @@ function handleFeatureAction(action) {
   if (action === 'practice') {
     focusAfterScroll(openPracticePanel(), generateQuestionBtn);
   } else if (action === 'explain') {
-    focusAfterScroll(document.getElementById('explainPanel'), studyInput);
+    focusAfterScroll($id('explainPanel'), studyInput);
   } else if (action === 'memory') {
-    const memoryPanel = document.getElementById('memoryPanel');
+    const memoryPanel = $id('memoryPanel');
     if (memoryPanel) {
       memoryPanel.open = true;
     }
@@ -1661,28 +1665,14 @@ function timeoutForEntry(entryId) {
   return ENTRY_TIMEOUT_MS[entryId] || RUN_TIMEOUT_MS;
 }
 
-function isAbortError(error) {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
 async function fetchWithTimeout(url, init = {}, timeoutMs = RUN_TIMEOUT_MS, signal) {
-  if (timeoutMs <= 0) {
-    throw new Error(t('ui.error.plugin_call_timeout', 'Plugin call timed out'));
-  }
-  const controller = new AbortController();
-  signal?.addEventListener('abort', () => controller.abort(), { once: true });
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (isAbortError(error)) {
-      if (signal?.aborted) throw new Error('plugin_call_aborted');
-      throw new Error(t('ui.error.plugin_call_timeout', 'Plugin call timed out'));
-    }
-    throw error;
-  } finally {
-    window.clearTimeout(timeout);
-  }
+  return window.StudyRequestUtils.fetchWithTimeout({
+    url,
+    init,
+    timeoutMs,
+    signal,
+    translate: t,
+  });
 }
 
 function setSettingsConfigStatus(key, fallback, target = settingsConfigStatus) {
@@ -1703,11 +1693,12 @@ function ensureConfigSection(config, key) {
 }
 
 function syncCommunicationControls(saving = false) {
+  if (!settingsCommunicationEnabled) return;
   const enabled = settingsCommunicationEnabled.checked;
   settingsCommunicationEnabled.disabled = saving;
-  settingsSolutionNarrationEnabled.disabled = saving || !enabled;
-  settingsGeneralNarrationEnabled.disabled = saving || !enabled;
-  settingsCommunicationRequiresEnabled.hidden = enabled;
+  if (settingsSolutionNarrationEnabled) settingsSolutionNarrationEnabled.disabled = saving || !enabled;
+  if (settingsGeneralNarrationEnabled) settingsGeneralNarrationEnabled.disabled = saving || !enabled;
+  if (settingsCommunicationRequiresEnabled) settingsCommunicationRequiresEnabled.hidden = enabled;
 }
 
 function syncSettingsSavingControls(saving = false) {
@@ -1724,6 +1715,10 @@ function renderCommunicationRuntime(status = settingsCommunicationStatus) {
     : !enabled ? 'requires_enabled'
       : status.command_subscription_active !== true || status.command_worker_active !== true ? 'commands_unavailable' : 'runtime_ready';
   settingsCommunicationRuntime.textContent = t(`ui.settings.communication.${key}`);
+}
+
+function renderModelRuntime(runtime = {}) {
+  window.StudyModelRuntime.render(settingsModelRuntimeCards, runtime, t, tf);
 }
 
 function applySettingsConfig(config) {
@@ -1756,6 +1751,7 @@ async function loadSettingsConfig(force = false) {
     settingsConfig = cloneConfig(getConfigRoot(payload));
     settingsCommunicationStatus = cloneConfig(payload.communication_status || {});
     applySettingsConfig(settingsConfig);
+    renderModelRuntime(payload.model_runtime || {});
     setSettingsConfigStatus('ui.status.config_loaded', 'Settings loaded');
   } catch (error) {
     setSettingsConfigStatus('ui.status.config_load_failed', 'Could not load settings');
@@ -1801,6 +1797,7 @@ async function saveSettingsConfig(statusTarget = settingsConfigStatus) {
     settingsCommunicationStatus = cloneConfig(payload.communication_status || {});
     applySettingsConfig(settingsConfig);
     setSettingsConfigStatus('ui.status.config_saved', 'Saved', statusTarget);
+    window.parent.postMessage({type: 'neko-plugin-context-invalidated'}, window.location.origin);
     if (surfaceDrawer?.dataset.open === 'true' && surfaceDrawer.dataset.surfaceId === 'note-exporter') {
       openSurfaceDrawer('note-exporter');
     }
@@ -1944,10 +1941,21 @@ function interactiveOcrErrorMessage(error) {
   return '';
 }
 
+function interactiveOcrFallbackMessage(reason) {
+  const normalized = String(reason || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  return t(
+    'ui.status.ocr_fallback_fullscreen',
+    'Screen selection unavailable; used full-screen OCR.',
+  );
+}
+
 async function runOcr(options = {}) {
   setStatus(t(
     'ui.status.preparing_ocr_selection',
-    'Switch to the learning material. Screen selection opens in 2 seconds...',
+    'Screen selection opens in 2 seconds...',
   ));
   let data;
   try {
@@ -1963,44 +1971,63 @@ async function runOcr(options = {}) {
     setStatus(t('ui.status.ocr_canceled', 'Screen selection canceled'));
     return data;
   }
-  setStatus(tf('ui.status.ocr_result', 'OCR {status}', { status: data.status || 'unknown' }));
-  if (data.text) {
+  const s = data.status || 'unknown';
+  const n = data.capture_mode_used === 'fullscreen' && ['ok', 'empty'].includes(s) ? interactiveOcrFallbackMessage(data.interactive_fallback_reason) : '';
+  const text = String(data.text || '').trim();
+  if (text) {
     studyInput.value = data.text;
+    ocrN = n;
+    ocrT = text;
   } else if (options.clearWhenEmpty && studyInput) {
     studyInput.value = '';
+    ocrN = ocrT = '';
   }
   setReply(data.text || data.diagnostic || data.summary || '');
-  await refreshStatus({ updateReply: false });
+  await refreshStatus({ updateReply: false }).catch((error) => { if (!n) throw error; });
+  setStatus(n || tf('ui.status.ocr_result', 'OCR {status}', { status: s }));
   return data;
 }
 
-async function explainText() {
+async function explainText(options = {}) {
   const text = studyInput.value.trim();
   if (!text && !studyInputImageValue) {
     throw new Error(t('ui.error.missing_study_input', 'Please enter text or paste an image first.'));
   }
-  setStatus(studyInputImageValue
-    ? t('ui.status.solving_problem', 'Solving problem...')
-    : t('ui.status.explaining', 'Explaining...'));
-  setReply(studyInputImageValue ? t('ui.status.solving_problem', 'Solving problem...') : t('ui.status.explaining', 'Explaining...'));
+  const n = (options.notice || (text === ocrT ? ocrN : '')).trim();
+  const pending = studyInputImageValue ? t('ui.status.solving_problem', 'Solving problem...') : t('ui.status.explaining', 'Explaining...');
+  setStatus(pending);
+  setReply(n ? `${n}\n\n${pending}` : pending);
   scrollReplyIntoView();
   const args = { text };
   if (studyInputImageValue) {
     args.vision_image_base64 = studyInputImageValue;
   }
-  const data = await callPlugin('study_explain_text', args);
+  let data;
+  try {
+    data = await callPlugin('study_explain_text', args);
+  } catch (error) {
+    if (n) error.n = n;
+    throw error;
+  }
   setStatus(data.degraded
     ? t('ui.status.reply_ready_fallback', 'Reply ready (fallback)')
     : t('ui.status.reply_ready', 'Reply ready'));
   setReply([
+    n,
     data.degraded
       ? formatTutorDiagnostic(data.diagnostic)
       : (data.reply || data.summary || data.transition_phrase || ''),
     outcomeFormatters.formatKnowledgeGuidanceEvidence(data, t),
     outcomeFormatters.formatSolutionNarrationNotice(data, t),
     outcomeFormatters.formatGeneralNarrationNotice(data, t),
+    data.history_persisted === false
+      ? t(
+        'ui.error.history_not_saved',
+        'This explanation is shown, but it could not be saved to session history. It may disappear after you leave or refresh.',
+      )
+      : '',
   ].filter(Boolean).join('\n\n'));
-  await refreshStatus({ updateReply: false });
+  await refreshStatus({ updateReply: false }).catch((error) => { if (!n) throw error; setStatus(t('ui.status.reply_ready', 'Reply ready')); });
 }
 
 async function generateQuestion() {
@@ -2116,15 +2143,15 @@ async function saveMemoryCard() {
 }
 
 async function reviewMemoryCard(rating) {
-  const topicId = currentMemoryCard?.topic_id || currentMemoryCard?.item_id || '';
-  if (!topicId) {
+  const itemId = currentMemoryCard?.item_id || currentMemoryCard?.item?.id || '';
+  const topicId = currentMemoryCard?.topic_id || '';
+  if (!itemId && !topicId) {
     return;
   }
   setStatus(t('ui.memory.reviewing', 'Reviewing memory card...'));
-  const data = await callPlugin('study_memory_card_review', {
-    topic_id: topicId,
-    rating,
-  });
+  const data = itemId
+    ? await callPlugin('study_memory_review_item', { item_id: itemId, rating })
+    : await callPlugin('study_memory_card_review', { topic_id: topicId, rating });
   const scheduledDays = data.schedule && Number.isFinite(Number(data.schedule.scheduled_days))
     ? Number(data.schedule.scheduled_days).toFixed(1)
     : '';
@@ -2195,7 +2222,7 @@ function bindButton(button, handler) {
       await handler();
     } catch (error) {
       setStatus(t('ui.status.error', 'Error'));
-      setReply(formatPluginError(error));
+      setReply([error?.n,formatPluginError(error)].filter(Boolean).join('\n\n'));
     } finally {
       button.disabled = false;
     }
@@ -2207,7 +2234,7 @@ async function handleNekoCoachAction(action) {
   if (normalized === 'explain-current') {
     const ocrData = await runOcr({ clearWhenEmpty: true });
     if (String(ocrData?.text || '').trim() || studyInputImageValue) {
-      await explainText();
+      await explainText({ notice: ocrN });
     }
     return;
   }
@@ -2289,6 +2316,7 @@ async function bootstrap() {
     });
   }
   if (studyInput) {
+    studyInput.addEventListener('input', () => { ocrN = ocrT = ''; });
     studyInput.addEventListener('paste', createImagePasteHandler({
       textarea: studyInput,
       kind: 'study',
@@ -2344,6 +2372,9 @@ async function bootstrap() {
       event.preventDefault();
       saveSettingsConfig();
     });
+  }
+  if (settingsModelRefreshBtn) {
+    settingsModelRefreshBtn.addEventListener('click', () => StudyModelRuntime.refresh(callPlugin, t, tf));
   }
   if (settingsDataSaveBtn) {
     settingsDataSaveBtn.addEventListener('click', () => {
@@ -2432,7 +2463,7 @@ async function bootstrap() {
     });
   });
   await refreshStatus();
-  await loadPracticeScope({ silent: true });
+  await loadPracticeScope({ silent: true }).catch(() => null);
   await loadQuestionContext({ silent: true });
 }
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
     Err,
@@ -16,6 +18,24 @@ from .models import public_current_question_payload
 
 
 class _TutorAnswerEntriesMixin:
+    async def _clear_attempt_evaluation_reservation(
+        self, attempt_id: str, *, recover_cached: bool = False
+    ) -> None:
+        if not attempt_id:
+            return
+        async with self._lock:
+            if str(self._state.current_question.get("attempt_id") or "") == attempt_id:
+                self._state.current_question.pop("attempt_evaluation_pending", None)
+                if (
+                    recover_cached
+                    and self._state.current_question.get("attempt_evaluated")
+                    and isinstance(
+                        self._state.current_question.get("answer_evaluation_cache"),
+                        dict,
+                    )
+                ):
+                    self._state.current_question["attempt_evaluation_recovery"] = True
+
     @ui.action()
     @plugin_entry(
         id="study_evaluate_answer",
@@ -51,6 +71,7 @@ class _TutorAnswerEntriesMixin:
     ):
         if self._agent is None:
             return Err(SdkError("study tutor agent is not initialized"))
+        target_lanlan = self._resolve_study_target_lanlan(kwargs)
         async with self._lock:
             current_question = dict(self._state.current_question)
             active_mode = self._state.active_mode
@@ -66,8 +87,16 @@ class _TutorAnswerEntriesMixin:
         supplied_current_identity = bool(
             current_question_requires_identity
             and (
-                supplied_question_id == state_question_id
-                or supplied_attempt_id == state_attempt_id
+                (
+                    supplied_question_id
+                    and state_question_id
+                    and supplied_question_id == state_question_id
+                )
+                or (
+                    supplied_attempt_id
+                    and state_attempt_id
+                    and supplied_attempt_id == state_attempt_id
+                )
             )
         )
         using_current_question = (
@@ -89,6 +118,11 @@ class _TutorAnswerEntriesMixin:
                     )
                 )
             if current_question.get("attempt_evaluated"):
+                cached_evaluation = current_question.get("answer_evaluation_cache")
+                if current_question.get("attempt_evaluation_recovery") and isinstance(
+                    cached_evaluation, dict
+                ):
+                    return Ok(dict(cached_evaluation))
                 return Err(
                     SdkError(
                         "attempt has already been evaluated",
@@ -149,6 +183,7 @@ class _TutorAnswerEntriesMixin:
         if selected_topic_id:
             question_payload["selected_topic_id"] = selected_topic_id
         reserved_attempt = False
+        final_attempt_state_staged = False
         if using_current_question and state_attempt_id:
             async with self._lock:
                 live_question = self._state.current_question
@@ -235,14 +270,7 @@ class _TutorAnswerEntriesMixin:
             )
             if reply.degraded:
                 if reserved_attempt:
-                    async with self._lock:
-                        if (
-                            str(self._state.current_question.get("attempt_id") or "")
-                            == state_attempt_id
-                        ):
-                            self._state.current_question.pop(
-                                "attempt_evaluation_pending", None
-                            )
+                    await self._clear_attempt_evaluation_reservation(state_attempt_id)
                     await self._persist_state()
                 return Ok(payload)
             payload["question"] = resolved_question
@@ -269,6 +297,35 @@ class _TutorAnswerEntriesMixin:
             payload["screen_classification"] = (
                 tutor_context.get("screen_classification") or {}
             )
+            if using_current_question and state_attempt_id:
+                public_eval_cache = {
+                    key: value
+                    for key, value in payload.items()
+                    if key
+                    not in {
+                        "answer",
+                        "accepted_answers",
+                        "key_points",
+                        "rubric",
+                        "solution_steps",
+                        "internal_private_payload",
+                        "current_question_private",
+                    }
+                }
+                async with self._lock:
+                    if (
+                        str(self._state.current_question.get("attempt_id") or "")
+                        == state_attempt_id
+                    ):
+                        self._state.current_question.pop(
+                            "attempt_evaluation_pending", None
+                        )
+                        self._state.current_question["attempt_evaluated"] = True
+                        self._state.current_question["answer_evaluation_cache"] = (
+                            public_eval_cache
+                        )
+                        final_attempt_state_staged = True
+                await self._persist_state()
             topic = str(
                 selected_topic_id
                 or question_payload.get("selected_topic_id")
@@ -300,46 +357,26 @@ class _TutorAnswerEntriesMixin:
                 ),
                 topic=topic,
                 mastery_after=mastery_after,
+                target_lanlan=target_lanlan,
             )
-            if using_current_question and state_attempt_id:
-                public_eval_cache = {
-                    key: value
-                    for key, value in payload.items()
-                    if key
-                    not in {
-                        "answer",
-                        "accepted_answers",
-                        "key_points",
-                        "rubric",
-                        "solution_steps",
-                        "internal_private_payload",
-                        "current_question_private",
-                    }
-                }
-                async with self._lock:
-                    if (
-                        str(self._state.current_question.get("attempt_id") or "")
-                        == state_attempt_id
-                    ):
-                        self._state.current_question.pop(
-                            "attempt_evaluation_pending", None
-                        )
-                        self._state.current_question["attempt_evaluated"] = True
-                        self._state.current_question["answer_evaluation_cache"] = (
-                            public_eval_cache
-                        )
-                await self._persist_state()
             return Ok(payload)
+        except asyncio.CancelledError:
+            if reserved_attempt:
+                await self._clear_attempt_evaluation_reservation(
+                    state_attempt_id,
+                    recover_cached=final_attempt_state_staged,
+                )
+                with contextlib.suppress(Exception):
+                    await self._persist_state()
+            raise
         except Exception as exc:
             if reserved_attempt:
-                async with self._lock:
-                    if (
-                        str(self._state.current_question.get("attempt_id") or "")
-                        == state_attempt_id
-                    ):
-                        self._state.current_question.pop(
-                            "attempt_evaluation_pending", None
-                        )
+                await self._clear_attempt_evaluation_reservation(
+                    state_attempt_id,
+                    recover_cached=final_attempt_state_staged,
+                )
+                with contextlib.suppress(Exception):
+                    await self._persist_state()
             return _entry_exception_error(
                 self, exc, operation="study_evaluate_answer"
             )
