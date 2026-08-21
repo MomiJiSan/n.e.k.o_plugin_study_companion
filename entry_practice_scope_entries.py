@@ -17,6 +17,7 @@ from .entry_common import (
 from .models import PracticeScopeV1
 from .practice_scope import PracticeScopeError, build_practice_scope
 
+
 _MAX_PRACTICE_SCOPE_TOPICS = 5000
 _PRACTICE_SCOPE_INPUT_PROPERTIES = {
     "schema_version": {"type": "integer", "default": 1},
@@ -51,6 +52,10 @@ class _PracticeScopeEntriesMixin:
         return lock
 
     def _practice_scope_topics(self, requested_scope: Mapping[str, object]) -> list[dict]:
+        mode = str(requested_scope.get("mode") or "explicit_scope").strip().lower()
+        if mode.replace("-", "_") == "explicit_topic":
+            topic = self._store.get_topic(str(requested_scope.get("topic_id") or ""))
+            return [topic] if topic is not None else []
         stage = str(requested_scope.get("stage") or "").strip().lower().replace("-", "_")
         subject = str(requested_scope.get("subject") or "").strip().lower().replace("-", "_")
         course_family = (
@@ -59,14 +64,20 @@ class _PracticeScopeEntriesMixin:
             .lower()
             .replace("-", "_")
         )
-        return self._store.list_topics(
-            _MAX_PRACTICE_SCOPE_TOPICS,
+        topics = self._store.list_topics(
+            _MAX_PRACTICE_SCOPE_TOPICS + 1,
             subject or None,
             stage or None,
             chapter=str(requested_scope.get("chapter") or "").strip() or None,
             unit=str(requested_scope.get("unit") or "").strip() or None,
             course_family=course_family or None,
         )
+        if len(topics) > _MAX_PRACTICE_SCOPE_TOPICS:
+            raise PracticeScopeError(
+                "practice scope matches too many topics",
+                code="PRACTICE_SCOPE_TOO_LARGE",
+            )
+        return topics
 
     def _canonical_practice_scope(
         self, requested_scope: Mapping[str, object], *, revision: int

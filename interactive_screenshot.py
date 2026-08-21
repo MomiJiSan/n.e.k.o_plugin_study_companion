@@ -5,15 +5,16 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 import io
 import ipaddress
 import os
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 48911
@@ -24,6 +25,12 @@ _SESSION_TIMEOUT_MS = 45_000
 _MAX_ENCODED_IMAGE_CHARS = 12 * 1024 * 1024
 _MAX_DECODED_IMAGE_BYTES = 10 * 1024 * 1024
 _SUPPORTED_IMAGE_MIME_TYPES = frozenset({"image/jpeg", "image/png"})
+_INTERACTIVE_UNAVAILABLE_ERRORS = frozenset(
+    {
+        "interactive screenshot is only supported on macOS or Windows",
+        "backend is configured as remote (NEKO_ACTIVITY_TRACKER_REMOTE); local interactive screenshot disabled",
+    }
+)
 
 
 class InteractiveCaptureError(RuntimeError):
@@ -117,6 +124,7 @@ class InteractiveScreenshotClient:
         activation_delay_seconds: float = _ACTIVATION_DELAY_SECONDS,
         request_timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS,
         session_timeout_ms: int = _SESSION_TIMEOUT_MS,
+        lanlan_name: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
@@ -126,6 +134,7 @@ class InteractiveScreenshotClient:
         self._activation_delay_seconds = max(0.0, float(activation_delay_seconds))
         self._request_timeout_seconds = float(request_timeout_seconds)
         self._session_timeout_ms = int(session_timeout_ms)
+        self._lanlan_name = str(lanlan_name or "").strip() or None
         self._transport = transport
         self._sleep = sleep
 
@@ -139,13 +148,16 @@ class InteractiveScreenshotClient:
                 transport=self._transport,
                 trust_env=False,
             ) as client:
+                request_payload: dict[str, Any] = {
+                    "selection_only": True,
+                    "copy_to_clipboard": False,
+                    "session_timeout_ms": self._session_timeout_ms,
+                }
+                if self._lanlan_name is not None:
+                    request_payload["lanlan_name"] = self._lanlan_name
                 response = await client.post(
                     f"{self._base_url}{_INTERACTIVE_SCREENSHOT_PATH}",
-                    json={
-                        "selection_only": True,
-                        "copy_to_clipboard": False,
-                        "session_timeout_ms": self._session_timeout_ms,
-                    },
+                    json=request_payload,
                 )
         except httpx.TimeoutException as exc:
             raise InteractiveCaptureError(
@@ -170,6 +182,10 @@ class InteractiveScreenshotClient:
             return InteractiveCaptureResult(canceled=True)
         if response.status_code != 200 or payload.get("success") is False:
             error_code = str(payload.get("error") or f"http_status_{response.status_code}")
+            if error_code == "bridge_error":
+                error_code = "no_renderer"
+            elif error_code in _INTERACTIVE_UNAVAILABLE_ERRORS:
+                error_code = "interactive_unavailable"
             raise InteractiveCaptureError(f"interactive_capture: {error_code}")
 
         data_url = payload.get("data")
@@ -179,5 +195,7 @@ class InteractiveScreenshotClient:
         return InteractiveCaptureResult(image=image)
 
 
-async def capture_interactive_region() -> InteractiveCaptureResult:
-    return await InteractiveScreenshotClient().capture_region()
+async def capture_interactive_region(
+    *, lanlan_name: str | None = None
+) -> InteractiveCaptureResult:
+    return await InteractiveScreenshotClient(lanlan_name=lanlan_name).capture_region()

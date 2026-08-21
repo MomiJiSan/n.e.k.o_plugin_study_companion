@@ -13,8 +13,7 @@ from .knowledge_quality import (
     KnowledgeCandidateStatus,
     KnowledgeQualityStore,
 )
-from .memory_deck_store import MemoryDeckStore
-from .memory_deck_store import ensure_memory_schema as ensure_memory_schema
+from .memory_deck_store import MemoryDeckStore, ensure_memory_schema
 from .mode_manager import normalize_mode
 from .models import (
     STORE_CONFIG,
@@ -23,65 +22,6 @@ from .models import (
     StudyState,
     build_config,
     json_copy,
-)
-from .store_fsrs import (
-    append_mastery_snapshot,
-    append_review_log,
-    get_fsrs_card,
-    get_latest_mastery,
-    list_fsrs_cards,
-    list_mastery_overview,
-    list_review_log,
-    upsert_fsrs_card,
-)
-from .store_knowledge import (
-    add_knowledge_evidence,
-    candidate_status_counts,
-    get_candidate_by_key,
-    get_candidate_item,
-    list_candidate_items,
-    list_knowledge_evidence,
-    list_recent_knowledge_evidence,
-    update_candidate_score_status,
-    upsert_candidate_item,
-)
-from .store_knowledge_contribution import (
-    anonymous_knowledge_stats_summary,
-    clear_knowledge_contribution_queue,
-    enqueue_knowledge_contribution_snapshot,
-    list_anonymous_knowledge_stats,
-    list_knowledge_contribution_queue,
-    upsert_anonymous_knowledge_stat,
-)
-from .store_maintenance import json_loads, purge_all, transaction
-from .store_qa import (
-    add_qa_record,
-    add_wrong_question,
-    ensure_session,
-    get_retry_wrong_question,
-    list_qa_records,
-    list_qa_records_for_topic,
-    list_sessions,
-    list_wrong_questions,
-    mark_wrong_question_resolved,
-    record_wrong_question_correct,
-)
-from .store_schema import (
-    _ensure_column,
-    _init_db,
-    _load_seed_if_empty,
-    _trim_append_only_rows,
-)
-from .store_topics import (
-    average_latest_mastery,
-    count_topics,
-    count_tracked_mastery_topics,
-    ensure_topic,
-    find_topic_by_name,
-    get_topic,
-    list_topics,
-    load_knowledge_seed,
-    upsert_topic,
 )
 
 _DROP = object()
@@ -651,37 +591,70 @@ class StudyStore:
         output_text: str,
         metadata: dict[str, Any] | None = None,
         history_limit: int = 50,
-    ) -> None:
-        with self._lock:
-            conn = self._require_conn()
-            conn.execute(
-                """
-                INSERT INTO interactions (kind, input_text, output_text, metadata, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    kind,
-                    input_text,
-                    output_text,
-                    json.dumps(
-                        json_copy(metadata or {}), ensure_ascii=False, sort_keys=True
-                    ),
-                    time.time(),
-                ),
-            )
-            self._interaction_count += 1
-            if self._interaction_count >= int(self._INTERACTION_TRIM_INTERVAL):
-                conn.execute(
-                    """
-                    DELETE FROM interactions
-                    WHERE id NOT IN (
-                        SELECT id FROM interactions ORDER BY id DESC LIMIT ?
+        cancel_event: threading.Event | None = None,
+        worker_started_event: threading.Event | None = None,
+        commit_started_event: threading.Event | None = None,
+        committed_event: threading.Event | None = None,
+        finished_event: threading.Event | None = None,
+    ) -> bool:
+        if worker_started_event is not None:
+            worker_started_event.set()
+        try:
+            with self._lock:
+                if cancel_event is not None and cancel_event.is_set():
+                    return False
+                conn = self._require_conn()
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO interactions (kind, input_text, output_text, metadata, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            kind,
+                            input_text,
+                            output_text,
+                            json.dumps(
+                                json_copy(metadata or {}),
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            ),
+                            time.time(),
+                        ),
                     )
-                    """,
-                    (max(1, int(history_limit)),),
-                )
-                self._interaction_count = 0
-            conn.commit()
+                    next_interaction_count = self._interaction_count + 1
+                    trim_history = next_interaction_count >= int(
+                        self._INTERACTION_TRIM_INTERVAL
+                    )
+                    if trim_history:
+                        conn.execute(
+                            """
+                            DELETE FROM interactions
+                            WHERE id NOT IN (
+                                SELECT id FROM interactions ORDER BY id DESC LIMIT ?
+                            )
+                            """,
+                            (max(1, int(history_limit)),),
+                        )
+                    if commit_started_event is not None:
+                        commit_started_event.set()
+                    if cancel_event is not None and cancel_event.is_set():
+                        conn.rollback()
+                        return False
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    raise
+                self._interaction_count = 0 if trim_history else next_interaction_count
+                if committed_event is not None:
+                    committed_event.set()
+                return True
+        finally:
+            if finished_event is not None:
+                finished_event.set()
 
     def batch_write_answer_data(
         self,
@@ -1476,6 +1449,67 @@ class StudyStore:
         }
 
 
+from .store_schema import (
+    _ensure_column,
+    _init_db,
+    _load_seed_if_empty,
+    _trim_append_only_rows,
+)
+from .store_topics import (
+    average_latest_mastery,
+    count_topics,
+    count_tracked_mastery_topics,
+    ensure_topic,
+    find_topic_by_name,
+    get_topic,
+    list_topics,
+    load_knowledge_seed,
+    upsert_topic,
+)
+from .store_knowledge import (
+    add_knowledge_evidence,
+    candidate_status_counts,
+    get_candidate_by_key,
+    get_candidate_item,
+    list_candidate_items,
+    list_knowledge_evidence,
+    list_recent_knowledge_evidence,
+    update_candidate_score_status,
+    upsert_candidate_item,
+)
+from .store_knowledge_contribution import (
+    anonymous_knowledge_stats_summary,
+    clear_knowledge_contribution_queue,
+    enqueue_knowledge_contribution_snapshot,
+    list_anonymous_knowledge_stats,
+    list_knowledge_contribution_queue,
+    upsert_anonymous_knowledge_stat,
+)
+from .store_qa import (
+    add_qa_record,
+    add_wrong_question,
+    ensure_session,
+    get_retry_wrong_question,
+    list_qa_records,
+    list_qa_records_for_topic,
+    list_sessions,
+    list_wrong_questions,
+    mark_wrong_question_resolved,
+    record_wrong_question_correct,
+)
+from .store_fsrs import (
+    append_mastery_snapshot,
+    append_review_log,
+    get_fsrs_card,
+    get_latest_mastery,
+    list_fsrs_cards,
+    list_latest_mastery_for_topics,
+    list_mastery_overview,
+    list_review_log,
+    upsert_fsrs_card,
+)
+from .store_maintenance import json_loads, purge_all, transaction
+
 StudyStore._init_db = _init_db  # type: ignore[method-assign]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]
 StudyStore._trim_append_only_rows = _trim_append_only_rows  # type: ignore[method-assign]
@@ -1518,6 +1552,7 @@ StudyStore.mark_wrong_question_resolved = mark_wrong_question_resolved  # type: 
 StudyStore.record_wrong_question_correct = record_wrong_question_correct  # type: ignore[method-assign]
 StudyStore.append_mastery_snapshot = append_mastery_snapshot  # type: ignore[method-assign]
 StudyStore.get_latest_mastery = get_latest_mastery  # type: ignore[method-assign]
+StudyStore.list_latest_mastery_for_topics = list_latest_mastery_for_topics  # type: ignore[method-assign]
 StudyStore.list_mastery_overview = list_mastery_overview  # type: ignore[method-assign]
 StudyStore.get_fsrs_card = get_fsrs_card  # type: ignore[method-assign]
 StudyStore.upsert_fsrs_card = upsert_fsrs_card  # type: ignore[method-assign]

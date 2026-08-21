@@ -9,6 +9,7 @@ from plugin.sdk.plugin import Err, Ok, SdkError
 from .constants import MODE_COMPANION, MODE_INTERACTIVE, MODE_TEACHING
 from .entry_common import _plugin_lock
 
+
 _NEKO_COMMAND_TOPIC = "neko.study_command"
 
 _NEKO_COMMAND_HANDLERS: dict[str, str] = {
@@ -337,7 +338,9 @@ class _NekoCommandsMixin:
 
         if isinstance(result, Ok):
             reply = result.value if isinstance(result.value, dict) else {}
-            if bool(reply.get("solution_narration_scheduled")):
+            if bool(reply.get("solution_narration_scheduled")) or bool(
+                reply.get("general_narration_scheduled")
+            ):
                 return
             await self._push_neko_command_message(
                 visibility=[],

@@ -43,6 +43,16 @@ type StudyStatus = {
   };
 };
 
+type StudyModelRuntime = {
+  group?: string;
+  model?: string;
+  provider_type?: string;
+  configured?: boolean;
+  credential_configured?: boolean;
+  transport_supported?: boolean;
+  vision_capability?: string;
+};
+
 type StudyMode = 'companion' | 'interactive' | 'teaching';
 
 type PracticeScope = {
@@ -90,6 +100,14 @@ type DocumentJobState = {
   progress: number;
 };
 
+type DocumentJobMetadata = {
+  name?: string;
+  type?: string;
+  chars?: number;
+  tokens?: number;
+  truncated?: boolean;
+};
+
 type DocumentJobPayload = {
   job_id?: string;
   status?: string;
@@ -103,10 +121,27 @@ type DocumentJobPayload = {
   summary?: string;
   degraded?: boolean;
   diagnostic?: string;
+  document?: DocumentJobMetadata;
 };
 
 const DOCUMENT_JOB_STORAGE_KEY = 'study_companion.document_analysis_job_id';
 const PENDING_DOCUMENT_JOB_ID = '__pending__';
+const PENDING_DOCUMENT_JOB_PREFIX = `${PENDING_DOCUMENT_JOB_ID}:`;
+
+function createDocumentStartToken() {
+  if (typeof window.crypto?.randomUUID === 'function') return window.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isPendingDocumentJobId(jobId: string) {
+  return jobId === PENDING_DOCUMENT_JOB_ID || jobId.startsWith(PENDING_DOCUMENT_JOB_PREFIX);
+}
+
+function pendingDocumentStartToken(jobId: string) {
+  return jobId.startsWith(PENDING_DOCUMENT_JOB_PREFIX)
+    ? jobId.slice(PENDING_DOCUMENT_JOB_PREFIX.length)
+    : '';
+}
 
 type SolutionNarrationOutcome = {
   diagnostic?: string;
@@ -122,6 +157,10 @@ type GeneralNarrationOutcome = {
   general_narration_status?: string;
   general_narration_reason?: string;
   general_narration_response_mode?: string;
+};
+
+type HistoryPersistenceOutcome = {
+  history_persisted?: boolean;
 };
 
 type KnowledgeGuidanceTopic = {
@@ -357,17 +396,17 @@ function formatKnowledgeGuidanceEvidence(
 
 const ENTRY_TIMEOUT_MS: Record<string, number> = {
   study_status: 15000,
+  study_get_settings_config: 15000,
   study_ocr_snapshot: 60000,
   study_set_mode: 15000,
   study_explain_text: 120000,
-  study_analyze_document: 105000,
   study_start_document_analysis: 30000,
   study_document_analysis_status: 15000,
   study_cancel_document_analysis: 15000,
-  study_generate_question: 70000,
+  study_generate_question: 75000,
   study_question_context: 30000,
-  study_generate_targeted_question: 55000,
-  study_evaluate_answer: 70000,
+  study_generate_targeted_question: 60000,
+  study_evaluate_answer: 75000,
   study_summarize_session: 90000,
 };
 
@@ -925,6 +964,17 @@ function callStudyPlugin<T = Record<string, unknown>>(
   );
 }
 
+function openHostedExternalUrl(url: string): void {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(
+      { type: 'neko-hosted-surface-open-external', payload: { url } },
+      '*',
+    );
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 export default function StudyPanel(props: PluginSurfaceProps) {
   const documentKeyAliases: Record<string, string> = {
     'ui.document.import': 'ui.button.import_document',
@@ -963,6 +1013,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     )
   );
   const [status, setStatus] = useState<StudyStatus>({});
+  const [modelRuntime, setModelRuntime] = useState<Record<string, StudyModelRuntime>>({});
+  const [modelRuntimeLoading, setModelRuntimeLoading] = useState(false);
   const [text, setText] = useState('');
   const [question, setQuestion] = useState('');
   const [questionContext, setQuestionContext] = useState<QuestionContext | null>(null);
@@ -992,6 +1044,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const documentJobControllerRef = useRef<AbortController | null>(null);
   const contextRefreshControllerRef = useRef<AbortController | null>(null);
   const documentJobIdRef = useRef('');
+  const documentPendingStartTokenRef = useRef('');
+  const documentPendingStartDeadlineRef = useRef(0);
   const documentCancelRequestedRef = useRef(false);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
   const generateButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -1054,6 +1108,29 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     return t(`ui.status.screen.${normalized}`, normalized);
   }
 
+  async function refreshModelRuntime(signal?: AbortSignal) {
+    setModelRuntimeLoading(true);
+    try {
+      const data = await callStudyPlugin<{
+        model_runtime?: Record<string, StudyModelRuntime>;
+      }>(props.api, 'study_get_settings_config', props.locale, {}, signal);
+      if (!signal?.aborted) setModelRuntime(data.model_runtime || {});
+    } catch (_error) {
+      if (!signal?.aborted) setModelRuntime({});
+    } finally {
+      if (!signal?.aborted) setModelRuntimeLoading(false);
+    }
+  }
+
+  function modelRuntimeStatus(role: string, item: StudyModelRuntime) {
+    if (item.configured !== true) return t('ui.settings.model_runtime.not_configured', 'Not configured');
+    if (item.transport_supported === false) return t('ui.settings.model_runtime.unsupported', 'This provider protocol is not supported by Study Companion');
+    if (item.credential_configured !== true) return t('ui.settings.model_runtime.credential_missing', 'Credential is not configured');
+    return role === 'vision'
+      ? t('ui.settings.model_runtime.configured_vision_unknown', 'Configured; image capability will be confirmed on the first request')
+      : t('ui.settings.model_runtime.ready', 'Ready');
+  }
+
   function normalizeStudyStatus(value: unknown): StudyStatus {
     if (!value || typeof value !== 'object') {
       return {};
@@ -1107,22 +1184,44 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   }
 
   function formatTutorDiagnostic(diagnostic?: string, documentOperation = false) {
+    const phaseDeadlineDiagnostics = new Set([
+      'document_analysis_window_exhausted',
+      'document_chunk_window_exhausted',
+      'document_merge_window_exhausted',
+      'document_finalize_timeout',
+    ]);
+    const diagnosticCode = String(diagnostic || '').trim();
+    const normalizedDiagnostic = phaseDeadlineDiagnostics.has(diagnosticCode)
+      ? 'timeout'
+      : diagnosticCode;
     const messages: Record<string, [string, string]> = {
       timeout: documentOperation
         ? ['ui.document.error.timeout', 'Document analysis timed out. Please retry shortly.']
-        : ['ui.error.llm_timeout', 'Image understanding timed out. Please retry or paste the problem text.'],
-      rate_limited: ['ui.error.llm_rate_limited', 'Qwen is receiving too many requests. Please retry shortly.'],
-      authentication_failed: ['ui.error.llm_authentication_failed', 'The Qwen API credential is invalid. Please check the API key.'],
+        : ['ui.error.llm_timeout', 'The model request timed out. Please retry shortly.'],
+      rate_limited: ['ui.error.llm_rate_limited', 'The model service is receiving too many requests. Please retry shortly.'],
+      authentication_failed: ['ui.error.llm_authentication_failed', 'The configured model credential is invalid. Check it in N.E.K.O model settings.'],
       model_not_supported: documentOperation
         ? ['ui.error.document_analysis_model_not_supported', 'The configured model does not support document analysis.']
-        : ['ui.error.llm_model_not_supported', 'The configured Qwen model or native endpoint does not support this request.'],
-      provider_unavailable: ['ui.error.llm_provider_unavailable', 'Qwen is temporarily unavailable. Please retry shortly.'],
+        : ['ui.error.llm_model_not_supported', 'The configured model is unavailable or does not support this request.'],
+      provider_unavailable: ['ui.error.llm_provider_unavailable', 'The model service is temporarily unavailable. Please retry shortly.'],
+      unsupported_provider: documentOperation
+        ? ['ui.error.document_analysis_unsupported_provider', 'The configured model provider protocol is not supported by Study Companion.']
+        : ['ui.error.llm_unsupported_provider', 'The configured model provider protocol is not supported by Study Companion.'],
+      context_limit_exceeded: documentOperation
+        ? ['ui.error.document_analysis_context_limit_exceeded', 'The document exceeds the configured model context limit.']
+        : ['ui.error.llm_context_limit_exceeded', 'The content exceeds the configured model context limit. Shorten it and retry.'],
+      vision_not_supported: documentOperation
+        ? ['ui.error.document_analysis_vision_not_supported', 'The configured Vision model does not accept image input.']
+        : ['ui.error.llm_vision_not_supported', 'The configured Vision model does not accept image input.'],
+      agent_quota_exceeded: documentOperation
+        ? ['ui.error.document_analysis_agent_quota_exceeded', 'The free Agent daily quota has been used up.']
+        : ['ui.error.llm_agent_quota_exceeded', 'The free Agent daily quota has been used up. Try again later or configure another Agent model.'],
       invalid_endpoint: documentOperation
-        ? ['ui.error.document_analysis_invalid_endpoint', 'The configured Qwen API endpoint is invalid or unsupported.']
-        : ['ui.error.llm_call_failed', 'The configured Qwen API endpoint is invalid or unsupported.'],
+        ? ['ui.error.document_analysis_invalid_endpoint', 'The configured model endpoint is invalid or unsupported.']
+        : ['ui.error.llm_invalid_endpoint', 'The configured model endpoint is invalid or unsupported.'],
       invalid_request: documentOperation
-        ? ['ui.error.document_analysis_invalid_request', 'Qwen rejected the document analysis request as invalid.']
-        : ['ui.error.llm_call_failed', 'Qwen rejected the request as invalid.'],
+        ? ['ui.error.document_analysis_invalid_request', 'The model service rejected the document analysis request as invalid.']
+        : ['ui.error.llm_invalid_request', 'The model service rejected the request as invalid.'],
       invalid_image: ['ui.error.llm_invalid_image', 'The image could not be read. Please use a valid JPEG or PNG image.'],
       document_too_large: ['ui.document.error.file_too_large', 'The document exceeds the 512 KiB size limit.'],
       document_too_long: ['ui.document.error.too_long', 'The document exceeds the 160,000-token limit. Shorten it and retry.'],
@@ -1138,8 +1237,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       document_type_mismatch: ['ui.document.error.unsupported_type', 'The document type does not match its file extension.'],
       unsupported_locale: ['ui.error.plugin_call_failed', 'The current page language is not supported for document analysis.'],
       llm_call_failed: documentOperation
-        ? ['ui.error.document_analysis_llm_call_failed', 'The Qwen document analysis request failed.']
-        : ['ui.error.llm_call_failed', 'The Qwen request failed. Please retry.'],
+        ? ['ui.error.document_analysis_llm_call_failed', 'The document analysis model request failed.']
+        : ['ui.error.llm_call_failed', 'The model service request failed. Please retry.'],
       document_job_busy: ['ui.error.document_job_busy', 'Another document analysis is already running.'],
       document_job_not_found: ['ui.error.document_job_not_found', 'The document analysis job is no longer available.'],
       document_split_failed: ['ui.error.document_split_failed', 'The document could not be split safely for analysis.'],
@@ -1148,8 +1247,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       document_merge_budget_exceeded: ['ui.error.document_merge_budget_exceeded', 'The section analyses are too long to merge safely.'],
       document_canceled: ['ui.error.document_canceled', 'Document analysis canceled.'],
     };
-    const [key, fallback] = messages[String(diagnostic || '').trim()]
-      || ['ui.error.llm_call_failed', 'The Qwen request failed. Please retry.'];
+    const [key, fallback] = messages[normalizedDiagnostic]
+      || ['ui.error.llm_call_failed', 'The model service request failed. Please retry.'];
     return t(key, fallback);
   }
 
@@ -1219,7 +1318,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       let loaded;
       if (isParsedStudyDocumentFile(file)) {
         assertParsedStudyDocumentFile(file);
-        const response = await props.api.parseDocument(file, { timeoutMs: STUDY_DOCUMENT_PARSE_TIMEOUT_MS });
+        const response = await props.api.parseDocument(file, { timeoutMs: STUDY_DOCUMENT_PARSE_TIMEOUT_MS, signal: controller.signal });
         if (controller.signal.aborted) return;
         const raw = response && typeof response === 'object' ? response as Record<string, unknown> : {};
         const payload = raw.document && typeof raw.document === 'object'
@@ -1285,8 +1384,47 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     };
   }
 
+  function restoredStudyDocument(metadata?: DocumentJobMetadata): StudyDocument | null {
+    const name = String(metadata?.name || '').trim();
+    const analysisType = String(metadata?.type || '') as StudyDocument['analysisType'];
+    const sourceTypeByAnalysisType: Partial<Record<StudyDocument['analysisType'], StudyDocument['sourceType']>> = {
+      'text/plain': 'txt',
+      'text/markdown': 'markdown',
+      'application/pdf': 'pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    };
+    const sourceType = sourceTypeByAnalysisType[analysisType];
+    if (!name || !sourceType) return null;
+    return {
+      name,
+      sourceType,
+      analysisType,
+      originalSize: 0,
+      encoding: 'recovered',
+      chars: Math.max(0, Math.floor(Number(metadata?.chars) || 0)),
+      estimatedTokens: Math.max(0, Math.floor(Number(metadata?.tokens) || 0)),
+      truncated: metadata?.truncated === true,
+      meta: { source_retained: false },
+      modified: false,
+    };
+  }
+
+  function formatDocumentCompletion(payload: DocumentJobPayload) {
+    const result = payload.reply || payload.summary || '';
+    if (payload.diagnostic !== 'output_truncated') return result;
+    return [
+      result,
+      t(
+        'ui.error.document_output_truncated',
+        'The document analysis reached the output limit. The result above may be incomplete.',
+      ),
+    ].filter(Boolean).join('\n\n');
+  }
+
   function rememberDocumentJobId(jobId: string) {
     documentJobIdRef.current = jobId;
+    documentPendingStartTokenRef.current = '';
+    documentPendingStartDeadlineRef.current = 0;
     try {
       if (jobId) window.sessionStorage.setItem(DOCUMENT_JOB_STORAGE_KEY, jobId);
       else window.sessionStorage.removeItem(DOCUMENT_JOB_STORAGE_KEY);
@@ -1296,16 +1434,28 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   }
 
   function savedDocumentJobId() {
+    const inMemoryJobId = String(documentJobIdRef.current || '');
+    const inMemoryPendingJobId = documentPendingStartTokenRef.current
+      ? `${PENDING_DOCUMENT_JOB_PREFIX}${documentPendingStartTokenRef.current}`
+      : '';
     try {
-      return String(window.sessionStorage.getItem(DOCUMENT_JOB_STORAGE_KEY) || '');
+      return inMemoryJobId
+        || String(window.sessionStorage.getItem(DOCUMENT_JOB_STORAGE_KEY) || '')
+        || inMemoryPendingJobId;
     } catch {
-      return '';
+      return inMemoryJobId || inMemoryPendingJobId;
     }
   }
 
-  function rememberPendingDocumentJob() {
+  function rememberPendingDocumentJob(startToken: string) {
+    documentPendingStartTokenRef.current = startToken;
+    documentPendingStartDeadlineRef.current = Date.now()
+      + timeoutForEntry('study_start_document_analysis');
     try {
-      window.sessionStorage.setItem(DOCUMENT_JOB_STORAGE_KEY, PENDING_DOCUMENT_JOB_ID);
+      window.sessionStorage.setItem(
+        DOCUMENT_JOB_STORAGE_KEY,
+        `${PENDING_DOCUMENT_JOB_PREFIX}${startToken}`,
+      );
     } catch {
       // Storage may be unavailable in a restricted hosted surface.
     }
@@ -1323,6 +1473,54 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         reject(new DOMException('Aborted', 'AbortError'));
       }, { once: true });
     });
+  }
+
+  function documentPollingController(parentSignal?: AbortSignal) {
+    const current = documentJobControllerRef.current;
+    if (parentSignal && current?.signal === parentSignal) return current;
+    current?.abort();
+    const controller = new AbortController();
+    if (parentSignal?.aborted) controller.abort();
+    else parentSignal?.addEventListener('abort', () => controller.abort(), { once: true });
+    documentJobControllerRef.current = controller;
+    return controller;
+  }
+
+  function recoveringDocumentJob(jobId: string): DocumentJobState {
+    const pendingStart = isPendingDocumentJobId(jobId);
+    return {
+      jobId: pendingStart ? '' : jobId,
+      status: pendingStart ? 'starting' : 'running',
+      stage: 'validating',
+      analysisMode: '',
+      completedChunks: 0,
+      totalChunks: 0,
+      progress: 0,
+    };
+  }
+
+  async function refreshAfterDocumentCompletion(signal: AbortSignal) {
+    try {
+      await refresh(signal, { updateReply: false });
+    } catch {
+      // The analysis result is terminal; a status refresh is best-effort only.
+    }
+  }
+
+  async function acknowledgeDocumentJob(jobId: string, signal?: AbortSignal) {
+    if (!jobId) return;
+    try {
+      await callStudyPlugin<DocumentJobPayload>(
+        props.api,
+        'study_document_analysis_status',
+        props.locale,
+        { job_id: jobId, acknowledge: true },
+        signal,
+      );
+      rememberDocumentJobId('');
+    } catch {
+      rememberDocumentJobId(jobId);
+    }
   }
 
   async function pollDocumentJob(jobId: string, controller: AbortController) {
@@ -1349,24 +1547,29 @@ export default function StudyPanel(props: PluginSurfaceProps) {
             pollDelayMs = 2000;
             continue;
           }
-          throw error;
+          setReply(formatPluginError(error));
+          pollDelayMs = Math.min(
+            30_000,
+            2_000 * (2 ** Math.min(consecutiveFailures - 2, 4)),
+          );
+          continue;
         }
         if (controller.signal.aborted || !mountedRef.current) return;
         const nextJob = normalizeDocumentJob(data, jobId);
         setDocumentJob(nextJob);
         if (['completed', 'succeeded'].includes(nextJob.status)) {
           terminal = true;
-          rememberDocumentJobId('');
           setReply(data.degraded
             ? formatTutorDiagnostic(data.diagnostic, true)
-            : (data.reply || data.summary || ''));
-          await refresh(controller.signal, { updateReply: false });
+            : formatDocumentCompletion(data));
+          await acknowledgeDocumentJob(jobId, controller.signal);
+          await refreshAfterDocumentCompletion(controller.signal);
           return;
         }
         if (['failed', 'canceled', 'timeout'].includes(nextJob.status)) {
           terminal = true;
-          rememberDocumentJobId('');
           setReply(formatTutorDiagnostic(data.diagnostic || (nextJob.status === 'canceled' ? 'document_canceled' : nextJob.status), true));
+          await acknowledgeDocumentJob(jobId, controller.signal);
           return;
         }
         pollDelayMs = 2000;
@@ -1385,57 +1588,168 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     }
   }
 
-  async function resumeDocumentJob(signal: AbortSignal) {
-    const savedJobId = savedDocumentJobId();
-    if (!savedJobId) return;
-    let data: DocumentJobPayload | null = null;
-    if (savedJobId !== PENDING_DOCUMENT_JOB_ID) {
-      data = await callStudyPlugin<DocumentJobPayload>(
+  async function resumeDocumentJob(signal: AbortSignal, pendingStartTokenOverride = '') {
+    let recoveryFailures = 0;
+    const pendingStartRecoveryDeadline = documentPendingStartDeadlineRef.current
+      || Date.now() + timeoutForEntry('study_start_document_analysis');
+    while (!signal.aborted && mountedRef.current) {
+      const savedJobId = savedDocumentJobId() || (pendingStartTokenOverride
+        ? `${PENDING_DOCUMENT_JOB_PREFIX}${pendingStartTokenOverride}`
+        : '');
+      const pendingStart = isPendingDocumentJobId(savedJobId);
+      const hasSavedJobId = Boolean(savedJobId && !pendingStart);
+      const startToken = pendingDocumentStartToken(savedJobId);
+      let data: DocumentJobPayload | null = null;
+      let savedJobNotFound = false;
+      let lookupFailed = false;
+
+      if (savedJobId) {
+        setDocumentJob((current) => current || recoveringDocumentJob(savedJobId));
+      }
+      if (hasSavedJobId) {
+        try {
+          data = await callStudyPlugin<DocumentJobPayload>(
+            props.api,
+            'study_document_analysis_status',
+            props.locale,
+            { job_id: savedJobId },
+            signal,
+          );
+          if (data?.diagnostic === 'document_job_not_found') {
+            savedJobNotFound = true;
+            data = null;
+          }
+        } catch (error) {
+          if (signal.aborted) return;
+          lookupFailed = true;
+          setReply(formatPluginError(error));
+        }
+      }
+
+      if (!data && !lookupFailed) {
+        try {
+          const activeArgs: Record<string, unknown> = pendingStart ? { pending_start: true } : {};
+          if (startToken) activeArgs.start_token = startToken;
+          data = await callStudyPlugin<DocumentJobPayload>(
+            props.api,
+            'study_active_document_analysis',
+            props.locale,
+            activeArgs,
+            signal,
+          );
+        } catch (error) {
+          if (signal.aborted) return;
+          lookupFailed = true;
+          setReply(formatPluginError(error));
+        }
+      }
+      if (signal.aborted || !mountedRef.current) return;
+
+      if (lookupFailed) {
+        recoveryFailures += 1;
+        const retryDelayMs = Math.min(30_000, 2_000 * (2 ** Math.min(recoveryFailures - 1, 4)));
+        try {
+          await waitForDocumentPoll(retryDelayMs, signal);
+        } catch (error) {
+          if (signal.aborted) return;
+          throw error;
+        }
+        continue;
+      }
+
+      const restoredDocument = restoredStudyDocument(data?.document);
+      if (restoredDocument) {
+        setStudyDocument((current) => current || restoredDocument);
+      }
+
+      if (
+        pendingStart
+        && data?.status === 'idle'
+        && Date.now() < pendingStartRecoveryDeadline
+      ) {
+        await waitForDocumentPoll(1_000, signal);
+        continue;
+      }
+      if (data?.status === 'idle') {
+        rememberDocumentJobId('');
+        setDocumentJob(null);
+        return;
+      }
+      const jobId = String(
+        data?.job_id || (hasSavedJobId && !savedJobNotFound ? savedJobId : ''),
+      );
+      if (!jobId) {
+        rememberDocumentJobId('');
+        setDocumentJob(null);
+        return;
+      }
+
+      rememberDocumentJobId(jobId);
+      const nextJob = normalizeDocumentJob(data || {}, jobId);
+      setDocumentJob(nextJob);
+      if (['completed', 'succeeded'].includes(nextJob.status)) {
+        setReply(data?.degraded
+          ? formatTutorDiagnostic(data.diagnostic, true)
+          : formatDocumentCompletion(data || {}));
+        await acknowledgeDocumentJob(jobId, signal);
+        setDocumentJob(null);
+        return;
+      }
+      if (['failed', 'canceled', 'timeout'].includes(nextJob.status)) {
+        setReply(formatTutorDiagnostic(data?.diagnostic || nextJob.status, true));
+        await acknowledgeDocumentJob(jobId, signal);
+        setDocumentJob(null);
+        return;
+      }
+      if (documentCancelRequestedRef.current) {
+        documentCancelRequestedRef.current = false;
+        await cancelKnownDocumentJob(jobId, nextJob, signal);
+        return;
+      }
+      await pollDocumentJob(jobId, documentPollingController(signal));
+      return;
+    }
+  }
+
+  async function cancelKnownDocumentJob(
+    jobId: string,
+    fallbackJob: DocumentJobState,
+    parentSignal?: AbortSignal,
+  ) {
+    try {
+      const data = await callHostedPlugin<DocumentJobPayload>(
         props.api,
-        'study_document_analysis_status',
-        props.locale,
-        { job_id: savedJobId },
-        signal,
-      ).catch(() => null);
-    }
-    if (data?.diagnostic === 'document_job_not_found') data = null;
-    if (!data) {
-      data = await callStudyPlugin<DocumentJobPayload>(
-        props.api,
-        'study_active_document_analysis',
-        props.locale,
-        {},
-        signal,
-      ).catch(() => null);
-    }
-    if (signal.aborted || !mountedRef.current) return;
-    const jobId = String(data?.job_id || '');
-    if (!jobId || data?.status === 'idle') {
-      rememberDocumentJobId('');
+        'study_cancel_document_analysis',
+        {
+          job_id: jobId,
+          cancellation_source: 'user',
+          locale: String(props.locale || '').trim(),
+        },
+        { timeoutMs: timeoutForEntry('study_cancel_document_analysis') },
+      );
+      const cancellationConfirmed = data.status === 'canceled'
+        || data.diagnostic === 'document_canceled'
+        || data.diagnostic === 'document_job_not_found';
+      if (!cancellationConfirmed) {
+        throw new Error(data.diagnostic || 'document cancellation was not confirmed');
+      }
+      if (mountedRef.current) {
+        setReply(formatTutorDiagnostic(data.diagnostic || 'document_canceled', true));
+        setDocumentJob(null);
+      }
+      await acknowledgeDocumentJob(jobId, parentSignal);
+      if (documentJobControllerRef.current?.signal === parentSignal) {
+        documentJobControllerRef.current = null;
+      }
       return;
+    } catch (error) {
+      if (!mountedRef.current) return;
+      rememberDocumentJobId(jobId);
+      setReply(formatPluginError(error));
+      setDocumentJob(fallbackJob);
+      const controller = documentPollingController(parentSignal);
+      await pollDocumentJob(jobId, controller);
     }
-    rememberDocumentJobId(jobId);
-    const nextJob = normalizeDocumentJob(data || {}, jobId);
-    setDocumentJob(nextJob);
-    if (['completed', 'succeeded'].includes(nextJob.status)) {
-      rememberDocumentJobId('');
-      setReply(data?.degraded
-        ? formatTutorDiagnostic(data.diagnostic, true)
-        : (data?.reply || data?.summary || ''));
-      setDocumentJob(null);
-      return;
-    }
-    if (['failed', 'canceled', 'timeout'].includes(nextJob.status)) {
-      rememberDocumentJobId('');
-      setReply(formatTutorDiagnostic(data?.diagnostic || nextJob.status, true));
-      setDocumentJob(null);
-      return;
-    }
-    const controller = new AbortController();
-    signal.addEventListener('abort', () => controller.abort(), { once: true });
-    documentJobControllerRef.current?.abort();
-    documentJobControllerRef.current = controller;
-    await pollDocumentJob(jobId, controller);
   }
 
   async function cancelDocumentJob() {
@@ -1448,26 +1762,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     documentCancelRequestedRef.current = false;
     documentJobControllerRef.current?.abort();
     documentJobControllerRef.current = null;
+    const fallbackJob = documentJob || recoveringDocumentJob(jobId);
     setDocumentJob((current) => current ? { ...current, status: 'cancel_requested', stage: 'canceling' } : current);
-    try {
-      const data = await callHostedPlugin<DocumentJobPayload>(
-        props.api,
-        'study_cancel_document_analysis',
-        {
-          job_id: jobId,
-          cancellation_source: 'user',
-          locale: String(props.locale || '').trim(),
-        },
-        { timeoutMs: timeoutForEntry('study_cancel_document_analysis') },
-      );
-      if (!mountedRef.current) return;
-      setReply(formatTutorDiagnostic(data.diagnostic || 'document_canceled', true));
-    } catch (error) {
-      if (mountedRef.current) setReply(formatPluginError(error));
-    } finally {
-      rememberDocumentJobId('');
-      if (mountedRef.current) setDocumentJob(null);
-    }
+    await cancelKnownDocumentJob(jobId, fallbackJob);
   }
 
   async function analyzeDocument() {
@@ -1506,16 +1803,20 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     setDocumentError('');
     setReply(t('ui.document.status.analyzing', 'Analyzing document...'));
     scrollReplyIntoView();
-    rememberPendingDocumentJob();
+    const startToken = createDocumentStartToken();
+    rememberPendingDocumentJob(startToken);
     try {
       const data = await callStudyPlugin<DocumentJobPayload>(props.api, 'study_start_document_analysis', props.locale, {
         document_name: currentDocument.name,
         document_type: currentDocument.analysisType,
         document_text: documentSource,
+        document_truncated: currentDocument.truncated,
         analysis_kind: documentKind,
         analysis_instruction: documentInstruction.trim(),
         locale: String(props.locale || '').trim(),
-      });
+        start_token: startToken,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
       if (!mountedRef.current) {
         if (data.job_id) rememberDocumentJobId(String(data.job_id));
         return;
@@ -1528,17 +1829,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       const jobId = String(data.job_id);
       rememberDocumentJobId(jobId);
       if (documentCancelRequestedRef.current) {
-        await callHostedPlugin(
-          props.api,
-          'study_cancel_document_analysis',
-          {
-            job_id: jobId,
-            cancellation_source: 'user',
-            locale: String(props.locale || '').trim(),
-          },
-          { timeoutMs: timeoutForEntry('study_cancel_document_analysis') },
-        ).catch(() => undefined);
-        rememberDocumentJobId('');
+        documentCancelRequestedRef.current = false;
+        await cancelKnownDocumentJob(jobId, normalizeDocumentJob(data, jobId), controller.signal);
         return;
       }
       if (!mountedRef.current) return;
@@ -1547,10 +1839,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       await pollDocumentJob(jobId, controller);
     } catch (error) {
       if (!controller.signal.aborted) {
-        rememberDocumentJobId('');
         setReply(error instanceof Error && /plugin call timed out|plugin_call_timeout/i.test(error.message)
           ? t('ui.document.error.timeout', 'Document analysis timed out. Please retry shortly.')
           : formatPluginError(error));
+        await resumeDocumentJob(controller.signal, startToken);
       }
     } finally {
       if (documentJobControllerRef.current === controller && !documentJobIdRef.current) {
@@ -1672,7 +1964,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         transition_phrase?: string;
         degraded?: boolean;
         diagnostic?: string;
-      } & SolutionNarrationOutcome & GeneralNarrationOutcome & KnowledgeGuidanceOutcome;
+      } & SolutionNarrationOutcome & GeneralNarrationOutcome & KnowledgeGuidanceOutcome & HistoryPersistenceOutcome;
       if (controller.signal.aborted) {
         return;
       }
@@ -1691,11 +1983,18 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       const knowledgeGuidanceEvidence = formatKnowledgeGuidanceEvidence(data, t);
       const narrationNotice = formatSolutionNarrationNotice(data, t);
       const generalNarrationNotice = formatGeneralNarrationNotice(data, t);
+      const historyPersistenceNotice = data.history_persisted === false
+        ? t(
+          'ui.error.history_not_saved',
+          'This explanation is shown, but it could not be saved to session history. It may disappear after you leave or refresh.',
+        )
+        : '';
       setReply([
         nextReply,
         knowledgeGuidanceEvidence,
         narrationNotice,
         generalNarrationNotice,
+        historyPersistenceNotice,
       ].filter(Boolean).join('\n\n'));
       await refresh(controller.signal, { updateReply: false });
     } catch (error) {
@@ -1888,15 +2187,23 @@ export default function StudyPanel(props: PluginSurfaceProps) {
 
   useEffect(() => {
     mountedRef.current = true;
+    setBusy(false);
     const controller = beginStudyRequest();
+    const documentController = documentPollingController();
+    void resumeDocumentJob(documentController.signal).catch((error) => {
+      if (documentController.signal.aborted) {
+        return;
+      }
+      setReply(formatPluginError(error));
+    });
     refresh(controller.signal)
+      .then(() => refreshModelRuntime(controller.signal))
       .then(() => loadPracticeScope(controller.signal))
-      .then(() => resumeDocumentJob(controller.signal))
       .catch((error) => {
         if (controller.signal.aborted) {
           return;
         }
-        setReply(formatPluginError(error));
+        setReply((current) => current || formatPluginError(error));
       });
     return () => {
       mountedRef.current = false;
@@ -2087,6 +2394,31 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         <div>
           <span>{t('ui.label.answer', 'Answer')}</span>
           <strong>{evaluation?.verdict ? `${evaluation.verdict}${evaluation.score !== undefined ? ` / ${evaluation.score}` : ''}` : '-'}</strong>
+        </div>
+      </section>
+      <section className="study-panel__model-runtime" aria-label={t('ui.settings.llm.title', 'LLM')}>
+        {(['text', 'vision'] as const).map((role) => {
+          const item = modelRuntime[role] || {};
+          return (
+            <div key={role}>
+              <span>{t(`ui.settings.model_runtime.${role}`, role === 'text' ? 'Text and document model' : 'Image explanation model')}</span>
+              <strong>{item.model || t('ui.settings.model_runtime.not_configured', 'Not configured')}</strong>
+              <small>{tf('ui.settings.model_runtime.meta', 'Group: {group} · Protocol: {protocol}', {
+                group: item.group || (role === 'text' ? 'agent' : 'vision'),
+                protocol: item.provider_type || t('ui.settings.model_runtime.protocol_unknown', 'Unknown'),
+              })}</small>
+              <small>{modelRuntimeStatus(role, item)}</small>
+            </div>
+          );
+        })}
+        <small>{t('ui.settings.model_runtime.managed_by_neko', 'Models and credentials are managed in N.E.K.O. Long-document analysis may consume multiple free Agent calls.')}</small>
+        <div className="study-panel__model-runtime-actions">
+          <button type="button" disabled={modelRuntimeLoading} onClick={() => void refreshModelRuntime()}>
+            {t('ui.button.refresh_model_status', 'Refresh model status')}
+          </button>
+          <button type="button" onClick={() => openHostedExternalUrl('/api_key')}>
+            {t('ui.button.open_model_settings', 'Open N.E.K.O model settings')}
+          </button>
         </div>
       </section>
       <section className="study-panel__state">

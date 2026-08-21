@@ -3,22 +3,27 @@ from __future__ import annotations
 import uuid
 
 from .entry_common import (
-    LLM_OPERATION_QUESTION_GENERATE,
     Any,
+    asyncio,
     Err,
     Ok,
     SdkError,
     TutorReply,
     _entry_exception_error,
     _validate_optional_vision_image_payload,
-    asyncio,
     plugin_entry,
     time,
     tr,
     ui,
+    LLM_OPERATION_QUESTION_GENERATE,
 )
 from .models import public_current_question_payload
-from .practice_scope import filter_question_params_to_scope, ordered_scope_topics
+from .practice_scope import (
+    filter_question_params_to_scope,
+    ordered_scope_topics,
+    practice_scope_matches_topic,
+)
+
 
 IMAGE_ONLY_QUESTION_PROMPT_EN = "Generate a study question from the pasted image."
 IMAGE_ONLY_QUESTION_PROMPT_ZH_CN = "请根据这张图片生成一道学习题。"
@@ -292,13 +297,29 @@ class _TutorQuestionEntriesMixin:
 
     def _scoped_question_params(self, scope) -> dict[str, Any]:
         eligible = set(scope.eligible_topic_ids)
-        topics = [
-            topic
-            for topic_id in scope.eligible_topic_ids
-            if (topic := self._knowledge_tracker.store.get_topic(topic_id))
-        ]
-        mastery_overview = self._knowledge_tracker.store.list_mastery_overview(
-            limit=5000
+        if scope.mode == "explicit_topic":
+            topic = self._knowledge_tracker.store.get_topic(scope.topic_id)
+            topics = (
+                [topic]
+                if topic is not None
+                and practice_scope_matches_topic(scope.to_public_dict(), topic)
+                else []
+            )
+        else:
+            topics = [
+                topic
+                for topic in self._knowledge_tracker.store.list_topics(
+                    5000,
+                    scope.subject or None,
+                    scope.stage or None,
+                    chapter=scope.chapter or None,
+                    unit=scope.unit or None,
+                    course_family=scope.course_family or None,
+                )
+                if str(topic.get("id") or "") in eligible
+            ]
+        mastery_overview = self._knowledge_tracker.store.list_latest_mastery_for_topics(
+            eligible
         )
         mastery_by_topic = {
             str(item.get("topic_id") or ""): dict(item)
@@ -308,6 +329,11 @@ class _TutorQuestionEntriesMixin:
         ordered_topics = ordered_scope_topics(
             topics, attempted_topic_ids=set(mastery_by_topic)
         )
+        if not ordered_topics:
+            raise SdkError(
+                "practice scope no longer contains any topics",
+                code="PRACTICE_SCOPE_INVALIDATED",
+            )
         unattempted = [
             topic
             for topic in ordered_topics
@@ -329,12 +355,22 @@ class _TutorQuestionEntriesMixin:
                 ),
             )
         target_topic_id = scope.topic_id or str(fallback_topic.get("id") or "")
-        params = self._knowledge_tracker.preview_next_question_params(target_topic_id)
-        params["retry_wrong_questions"] = self._knowledge_tracker.store.list_wrong_questions(
-            limit=5000, statuses=("active", "retrying")
+        topics_by_id = {
+            str(topic.get("id") or ""): dict(topic)
+            for topic in topics
+            if str(topic.get("id") or "")
+        }
+        params = self._knowledge_tracker.preview_next_question_params(
+            target_topic_id,
+            candidate_topic_ids=eligible,
+            candidate_limit=5000,
+            candidate_topics_by_id=topics_by_id,
         )
-        params["due_reviews"] = self._knowledge_tracker.get_review_queue(limit=5000)
-        params["weak_topics"] = self._knowledge_tracker.get_weak_topics(limit=5000)
+        params["retry_wrong_questions"] = self._knowledge_tracker.store.list_wrong_questions(
+            limit=5000,
+            topic_ids=eligible,
+            statuses=("active", "retrying"),
+        )
         params = filter_question_params_to_scope(params, eligible)
         if scope.mode == "explicit_topic":
             params["weak_topics"] = []
@@ -358,9 +394,25 @@ class _TutorQuestionEntriesMixin:
         if scope is not None:
             selected_topic_id = str(selection.get("selected_topic_id") or "").strip()
             if selected_topic_id:
+                scoped_topics_by_id: dict[str, dict[str, Any]] = {}
+                for candidate in params.get("due_reviews") or []:
+                    candidate_topic_id = str(candidate.get("topic_id") or "").strip()
+                    if candidate_topic_id:
+                        scoped_topics_by_id[candidate_topic_id] = dict(
+                            candidate.get("topic") or {}
+                        )
+                for candidate in params.get("weak_topics") or []:
+                    candidate_topic_id = str(
+                        candidate.get("topic_id") or candidate.get("id") or ""
+                    ).strip()
+                    if candidate_topic_id:
+                        scoped_topics_by_id[candidate_topic_id] = dict(candidate)
                 focused_params = filter_question_params_to_scope(
                     self._knowledge_tracker.preview_next_question_params(
-                        selected_topic_id
+                        selected_topic_id,
+                        candidate_topic_ids=set(scope.eligible_topic_ids),
+                        candidate_limit=5000,
+                        candidate_topics_by_id=scoped_topics_by_id,
                     ),
                     set(scope.eligible_topic_ids),
                 )
@@ -463,6 +515,23 @@ class _TutorQuestionEntriesMixin:
         reply = await self._agent.question_generate(
             source_text, mode=active_mode, context=tutor_context
         )
+        if targeted_context:
+            async with self._lock:
+                active_revision = int(
+                    getattr(self._state, "practice_scope_revision", 0) or 0
+                )
+                active_scope = self._resolve_active_practice_scope()
+                active_scope_key = active_scope.scope_key if active_scope else ""
+            if (
+                int(targeted_context.get("scope_revision") or 0)
+                != active_revision
+                or str(targeted_context.get("scope_key") or "").strip()
+                != active_scope_key
+            ):
+                raise SdkError(
+                    "practice scope changed during question generation",
+                    code="SELECTION_SCOPE_CHANGED",
+                )
         public_payload = None
         if targeted_context:
             private_payload = _question_private_payload(
@@ -502,20 +571,47 @@ class _TutorQuestionEntriesMixin:
         metadata_payload = (
             public_payload if public_payload is not None else dict(reply.payload or {})
         )
-        payload = await self._finalize_tutor_call(
-            LLM_OPERATION_QUESTION_GENERATE,
-            reply,
-            history_kind=LLM_OPERATION_QUESTION_GENERATE,
-            metadata={
-                "degraded": reply.degraded,
-                "diagnostic": reply.diagnostic,
-                "payload": metadata_payload,
-                "screen_classification": tutor_context.get("screen_classification")
-                or {},
-            },
-            extra_context=tutor_context,
-            public_payload=public_payload,
-        )
+        finalize_metadata = {
+            "degraded": reply.degraded,
+            "diagnostic": reply.diagnostic,
+            "payload": metadata_payload,
+            "screen_classification": tutor_context.get("screen_classification") or {},
+        }
+        if targeted_context:
+            async with self._practice_scope_write_lock():
+                async with self._lock:
+                    active_revision = int(
+                        getattr(self._state, "practice_scope_revision", 0) or 0
+                    )
+                    active_scope = self._resolve_active_practice_scope()
+                    active_scope_key = active_scope.scope_key if active_scope else ""
+                if (
+                    int(targeted_context.get("scope_revision") or 0)
+                    != active_revision
+                    or str(targeted_context.get("scope_key") or "").strip()
+                    != active_scope_key
+                ):
+                    raise SdkError(
+                        "practice scope changed during question generation",
+                        code="SELECTION_SCOPE_CHANGED",
+                    )
+                payload = await self._finalize_tutor_call(
+                    LLM_OPERATION_QUESTION_GENERATE,
+                    reply,
+                    history_kind=LLM_OPERATION_QUESTION_GENERATE,
+                    metadata=finalize_metadata,
+                    extra_context=tutor_context,
+                    public_payload=public_payload,
+                )
+        else:
+            payload = await self._finalize_tutor_call(
+                LLM_OPERATION_QUESTION_GENERATE,
+                reply,
+                history_kind=LLM_OPERATION_QUESTION_GENERATE,
+                metadata=finalize_metadata,
+                extra_context=tutor_context,
+                public_payload=public_payload,
+            )
         payload["screen_classification"] = tutor_context.get("screen_classification") or {}
         return payload
 

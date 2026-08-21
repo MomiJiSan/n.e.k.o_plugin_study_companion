@@ -1,27 +1,50 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 
-from ._general_narration import prepare_general_narration_content
 from .constants import LLM_OPERATION_DOCUMENT_ANALYZE
-from .document_analysis import DocumentValidationError, validate_document
-from .document_analysis_jobs import DocumentAnalysisJobError, DocumentAnalysisJobManager
+from ._general_narration import prepare_general_narration_content
+from .document_analysis import (
+    DOCUMENT_ANALYSIS_KINDS,
+    DocumentValidationError,
+    validate_document,
+)
+from .document_analysis_jobs import (
+    DOCUMENT_JOB_COMMITTED_RESULT_KEY,
+    DocumentAnalysisJobError,
+    DocumentAnalysisJobManager,
+)
 from .document_chunking import (
     DOCUMENT_DIRECT_MAX_TOKENS,
     DocumentChunkingError,
     split_document,
 )
-from .entry_common import Ok, SdkError, StudyEvent, asyncio, plugin_entry, tr, ui
+from .entry_common import asyncio, Ok, SdkError, StudyEvent, plugin_entry, tr, ui
 from .models import TutorReply, utc_now_iso
-from .tutor_llm_agent_document import _DocumentModelResult
-from .tutor_llm_agent_document_chunked import (
+from .study_model_gateway import StudyModelError
+from .tutor_llm_agent_document import (
+    _DocumentModelResult,
     _analyze_document_chunk_result,
     _merge_document_chunks_result,
 )
 
+
 _START_ENTRY_TIMEOUT_SECONDS = 30.0
 _STATUS_ENTRY_TIMEOUT_SECONDS = 10.0
 _DOCUMENT_CONCURRENCY = 2
+
+
+def _document_job_owner(owner, kwargs: dict[str, object] | None = None) -> str:
+    context = kwargs.get("_ctx") if isinstance(kwargs, dict) else None
+    if isinstance(context, dict):
+        target = str(context.get("lanlan_name") or "").strip()
+        if target:
+            return target
+    # Hosted/static UI calls do not carry an Entry context. Keep those jobs on
+    # the manager's stable default owner instead of binding them to mutable
+    # cached character state that may change between start/status/cancel.
+    return ""
 
 
 def _failed_payload(diagnostic: str) -> dict[str, object]:
@@ -105,13 +128,19 @@ class _DocumentAnalysisJobsEntriesMixin:
                 "document_name": {"type": "string", "maxLength": 255},
                 "document_type": {
                     "type": "string",
-                    "enum": ["text/plain", "text/markdown"],
+                    "enum": [
+                        "text/plain",
+                        "text/markdown",
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ],
                 },
                 "document_text": {
                     "type": "string",
                     "writeOnly": True,
                     "x-sensitive": True,
                 },
+                "document_truncated": {"type": "boolean", "default": False},
                 "analysis_instruction": {
                     "type": "string",
                     "maxLength": 1000,
@@ -119,19 +148,11 @@ class _DocumentAnalysisJobsEntriesMixin:
                 },
                 "analysis_kind": {
                     "type": "string",
-                    "enum": [
-                        "auto",
-                        "literary_book",
-                        "nonfiction_book",
-                        "design_document",
-                        "academic_paper",
-                        "exam",
-                        "course_material",
-                        "general_notes",
-                    ],
+                    "enum": list(DOCUMENT_ANALYSIS_KINDS),
                     "default": "auto",
                 },
                 "locale": {"type": "string", "maxLength": 16},
+                "start_token": {"type": "string", "maxLength": 128},
             },
             "required": ["document_name", "document_type", "document_text", "locale"],
         },
@@ -157,13 +178,16 @@ class _DocumentAnalysisJobsEntriesMixin:
         document_name: str,
         document_type: str,
         document_text: str,
+        document_truncated: bool = False,
         analysis_instruction: str = "",
         analysis_kind: str = "auto",
         locale: str = "zh-CN",
+        start_token: str = "",
         **_,
     ):
         if self._agent is None:
             return Ok(_failed_payload("model_unavailable"))
+        job_owner = _document_job_owner(self, _)
         try:
             document = await asyncio.to_thread(
                 validate_document,
@@ -185,6 +209,12 @@ class _DocumentAnalysisJobsEntriesMixin:
                 )
             )
             total_chunks = 1 if analysis_mode == "direct" else len(chunks)
+            document_metadata = document.public_metadata()
+            document_metadata["truncated"] = bool(document_truncated)
+            resolve_runtime = getattr(self._agent, "resolve_model_runtime", None)
+            model_runtime = (
+                await resolve_runtime("agent") if callable(resolve_runtime) else None
+            )
             runner_state = {"document": document, "chunks": chunks}
 
             async def runner(update, budget):
@@ -301,7 +331,7 @@ class _DocumentAnalysisJobsEntriesMixin:
                                 f"sha256:{job_document.sha256[:12]}"
                             ),
                             reply=merge_result.text,
-                            payload={"document": job_document.public_metadata()},
+                            payload={"document": dict(document_metadata)},
                             diagnostic=diagnostic,
                             created_at=utc_now_iso(),
                         )
@@ -310,7 +340,7 @@ class _DocumentAnalysisJobsEntriesMixin:
                         merge_output_truncated = False
                     else:
                         merge_output_truncated = merge_result.output_limit_reached
-                    metadata = job_document.public_metadata()
+                    metadata = dict(document_metadata)
                     metadata["chunks"] = total_chunks
                     metadata["analysis_mode"] = analysis_mode
                     finalize_remaining = budget.deadline_monotonic - time.monotonic()
@@ -318,37 +348,42 @@ class _DocumentAnalysisJobsEntriesMixin:
                         error = SdkError("document finalization window exhausted")
                         error.diagnostic = "document_finalize_timeout"
                         raise error
-                    try:
-                        payload = await asyncio.wait_for(
-                            self._finalize_tutor_call(
-                                LLM_OPERATION_DOCUMENT_ANALYZE,
-                                reply,
-                                history_kind=LLM_OPERATION_DOCUMENT_ANALYZE,
-                                metadata={
-                                    "degraded": reply.degraded,
-                                    "diagnostic": reply.diagnostic,
-                                    "document": metadata,
-                                    "locale": job_document.locale,
-                                    "source_retained": False,
-                                    "truncated_chunk_count": truncated_chunk_count,
-                                    "total_chunks": total_chunks,
-                                    "merge_output_truncated": merge_output_truncated,
-                                },
-                                public_payload={
-                                    "summary": reply.reply,
-                                    "document": metadata,
-                                },
-                            ),
-                            timeout=finalize_remaining,
+                    finalize_task = asyncio.create_task(
+                        self._finalize_tutor_call(
+                            LLM_OPERATION_DOCUMENT_ANALYZE,
+                            reply,
+                            history_kind=LLM_OPERATION_DOCUMENT_ANALYZE,
+                            metadata={
+                                "degraded": reply.degraded,
+                                "diagnostic": reply.diagnostic,
+                                "document": metadata,
+                                "locale": job_document.locale,
+                                "source_retained": False,
+                                "truncated_chunk_count": truncated_chunk_count,
+                                "total_chunks": total_chunks,
+                                "merge_output_truncated": merge_output_truncated,
+                            },
+                            public_payload={
+                                "summary": reply.reply,
+                                "document": metadata,
+                            },
                         )
-                    except asyncio.TimeoutError as exc:
-                        error = SdkError("document finalization window exhausted")
-                        error.diagnostic = "document_finalize_timeout"
-                        raise error from exc
+                    )
+                    try:
+                        payload = await asyncio.shield(finalize_task)
+                    except asyncio.CancelledError:
+                        # Finalization owns the persistence boundary. Once it starts,
+                        # drain it and return the recoverable result instead of
+                        # reporting a timeout after history may already be committed.
+                        payload = await finalize_task
                     payload.pop("input_text", None)
                     payload.pop("created_at", None)
                     payload["degraded"] = reply.degraded
                     payload["diagnostic"] = reply.diagnostic
+                    # Internal manager signal: finalization has crossed the
+                    # durable history boundary, so a racing user cancellation
+                    # must preserve this completed payload.
+                    payload[DOCUMENT_JOB_COMMITTED_RESULT_KEY] = True
                     return payload
                 finally:
                     for task in tasks:
@@ -391,6 +426,11 @@ class _DocumentAnalysisJobsEntriesMixin:
                             payload={
                                 "response_mode": "document_analysis",
                                 "content": content,
+                                **(
+                                    {"target_lanlan": job_owner}
+                                    if job_owner
+                                    else {}
+                                ),
                             },
                         )
                     )
@@ -405,18 +445,31 @@ class _DocumentAnalysisJobsEntriesMixin:
                 result["document_narration_status"] = "scheduled"
                 result["document_narration_reason"] = ""
 
-            payload = await self._document_job_manager().start(
-                analysis_mode=analysis_mode,
-                document=document.public_metadata(),
-                total_chunks=total_chunks,
-                runner=runner,
-                on_completed=on_completed,
+            bind_runtime = getattr(self._agent, "bind_model_runtime", None)
+            runtime_context = (
+                bind_runtime(model_runtime)
+                if model_runtime is not None and callable(bind_runtime)
+                else nullcontext()
             )
+            # create_task() copies the current context. Bind only while the job task
+            # is created so every chunk and the merge share one immutable model
+            # snapshot, while unrelated tutor calls keep resolving current settings.
+            with runtime_context:
+                payload = await self._document_job_manager().start(
+                    owner_id=job_owner,
+                    start_token=start_token,
+                    analysis_mode=analysis_mode,
+                    document=document_metadata,
+                    total_chunks=total_chunks,
+                    runner=runner,
+                    on_completed=on_completed,
+                )
             return Ok(payload)
         except (
             DocumentValidationError,
             DocumentChunkingError,
             DocumentAnalysisJobError,
+            StudyModelError,
         ) as exc:
             return Ok(
                 _failed_payload(
@@ -430,44 +483,79 @@ class _DocumentAnalysisJobsEntriesMixin:
     @ui.action()
     @plugin_entry(
         id="study_document_analysis_status",
-        name=tr("entries.analyze_document.name", default="Document Analysis Status"),
+        name=tr(
+            "entries.document_analysis_status.name",
+            default="Document Analysis Status",
+        ),
         description=tr(
-            "entries.analyze_document.description",
+            "entries.document_analysis_status.description",
             default="Read document analysis progress.",
         ),
         input_schema={
             "type": "object",
-            "properties": {"job_id": {"type": "string", "maxLength": 128}},
+            "properties": {
+                "job_id": {"type": "string", "maxLength": 128},
+                "acknowledge": {"type": "boolean", "default": False},
+            },
             "required": ["job_id"],
         },
         timeout=_STATUS_ENTRY_TIMEOUT_SECONDS,
     )
-    async def study_document_analysis_status(self, job_id: str, **_):
+    async def study_document_analysis_status(
+        self, job_id: str, acknowledge: bool = False, **kwargs
+    ):
         try:
-            return Ok(await self._document_job_manager().status(job_id))
+            return Ok(
+                await self._document_job_manager().status(
+                    job_id,
+                    owner_id=_document_job_owner(self, kwargs),
+                    acknowledge=bool(acknowledge),
+                )
+            )
         except DocumentAnalysisJobError as exc:
             return Ok(_failed_payload(exc.diagnostic))
 
     @ui.action()
     @plugin_entry(
         id="study_active_document_analysis",
-        name=tr("entries.analyze_document.name", default="Active Document Analysis"),
-        description=tr(
-            "entries.analyze_document.description",
-            default="Read the active document analysis job.",
+        name=tr(
+            "entries.active_document_analysis.name",
+            default="Recover Document Analysis",
         ),
-        input_schema={"type": "object", "properties": {}},
+        description=tr(
+            "entries.active_document_analysis.description",
+            default="Recover the latest retained document analysis job.",
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "start_token": {"type": "string", "maxLength": 128},
+                "pending_start": {"type": "boolean", "default": False},
+            },
+        },
         timeout=_STATUS_ENTRY_TIMEOUT_SECONDS,
     )
-    async def study_active_document_analysis(self, **_):
-        return Ok(await self._document_job_manager().active())
+    async def study_active_document_analysis(
+        self, start_token: str = "", pending_start: bool = False, **kwargs
+    ):
+        return Ok(
+            await self._document_job_manager().active(
+                owner_id=_document_job_owner(self, kwargs),
+                start_token=start_token,
+                pending_start=pending_start,
+            )
+        )
 
     @ui.action()
     @plugin_entry(
         id="study_cancel_document_analysis",
-        name=tr("entries.analyze_document.name", default="Cancel Document Analysis"),
+        name=tr(
+            "entries.cancel_document_analysis.name",
+            default="Cancel Document Analysis",
+        ),
         description=tr(
-            "entries.analyze_document.description", default="Cancel document analysis."
+            "entries.cancel_document_analysis.description",
+            default="Cancel document analysis.",
         ),
         input_schema={
             "type": "object",
@@ -484,13 +572,14 @@ class _DocumentAnalysisJobsEntriesMixin:
         timeout=_STATUS_ENTRY_TIMEOUT_SECONDS,
     )
     async def study_cancel_document_analysis(
-        self, job_id: str, cancellation_source: str = "user", **_
+        self, job_id: str, cancellation_source: str = "user", **kwargs
     ):
         try:
             return Ok(
                 await self._document_job_manager().cancel(
                     job_id,
                     source="user",
+                    owner_id=_document_job_owner(self, kwargs),
                 )
             )
         except DocumentAnalysisJobError as exc:

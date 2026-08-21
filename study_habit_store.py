@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import sqlite3
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from .store import StudyStore, safe_float, safe_int
+
 
 GOAL_TARGET_TYPES = {"subject", "deck", "passage", "custom"}
 GOAL_STATUSES = {"active", "completed", "cancelled"}

@@ -19,13 +19,14 @@ export default function PomodoroPanel(props: PluginSurfaceProps) {
   const isPaused = stateKey === 'paused';
   const isBreak = stateKey === 'short_break' || stateKey === 'long_break';
   const isRunning = isFocusing || isPaused || isBreak;
+  const allowCustomDuration = status.config?.allow_custom_duration !== false;
   const stateLabel = pomodoroStateLabel(props, stateKey);
   const modeLabel = pomodoroModeLabel(props, modeKey);
   const remaining = formatSeconds(status.remaining_seconds);
   const selectedMinutes = Math.min(120, Math.max(1, Math.round(Number(focusMinutes) || 25)));
-  const modeMinutes = modeKey === 'break_short'
+  const modeMinutes = modeKey === 'short_break'
     ? Number(status.config?.short_break_minutes || 5)
-    : modeKey === 'break_long'
+    : modeKey === 'long_break'
       ? Number(status.config?.long_break_minutes || 15)
       : Number(status.current_focus_session?.planned_minutes || selectedMinutes);
   const totalSeconds = Math.max(60, modeMinutes * 60);
@@ -117,7 +118,7 @@ export default function PomodoroPanel(props: PluginSurfaceProps) {
           step="1"
           inputMode="numeric"
           value={focusMinutes}
-          disabled={isRunning}
+          disabled={isRunning || !allowCustomDuration}
           onChange={(event) => setFocusMinutes(event.currentTarget.value)}
           onBlur={() => setFocusMinutes(String(normalizedFocusMinutes()))}
         />
@@ -129,7 +130,7 @@ export default function PomodoroPanel(props: PluginSurfaceProps) {
         <div><span>{text(props, 'ui.label.mode', 'Mode')}</span><strong>{modeLabel}</strong></div>
       </section>
       <div className="study-panel__actions study-panel__actions--primary pomodoro-actions">
-        <button className={!isRunning ? 'pomodoro-action is-primary' : 'pomodoro-action'} data-action="start" type="button" disabled={isRunning} onClick={() => act('study_pomodoro_start', { focus_minutes: normalizedFocusMinutes() })}>{text(props, 'ui.button.start', 'Start')}</button>
+        <button className={!isRunning ? 'pomodoro-action is-primary' : 'pomodoro-action'} data-action="start" type="button" disabled={isRunning} onClick={() => act('study_pomodoro_start', allowCustomDuration ? { focus_minutes: normalizedFocusMinutes() } : {})}>{text(props, 'ui.button.start', 'Start')}</button>
         <button className={isFocusing ? 'pomodoro-action is-primary' : 'pomodoro-action'} data-action="pause" type="button" disabled={!isFocusing} onClick={() => act('study_pomodoro_pause')}>{text(props, 'ui.button.pause', 'Pause')}</button>
         <button className={isPaused ? 'pomodoro-action is-primary' : 'pomodoro-action'} data-action="resume" type="button" disabled={!isPaused} onClick={() => act('study_pomodoro_resume')}>{text(props, 'ui.button.resume', 'Resume')}</button>
         <button className="pomodoro-action is-danger" data-action="stop" type="button" disabled={!isRunning} onClick={() => act('study_pomodoro_stop')}>{text(props, 'ui.button.stop', 'Stop')}</button>

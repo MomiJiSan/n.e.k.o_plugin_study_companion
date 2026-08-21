@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 MODE_COMPANION = "companion"
 MODE_INTERACTIVE = "interactive"
 MODE_TEACHING = "teaching"

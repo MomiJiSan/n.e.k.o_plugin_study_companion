@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from ._general_narration import prepare_general_narration_content
 from .entry_common import (
     Any,
-    StudyEvent,
-    _event_nonnegative_float,
-    _event_ratio,
     asyncio,
+    StudyEvent,
+    _event_ratio,
+    _event_nonnegative_float,
 )
+from ._general_narration import prepare_general_narration_content
 
 
 class _CommunicationTutorEventsMixin:
@@ -16,6 +16,7 @@ class _CommunicationTutorEventsMixin:
         *,
         response_mode: str,
         content: str,
+        target_lanlan: str | None = None,
     ) -> bool:
         normalized_mode = str(response_mode or "").strip()
         if normalized_mode not in {
@@ -30,13 +31,10 @@ class _CommunicationTutorEventsMixin:
         bus = self._event_bus
         if bus is None:
             return False
-        event = StudyEvent(
-            name="general_response_completed",
-            payload={
-                "response_mode": normalized_mode,
-                "content": prepared_content,
-            },
-        )
+        payload = {"response_mode": normalized_mode, "content": prepared_content}
+        if normalized_target := str(target_lanlan or "").strip():
+            payload["target_lanlan"] = normalized_target
+        event = StudyEvent(name="general_response_completed", payload=payload)
         schedule_emit = getattr(bus, "schedule_emit", None)
         if callable(schedule_emit):
             try:
@@ -51,7 +49,9 @@ class _CommunicationTutorEventsMixin:
             return False
         return True
 
-    async def _emit_solution_completed_event(self, sections: dict[str, str]) -> bool:
+    async def _emit_solution_completed_event(
+        self, sections: dict[str, str], *, target_lanlan: str | None = None
+    ) -> bool:
         bus = self._event_bus
         if bus is None:
             return False
@@ -60,8 +60,10 @@ class _CommunicationTutorEventsMixin:
             "answer": str(sections.get("answer") or "").strip(),
             "transfer": str(sections.get("transfer") or "").strip(),
         }
-        if any(not value for value in payload.values()):
+        if any(not payload[key] for key in ("analysis", "answer", "transfer")):
             return False
+        if normalized_target := str(target_lanlan or "").strip():
+            payload["target_lanlan"] = normalized_target
         try:
             scheduled = bus.schedule_emit(
                 StudyEvent(name="solution_completed", payload=payload)
@@ -82,6 +84,7 @@ class _CommunicationTutorEventsMixin:
         topic: str = "",
         mastery_before: float = -1.0,
         mastery_after: float = -1.0,
+        target_lanlan: str | None = None,
     ) -> None:
         bus = self._event_bus
         if bus is None:
@@ -98,11 +101,14 @@ class _CommunicationTutorEventsMixin:
                     "topic": str(topic or "").strip(),
                     "mastery_before": mastery_before,
                     "mastery_after": mastery_after,
+                    "target_lanlan": str(target_lanlan or "").strip() or None,
                 },
             )
         )
 
-    async def _emit_memory_review_answer_event(self, payload: dict[str, Any]) -> None:
+    async def _emit_memory_review_answer_event(
+        self, payload: dict[str, Any], *, target_lanlan: str | None = None
+    ) -> None:
         item = payload.get("item") or {}
         review = payload.get("review_record") or {}
         deck = (
@@ -120,9 +126,12 @@ class _CommunicationTutorEventsMixin:
             user_answer_summary=f"rating={rating}",
             correction_hint=str(review.get("error_type") or ""),
             topic=str(deck.get("subject") or deck.get("name") or ""),
+            target_lanlan=target_lanlan,
         )
 
-    async def _emit_recitation_answer_event(self, payload: dict[str, Any]) -> None:
+    async def _emit_recitation_answer_event(
+        self, payload: dict[str, Any], *, target_lanlan: str | None = None
+    ) -> None:
         diff_data = payload.get("diff") or {}
         review = payload.get("review") or {}
         item = review.get("item") or {}
@@ -150,6 +159,7 @@ class _CommunicationTutorEventsMixin:
                 f"extra: {diff_data.get('extra_count', 0)}"
             ),
             topic=str(deck.get("subject") or deck.get("name") or ""),
+            target_lanlan=target_lanlan,
         )
 
     async def _emit_session_summarized_event(self, payload: dict[str, Any]) -> None:

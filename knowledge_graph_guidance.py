@@ -5,19 +5,12 @@ from typing import Any
 
 from ._graph_utils import (
     dedupe_edges as _dedupe_edges,
-)
-from ._graph_utils import (
     normalized_relation as _normalized_relation,
-)
-from ._graph_utils import (
     text as _text,
-)
-from ._graph_utils import (
     topic_id as _topic_id,
-)
-from ._graph_utils import (
     topic_label as _topic_label,
 )
+
 
 APPLICATION_RELATIONS = {"application", "procedure_step", "extends", "supports"}
 CONFUSION_RELATIONS = {"confusable"}

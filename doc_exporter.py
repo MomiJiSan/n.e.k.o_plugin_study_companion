@@ -1,20 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
+from io import BytesIO
 import json
 import logging
 import os
 import re
 import textwrap
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from .models import STUDY_EXPORT_FORMATS, STUDY_EXPORT_STYLES, DocExportConfig
+from .models import DocExportConfig, STUDY_EXPORT_FORMATS, STUDY_EXPORT_STYLES
 from .store_notebook import NotebookStore
+
 
 _LOGGER = logging.getLogger(__name__)
 _MARKDOWN_ESCAPE_RE = re.compile(r"([\\`*_{}\[\]()#+\-.!|])")

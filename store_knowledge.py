@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from .store_common import (
-    _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
     Any,
     uuid,
+    _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
 )
 
 

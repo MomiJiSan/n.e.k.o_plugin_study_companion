@@ -6,20 +6,13 @@ from typing import Any, Iterable
 
 from ._graph_utils import (
     dedupe_edges as _dedupe_edges,
-)
-from ._graph_utils import (
     normalized_relation,
-)
-from ._graph_utils import (
     text as _text,
-)
-from ._graph_utils import (
     topic_id as _topic_id,
-)
-from ._graph_utils import (
     topic_label as _topic_label,
 )
 from .knowledge_graph_guidance import build_topic_edges, match_topics
+
 
 CORE_RELATION_ORDER = (
     "prerequisite",

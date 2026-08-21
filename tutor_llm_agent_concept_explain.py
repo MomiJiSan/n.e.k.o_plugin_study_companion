@@ -2,27 +2,28 @@ from __future__ import annotations
 
 import time
 
+from .tutor_llm_agent_common import (
+    Any,
+    asyncio,
+    STUDY_FALLBACK_EXPLANATION_DEFAULT,
+    SdkError,
+    MODE_COMPANION,
+    MODE_TEACHING,
+    build_concept_explain_messages,
+    build_transition_phrase,
+    normalize_mode,
+    MODE_CONCEPT_EXPLAIN,
+    TutorReply,
+    utc_now_iso,
+    diagnostic_code_for_exception,
+    _bounded_prompt_text,
+)
 from ._solution_structure import (
     SolutionStructure,
     parse_solution_structure,
     structure_from_mapping,
 )
-from .tutor_llm_agent_common import (
-    MODE_COMPANION,
-    MODE_CONCEPT_EXPLAIN,
-    MODE_TEACHING,
-    STUDY_FALLBACK_EXPLANATION_DEFAULT,
-    Any,
-    SdkError,
-    TutorReply,
-    _bounded_prompt_text,
-    asyncio,
-    build_concept_explain_messages,
-    build_transition_phrase,
-    diagnostic_code_for_exception,
-    normalize_mode,
-    utc_now_iso,
-)
+
 
 VISION_FALLBACK_EXPLANATION_EN = (
     "I could not reach the configured vision-capable model, so I cannot "
@@ -250,11 +251,14 @@ async def concept_explain(
             self._new_operation_deadline(MODE_CONCEPT_EXPLAIN, messages),
             context,
         )
-        model_result = await self._call_model_result(
-            messages,
-            operation=MODE_CONCEPT_EXPLAIN,
-            deadline=deadline,
-        )
+        model_call_kwargs: dict[str, Any] = {
+            "operation": MODE_CONCEPT_EXPLAIN,
+            "deadline": deadline,
+        }
+        quota_reservation = (context or {}).get("_agent_quota_reservation")
+        if quota_reservation is not None:
+            model_call_kwargs["quota_reservation"] = quota_reservation
+        model_result = await self._call_model_result(messages, **model_call_kwargs)
         content = model_result.text
         reply = content.strip()
         if not reply:

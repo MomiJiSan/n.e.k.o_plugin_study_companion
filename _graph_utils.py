@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+
 RELATION_ALIASES = {
     "supports": "prerequisite",
     "next": "extends",

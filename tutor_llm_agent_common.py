@@ -4,20 +4,6 @@ import asyncio
 import re
 from typing import Any, Awaitable, Callable
 
-from plugin.sdk.plugin import SdkError
-
-from .constants import (
-    LLM_OPERATION_ANSWER_EVALUATE,
-    LLM_OPERATION_CONCEPT_EXPLAIN,
-    LLM_OPERATION_KNOWLEDGE_TRACK,
-    LLM_OPERATION_QUESTION_GENERATE,
-    LLM_OPERATION_SUMMARIZE_SESSION,
-    MODE_COMPANION,
-    MODE_TEACHING,
-)
-from .llm_prompts import build_concept_explain_messages, build_operation_messages
-from .mode_manager import build_transition_phrase, normalize_mode, study_i18n_t
-from .models import MODE_CONCEPT_EXPLAIN, StudyConfig, TutorReply, utc_now_iso
 from .prompt_templates import (
     STUDY_EMPTY_INPUT_DEFAULT,
     STUDY_FALLBACK_EXPLANATION_DEFAULT,
@@ -33,6 +19,20 @@ from .prompt_templates import (
     STUDY_JSON_CORRECTION_USER_TEMPLATE,
     STUDY_MARKDOWN_SECTION_EMPTY_ITEM,
 )
+from plugin.sdk.plugin import SdkError
+
+from .constants import (
+    LLM_OPERATION_ANSWER_EVALUATE,
+    LLM_OPERATION_CONCEPT_EXPLAIN,
+    LLM_OPERATION_KNOWLEDGE_TRACK,
+    LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_SUMMARIZE_SESSION,
+    MODE_COMPANION,
+    MODE_TEACHING,
+)
+from .llm_prompts import build_concept_explain_messages, build_operation_messages
+from .mode_manager import build_transition_phrase, normalize_mode, study_i18n_t
+from .models import MODE_CONCEPT_EXPLAIN, StudyConfig, TutorReply, utc_now_iso
 
 try:
     from utils.file_utils import robust_json_loads

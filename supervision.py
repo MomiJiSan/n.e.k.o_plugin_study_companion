@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from .models import SupervisionConfig
 
+
 _DISTRACTION_FOREGROUND_CATEGORIES = frozenset({"gaming", "entertainment"})
 
 

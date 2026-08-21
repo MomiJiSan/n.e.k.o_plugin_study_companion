@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import json
 import math
-from copy import deepcopy
 from typing import Any, Iterable, Mapping
 
 from .models import PracticeScopeV1, utc_now_iso
+
 
 PRACTICE_SCOPE_SCHEMA_VERSION = 1
 PRACTICE_SCOPE_MODES = frozenset({"explicit_scope", "explicit_topic"})
@@ -227,7 +228,11 @@ def filter_question_params_to_scope(
         if isinstance(item, Mapping) and _candidate_topic_id(item) in eligible
     ]
     existing_retry = filtered.get("retry_wrong_question")
-    if isinstance(existing_retry, Mapping) and _candidate_topic_id(existing_retry) in eligible:
+    if (
+        isinstance(existing_retry, Mapping)
+        and _candidate_topic_id(existing_retry) in eligible
+        and dict(existing_retry) not in retry_candidates
+    ):
         retry_candidates.insert(0, dict(existing_retry))
     filtered["retry_wrong_questions"] = retry_candidates
     filtered["retry_wrong_question"] = retry_candidates[0] if retry_candidates else {}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import date as date_type, datetime, timedelta
 from typing import Any
 
 from .study_habit_store import StudyHabitStore

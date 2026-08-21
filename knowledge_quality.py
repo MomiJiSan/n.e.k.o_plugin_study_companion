@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from enum import StrEnum
 import hashlib
 import math
 import re
-from enum import StrEnum
 from typing import Any
 
 from .models import json_copy

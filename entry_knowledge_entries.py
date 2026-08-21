@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 from .entry_common import (
-    Ok,
-    PublicGraphContributionBuilder,
-    StudyConfig,
-    _entry_exception_error,
     asyncio,
-    build_contribution_settings_payload,
-    build_knowledge_map_payload,
+    Ok,
+    _entry_exception_error,
     plugin_entry,
     tr,
     ui,
+    StudyConfig,
+    PublicGraphContributionBuilder,
+    build_contribution_settings_payload,
+    build_knowledge_map_payload,
 )
-from .knowledge_graph_guidance import build_knowledge_guidance_payload
 from .knowledge_quality import (
     KnowledgeCandidateStatus,
     KnowledgeCandidateType,
     KnowledgeEvidenceType,
 )
+from .knowledge_graph_guidance import build_knowledge_guidance_payload
 
 
 class _KnowledgeEntriesMixin:

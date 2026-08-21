@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import re
-from dataclasses import dataclass
 
 from utils.tokenize import count_tokens
+
 
 DOCUMENT_MAX_BYTES = 512 * 1024
 DOCUMENT_MAX_TOKENS = 160_000
 DOCUMENT_INSTRUCTION_MAX_TOKENS = 300
 DOCUMENT_OUTPUT_MAX_TOKENS = 3_072
-DOCUMENT_ENTRY_TIMEOUT_SECONDS = 95.0
 DOCUMENT_MODEL_TIMEOUT_SECONDS = 75.0
 DOCUMENT_UI_TIMEOUT_SECONDS = 105.0
 
@@ -35,6 +35,7 @@ DOCUMENT_ANALYSIS_KINDS = (
 )
 _SUPPORTED_ANALYSIS_KINDS = frozenset(DOCUMENT_ANALYSIS_KINDS)
 _LOCALE_ALIASES = {
+    "en-us": "en",
     "zh": "zh-CN",
     "zh-cn": "zh-CN",
     "zh-hans": "zh-CN",
@@ -413,7 +414,6 @@ def _full_chunks(value: str, size: int) -> list[str]:
 
 
 __all__ = [
-    "DOCUMENT_ENTRY_TIMEOUT_SECONDS",
     "DOCUMENT_ANALYSIS_KINDS",
     "DOCUMENT_INSTRUCTION_MAX_TOKENS",
     "DOCUMENT_MAX_BYTES",

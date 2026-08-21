@@ -1,21 +1,17 @@
 from __future__ import annotations
 
 from .entry_common import (
-    MODE_COMPANION,
-    MODE_INTERACTIVE,
-    MODE_TEACHING,
+    Err,
     Ok,
+    SdkError,
     _entry_exception_error,
-    handle_user_intent,
     plugin_entry,
     tr,
     ui,
-)
-from .entry_common import (
-    Err as Err,
-)
-from .entry_common import (
-    SdkError as SdkError,
+    MODE_COMPANION,
+    MODE_INTERACTIVE,
+    MODE_TEACHING,
+    handle_user_intent,
 )
 
 

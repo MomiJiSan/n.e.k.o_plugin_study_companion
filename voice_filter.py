@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import re
-import time
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
+import re
+import time
 from typing import Any
+
 
 CATGIRL_NAMES = ("Yui", "yui", "结衣")
 NAME_WINDOW_SECONDS = 3.0

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from .entry_common import Any, StudyEvent, asyncio
 
+
 _ACTIVE_POMODORO_STATES = {"focusing", "short_break", "long_break"}
 _POMODORO_DEADLINE_EPSILON_SECONDS = 0.55
 
 
 class _CommunicationPomodoroEventsMixin:
     """Drive pomodoro deadlines independently from the hosted UI lifecycle."""
+
+    async def _on_command_loop_start(self) -> None:
+        self._pomodoro_lock = asyncio.Lock()
+        self._pomodoro_wakeup = asyncio.Event()
+        self._pomodoro_watcher_task = None
+        self._start_pomodoro_watcher()
 
     def _pomodoro_runtime_lock(self) -> asyncio.Lock:
         lock = getattr(self, "_pomodoro_lock", None)
@@ -25,18 +32,20 @@ class _CommunicationPomodoroEventsMixin:
 
     def _wake_pomodoro_watcher(self) -> None:
         self._pomodoro_runtime_wakeup().set()
+        task = getattr(self, "_pomodoro_watcher_task", None)
+        if task is None or task.done():
+            self._start_pomodoro_watcher()
 
     def _resolve_pomodoro_target_lanlan(
         self, kwargs: dict[str, Any] | None = None
     ) -> str | None:
-        shared_resolver = getattr(self, "_resolve_study_target_lanlan", None)
-        if callable(shared_resolver) and hasattr(self, "ctx"):
-            return shared_resolver(kwargs)
         context = kwargs.get("_ctx") if isinstance(kwargs, dict) else None
         if isinstance(context, dict):
             target = str(context.get("lanlan_name") or "").strip()
-            if target:
-                return target
+            return target or None
+        shared_resolver = getattr(self, "_resolve_study_target_lanlan", None)
+        if callable(shared_resolver) and hasattr(self, "ctx"):
+            return shared_resolver(kwargs)
         target = str(
             getattr(getattr(self, "ctx", None), "_current_lanlan", "") or ""
         ).strip()

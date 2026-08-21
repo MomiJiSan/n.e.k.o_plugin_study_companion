@@ -1,35 +1,122 @@
 from __future__ import annotations
 
-from ._semantic_routing import (
-    StudyInputSemantics,
-    build_semantic_routing_messages,
-    parse_study_input_semantics,
-)
+from dataclasses import dataclass, field
+import threading
+
 from .entry_common import (
+    Any,
+    asyncio,
+    time,
     LLM_OPERATION_ANSWER_EVALUATE,
     LLM_OPERATION_CONCEPT_EXPLAIN,
     LLM_OPERATION_KNOWLEDGE_TRACK,
     LLM_OPERATION_QUESTION_GENERATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
-    Any,
     StudyEvent,
     TutorReply,
+    utc_now_iso,
+    build_tutor_payload,
+    diagnostic_code_for_exception,
     _detect_mastery_threshold_crossed,
     _plugin_lock,
-    asyncio,
-    build_tutor_payload,
-    time,
-    utc_now_iso,
 )
-from .entry_common import (
-    diagnostic_code_for_exception as diagnostic_code_for_exception,
-)
-from .knowledge_graph_guidance import build_knowledge_guidance_payload, match_topics
+from .knowledge_graph_guidance import build_knowledge_guidance_payload
+from .knowledge_graph_guidance import match_topics
 from .models import public_current_question_payload
+from ._semantic_routing import (
+    StudyInputSemantics,
+    build_semantic_routing_messages,
+    parse_study_input_semantics,
+)
+
 
 _SEMANTIC_ROUTE_OPERATION = "knowledge_semantic_route"
 _SEMANTIC_ROUTE_MIN_CONFIDENCE = 0.6
 _SEMANTIC_ROUTE_TIMEOUT_SECONDS = 12.0
+_CANCEL_DRAIN_TIMEOUT_SECONDS = 5.0
+
+
+@dataclass(slots=True)
+class _TutorFinalizeProgress:
+    cancel_requested: threading.Event = field(default_factory=threading.Event)
+    worker_started: threading.Event = field(default_factory=threading.Event)
+    commit_started: threading.Event = field(default_factory=threading.Event)
+    history_persisted: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+
+
+async def _append_interaction_cancel_safe(
+    store: Any,
+    *,
+    progress: _TutorFinalizeProgress,
+    kind: str,
+    input_text: str,
+    output_text: str,
+    metadata: dict[str, Any],
+    history_limit: int,
+) -> None:
+    try:
+        persisted = await asyncio.to_thread(
+            store.append_interaction,
+            kind=kind,
+            input_text=input_text,
+            output_text=output_text,
+            metadata=metadata,
+            history_limit=history_limit,
+            cancel_event=progress.cancel_requested,
+            worker_started_event=progress.worker_started,
+            commit_started_event=progress.commit_started,
+            committed_event=progress.history_persisted,
+            finished_event=progress.finished,
+        )
+    except asyncio.CancelledError:
+        progress.cancel_requested.set()
+        if progress.commit_started.is_set():
+            finished = await asyncio.shield(
+                asyncio.to_thread(
+                    progress.finished.wait, _CANCEL_DRAIN_TIMEOUT_SECONDS
+                )
+            )
+            if not finished:
+                _warn(
+                    getattr(store, "_logger", None),
+                    "study interaction cancellation drain timed out",
+                )
+        raise
+    if persisted is False:
+        raise asyncio.CancelledError
+
+
+def _consume_background_task(task: asyncio.Task[Any]) -> None:
+    try:
+        task.result()
+    except BaseException:
+        pass
+
+
+async def _await_completion_on_cancel(
+    awaitable: Any,
+    *,
+    timeout_seconds: float = _CANCEL_DRAIN_TIMEOUT_SECONDS,
+    logger: Any = None,
+) -> Any:
+    task = asyncio.create_task(awaitable)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(task), timeout=max(0.0, float(timeout_seconds))
+            )
+        except asyncio.TimeoutError:
+            _warn(logger, "study state persistence cancellation drain timed out")
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+        if not task.done():
+            task.add_done_callback(_consume_background_task)
+        raise
 
 
 def _warn(logger: Any, message: str, *args: Any) -> None:
@@ -107,6 +194,50 @@ def _knowledge_guidance_outcome(
     }
 
 
+def _topic_reference_ids(topic: dict[str, Any]) -> list[str]:
+    reference_ids: list[str] = []
+    for field in ("prerequisites", "related"):
+        refs = topic.get(field)
+        if not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if isinstance(ref, dict):
+                ref_id = str(ref.get("id") or ref.get("topic_id") or "").strip()
+            else:
+                ref_id = str(ref or "").strip()
+            if ref_id:
+                reference_ids.append(ref_id)
+    return reference_ids
+
+
+def _load_explicit_guidance_topics(
+    store: Any,
+    topic_id: str,
+    *,
+    max_depth: int = 2,
+) -> list[dict[str, Any]]:
+    topics: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    queue: list[tuple[str, int]] = [(topic_id, 0)]
+    while queue and len(topics) < 24:
+        current_id, depth = queue.pop(0)
+        if not current_id or current_id in seen:
+            continue
+        seen.add(current_id)
+        topic = store.get_topic(current_id)
+        if not isinstance(topic, dict):
+            continue
+        topics.append(topic)
+        if depth >= max_depth:
+            continue
+        queue.extend(
+            (reference_id, depth + 1)
+            for reference_id in _topic_reference_ids(topic)
+            if reference_id not in seen
+        )
+    return topics
+
+
 class _TutorContextSupportMixin:
     def _invalidate_knowledge_guidance_cache(self) -> None:
         cache = getattr(self, "_knowledge_guidance_topics_cache", None)
@@ -156,15 +287,40 @@ class _TutorContextSupportMixin:
             if topic_id:
                 explicit = match_topics(topic_items, topic_id=topic_id, limit=1)
                 if not explicit:
+                    explicit_topics = await asyncio.to_thread(
+                        _load_explicit_guidance_topics,
+                        self._store,
+                        topic_id,
+                    )
+                    topics_by_id = {
+                        str(topic.get("id") or ""): topic
+                        for topic in topic_items
+                        if isinstance(topic, dict) and topic.get("id")
+                    }
+                    topics_by_id.update(
+                        {
+                            str(topic.get("id") or ""): topic
+                            for topic in explicit_topics or []
+                            if isinstance(topic, dict) and topic.get("id")
+                        }
+                    )
+                    topic_items = list(topics_by_id.values())
+                    explicit = match_topics(topic_items, topic_id=topic_id, limit=1)
+                if not explicit:
                     return {}, _knowledge_guidance_outcome(
                         status="not_matched", source="selected_topic"
                     )
                 explicit_topic = explicit[0]
+                explicit_response_mode = (
+                    "general_explanation"
+                    if operation == LLM_OPERATION_CONCEPT_EXPLAIN
+                    else "problem_solving"
+                )
                 semantics = StudyInputSemantics(
                     subject=str(explicit_topic.get("subject") or "unknown"),
                     content_type="selected_topic",
                     intent="explicit_topic",
-                    response_mode="unknown",
+                    response_mode=explicit_response_mode,
                     entity=str(explicit_topic.get("label") or ""),
                     retrieval_concepts=(str(explicit_topic.get("label") or ""),),
                     confidence=1.0,
@@ -173,11 +329,7 @@ class _TutorContextSupportMixin:
                     topics=topic_items,
                     topic_id=topic_id,
                     query=query,
-                    response_mode=(
-                        semantics.response_mode
-                        if operation == LLM_OPERATION_CONCEPT_EXPLAIN
-                        else "problem_solving"
-                    ),
+                    response_mode=explicit_response_mode,
                     max_depth=3,
                     match_limit=5,
                 )
@@ -186,7 +338,8 @@ class _TutorContextSupportMixin:
                     semantics=semantics,
                     guidance=guidance,
                     source="selected_topic",
-                    semantic_status="not_applicable",
+                    semantic_status="available",
+                    response_mode=explicit_response_mode,
                 )
             if operation != LLM_OPERATION_CONCEPT_EXPLAIN:
                 guidance = build_knowledge_guidance_payload(
@@ -207,6 +360,10 @@ class _TutorContextSupportMixin:
             semantics, route_status, route_reason = await self._route_study_input_semantics(
                 query, context=seed
             )
+            if "_agent_quota_reservation" in seed and context is not None:
+                context["_agent_quota_reservation"] = seed[
+                    "_agent_quota_reservation"
+                ]
             if semantics is None:
                 return {}, _knowledge_guidance_outcome(
                     status=route_status,
@@ -298,6 +455,34 @@ class _TutorContextSupportMixin:
             if not callable(attach_image):
                 return None, "routing_unavailable", "model_unavailable"
             messages = attach_image(messages, image)
+        request_deadline = context.get("deadline_monotonic")
+        parsed_request_deadline = 0.0
+        if not isinstance(request_deadline, bool):
+            try:
+                parsed_request_deadline = float(request_deadline)
+            except (TypeError, ValueError):
+                pass
+        if (
+            parsed_request_deadline > 0
+            and parsed_request_deadline <= time.monotonic()
+        ):
+            return None, "routing_unavailable", "timeout"
+        quota_reservation = None
+        if not image:
+            reserve_optional = getattr(agent, "reserve_optional_agent_call", None)
+            if callable(reserve_optional):
+                try:
+                    optional_allowed, quota_reservation = await reserve_optional(
+                        _SEMANTIC_ROUTE_OPERATION
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    return None, "routing_unavailable", "quota_reservation_failed"
+                if quota_reservation is not None:
+                    context["_agent_quota_reservation"] = quota_reservation
+                if not optional_allowed:
+                    return None, "routing_unavailable", "primary_quota_reserved"
         new_deadline = getattr(agent, "_new_operation_deadline", None)
         route_deadline = time.monotonic() + _SEMANTIC_ROUTE_TIMEOUT_SECONDS
         deadline = (
@@ -305,24 +490,20 @@ class _TutorContextSupportMixin:
             if callable(new_deadline)
             else route_deadline
         )
-        request_deadline = context.get("deadline_monotonic")
-        if not isinstance(request_deadline, bool):
-            try:
-                parsed_request_deadline = float(request_deadline)
-            except (TypeError, ValueError):
-                parsed_request_deadline = 0.0
-            if parsed_request_deadline > 0:
-                deadline = min(deadline, parsed_request_deadline)
+        if parsed_request_deadline > 0:
+            deadline = min(deadline, parsed_request_deadline)
         remaining_seconds = deadline - time.monotonic()
         if remaining_seconds <= 0:
             return None, "routing_unavailable", "timeout"
         try:
+            call_kwargs: dict[str, Any] = {
+                "operation": _SEMANTIC_ROUTE_OPERATION,
+                "deadline": deadline,
+            }
+            if quota_reservation is not None:
+                call_kwargs["quota_reservation"] = quota_reservation
             raw = await asyncio.wait_for(
-                call_model(
-                    messages,
-                    operation=_SEMANTIC_ROUTE_OPERATION,
-                    deadline=deadline,
-                ),
+                call_model(messages, **call_kwargs),
                 timeout=remaining_seconds,
             )
         except asyncio.CancelledError:
@@ -552,6 +733,7 @@ class _TutorContextSupportMixin:
         metadata: dict[str, Any],
         extra_context: dict[str, Any] | None = None,
         public_payload: dict[str, Any] | None = None,
+        finalize_progress: _TutorFinalizeProgress | None = None,
     ) -> dict[str, Any]:
         diagnostic = str(reply.diagnostic or "")
         if reply.degraded:
@@ -572,15 +754,17 @@ class _TutorContextSupportMixin:
                 return payload
             return build_tutor_payload(reply)
 
-        await self._record_tutor_result(operation, reply, extra=extra_context)
-        await asyncio.to_thread(
-            self._store.append_interaction,
+        progress = finalize_progress or _TutorFinalizeProgress()
+        await _append_interaction_cancel_safe(
+            self._store,
+            progress=progress,
             kind=history_kind,
             input_text=reply.input_text,
             output_text=reply.reply,
             metadata=metadata,
             history_limit=self._cfg.history_limit,
         )
+        await self._record_tutor_result(operation, reply, extra=extra_context)
         tracking_enrichment: dict[str, Any] = {}
         if operation != LLM_OPERATION_SUMMARIZE_SESSION:
             tracking_enrichment = await self._track_learning(
@@ -589,7 +773,9 @@ class _TutorContextSupportMixin:
                 extra_context=extra_context,
                 public_payload=public_payload,
             )
-        await self._persist_state()
+        await _await_completion_on_cancel(
+            self._persist_state(), logger=getattr(self, "logger", None)
+        )
         if public_payload is not None:
             payload = {
                 "operation": reply.operation,
@@ -781,6 +967,7 @@ class _TutorContextSupportMixin:
         except Exception as exc:
             self.logger.warning("study knowledge tracker persistence failed: {}", exc)
             return {}
+        self._invalidate_knowledge_guidance_cache()
         tracked_topic = str(tracking_result.get("topic_id") or topic).strip()
         mastery_after: float | None = None
         if tracked_topic:

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
+import math
 from typing import Any, Iterable
+
+
+REVIEW_WAS_DUE_BEFORE_KEY = "_review_was_due_before"
+REVIEW_IS_DUE_AFTER_KEY = "_review_is_due_after"
 
 
 def _utc_now() -> datetime:

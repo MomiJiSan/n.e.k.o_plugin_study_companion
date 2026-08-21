@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
-import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+import re
+import time
 from typing import Any
 
 from plugin.sdk.shared.i18n import load_plugin_i18n_from_dir
@@ -229,6 +229,7 @@ def build_transition_phrase(
     lock_until: float = 0.0,
 ) -> str:
     label = mode_label(mode, language=language)
+    is_english = _is_english_language(language)
     is_chinese = _is_chinese_language(language)
     normalized = normalize_mode(mode)
     if outcome == "same":

@@ -7,6 +7,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+
 _LOGGER = logging.getLogger(__name__)
 
 CAPTURE_BACKEND_DXCAM = "dxcam"

@@ -2,23 +2,56 @@ from __future__ import annotations
 
 from .entry_common import (
     Any,
+    asyncio,
     StudyEvent,
     StudyEventBus,
-    asyncio,
 )
+from .fsrs_bridge import REVIEW_IS_DUE_AFTER_KEY, REVIEW_WAS_DUE_BEFORE_KEY
+
+
+def _consume_review_due_transition(payload: Any) -> tuple[bool, bool]:
+    if not isinstance(payload, dict):
+        return False, False
+    marker_payload = payload
+    nested_review = payload.get("review")
+    if isinstance(nested_review, dict) and REVIEW_WAS_DUE_BEFORE_KEY in nested_review:
+        marker_payload = nested_review
+    was_due_before = bool(marker_payload.pop(REVIEW_WAS_DUE_BEFORE_KEY, False))
+    is_due_after = bool(marker_payload.pop(REVIEW_IS_DUE_AFTER_KEY, False))
+    return was_due_before, is_due_after
 
 
 class _CommunicationReviewEventsMixin:
+    def _memory_review_transition_lock(self) -> asyncio.Lock:
+        lock = getattr(self, "_memory_review_completion_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._memory_review_completion_lock = lock
+        return lock
+
+    async def _run_serialized_review_transition(
+        self, operation, /, *args, **kwargs
+    ) -> tuple[Any, bool]:
+        async with self._memory_review_transition_lock():
+            payload = await asyncio.to_thread(operation, *args, **kwargs)
+            was_due_before, is_due_after = _consume_review_due_transition(payload)
+            completed = False
+            if was_due_before and not is_due_after:
+                due_after = await asyncio.to_thread(self._count_total_due_reviews)
+                completed = due_after == 0
+        return payload, completed
+
     def _resolve_study_target_lanlan(
         self, kwargs: dict[str, Any] | None = None
     ) -> str | None:
-        if isinstance(kwargs, dict):
+        if isinstance(kwargs, dict) and "_ctx" in kwargs:
             ctx_payload = kwargs.get("_ctx")
             if isinstance(ctx_payload, dict):
                 lanlan_name = str(ctx_payload.get("lanlan_name") or "").strip()
-                if lanlan_name:
-                    return lanlan_name
-        lanlan_name = str(getattr(self.ctx, "_current_lanlan", "") or "").strip()
+                return lanlan_name or None
+            return None
+        ctx = getattr(self, "ctx", None)
+        lanlan_name = str(getattr(ctx, "_current_lanlan", "") or "").strip()
         return lanlan_name or None
 
     def _count_total_due_reviews(self) -> int:

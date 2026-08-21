@@ -1,18 +1,17 @@
 from __future__ import annotations
-
 from .tutor_llm_agent_common import (
-    _JSON_CORRECTION_BAD_OUTPUT_MAX_TOKENS,
-    _JSON_CORRECTION_ERROR_MAX_TOKENS,
-    _JSON_CORRECTION_MAX_ATTEMPTS,
-    STUDY_JSON_CORRECTION_USER_TEMPLATE,
     Any,
     Awaitable,
     Callable,
-    SdkError,
-    _bounded_prompt_text,
-    _strip_code_fences,
     re,
+    STUDY_JSON_CORRECTION_USER_TEMPLATE,
+    SdkError,
     robust_json_loads,
+    _JSON_CORRECTION_MAX_ATTEMPTS,
+    _JSON_CORRECTION_BAD_OUTPUT_MAX_TOKENS,
+    _JSON_CORRECTION_ERROR_MAX_TOKENS,
+    _strip_code_fences,
+    _bounded_prompt_text,
 )
 
 

@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 import base64
-import importlib
-import importlib.util
-import io
-import subprocess
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+import io
+import importlib
+import importlib.util
+import subprocess
+import sys
 from threading import RLock
+import time
 from typing import Any
 
 from PIL import Image
-
 from .models import (
-    OCR_SNIPPET_MAX_CHARS,
     ActivitySnapshot,
+    OCR_SNIPPET_MAX_CHARS,
     OcrSnapshot,
     StudyConfig,
     utc_now_iso,

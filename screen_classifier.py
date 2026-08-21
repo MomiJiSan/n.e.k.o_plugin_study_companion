@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import re
-import time
 from collections import Counter
 from dataclasses import dataclass, field
+import re
+import time
 from typing import Any, Iterable
+
 
 _VALID_SCREEN_TYPES = frozenset({"idle", "reading", "question", "answering", "review", "notes", "summary"})
 _APP_TITLE_RULES: dict[str, tuple[str, ...]] = {
@@ -405,6 +406,14 @@ def classify_screen_from_ocr(
     if screen_type == "idle":
         confidence = max(confidence, 0.45 if not title else 0.55)
 
+    reasons = {
+        "question": question_hits,
+        "answering": answer_hits,
+        "review": review_hits,
+        "summary": summary_hits,
+        "notes": notes_hits,
+        "reading": reading_hits,
+    }
     current = ScreenClassification(
         screen_type=screen_type,
         confidence=confidence,
