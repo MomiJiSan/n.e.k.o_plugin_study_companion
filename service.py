@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import copy
-import logging
 import importlib.util
+import logging
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from .models import OcrSnapshot, StudyConfig, StudyState, TutorReply
-
 
 _LOGGER = logging.getLogger(__name__)
 

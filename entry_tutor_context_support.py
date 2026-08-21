@@ -1,34 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import threading
+from dataclasses import dataclass, field
 
-from .entry_common import (
-    Any,
-    asyncio,
-    time,
-    LLM_OPERATION_ANSWER_EVALUATE,
-    LLM_OPERATION_CONCEPT_EXPLAIN,
-    LLM_OPERATION_KNOWLEDGE_TRACK,
-    LLM_OPERATION_QUESTION_GENERATE,
-    LLM_OPERATION_SUMMARIZE_SESSION,
-    StudyEvent,
-    TutorReply,
-    utc_now_iso,
-    build_tutor_payload,
-    diagnostic_code_for_exception,
-    _detect_mastery_threshold_crossed,
-    _plugin_lock,
-)
-from .knowledge_graph_guidance import build_knowledge_guidance_payload
-from .knowledge_graph_guidance import match_topics
-from .models import public_current_question_payload
 from ._semantic_routing import (
     StudyInputSemantics,
     build_semantic_routing_messages,
     parse_study_input_semantics,
 )
-
+from .entry_common import (
+    LLM_OPERATION_ANSWER_EVALUATE,
+    LLM_OPERATION_CONCEPT_EXPLAIN,
+    LLM_OPERATION_KNOWLEDGE_TRACK,
+    LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_SUMMARIZE_SESSION,
+    Any,
+    StudyEvent,
+    TutorReply,
+    _detect_mastery_threshold_crossed,
+    _plugin_lock,
+    asyncio,
+    build_tutor_payload,
+    time,
+    utc_now_iso,
+)
+from .knowledge_graph_guidance import build_knowledge_guidance_payload, match_topics
+from .models import public_current_question_payload
 
 _SEMANTIC_ROUTE_OPERATION = "knowledge_semantic_route"
 _SEMANTIC_ROUTE_MIN_CONFIDENCE = 0.6
@@ -196,8 +193,8 @@ def _knowledge_guidance_outcome(
 
 def _topic_reference_ids(topic: dict[str, Any]) -> list[str]:
     reference_ids: list[str] = []
-    for field in ("prerequisites", "related"):
-        refs = topic.get(field)
+    for relation_field in ("prerequisites", "related"):
+        refs = topic.get(relation_field)
         if not isinstance(refs, list):
             continue
         for ref in refs:

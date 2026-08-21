@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import deque
 from dataclasses import replace
-import time
 
 from .models import ActivitySnapshot, ActivitySummary
 

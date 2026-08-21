@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 GENERAL_NARRATION_MAX_CHARS = 1600
 
 _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s*")

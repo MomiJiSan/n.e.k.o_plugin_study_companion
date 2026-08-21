@@ -11,7 +11,6 @@ from typing import Any
 
 from plugin.sdk.shared.transport.message_plane import MessagePlaneTransport
 
-
 _logger = logging.getLogger(__name__)
 
 

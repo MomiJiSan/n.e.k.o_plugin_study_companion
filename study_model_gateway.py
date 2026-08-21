@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
-import time
 from typing import Any
 from urllib.parse import urlsplit
 
 from .qwen_native_client import (
+    _OUTPUT_TOKEN_BUDGETS,
     QwenNativeClient,
     QwenNativeError,
-    QwenNativeResult,
-    _OUTPUT_TOKEN_BUDGETS,
     messages_have_image,
 )
 

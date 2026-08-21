@@ -9,7 +9,6 @@ from plugin.sdk.plugin import Err, Ok, SdkError
 from .constants import MODE_COMPANION, MODE_INTERACTIVE, MODE_TEACHING
 from .entry_common import _plugin_lock
 
-
 _NEKO_COMMAND_TOPIC = "neko.study_command"
 
 _NEKO_COMMAND_HANDLERS: dict[str, str] = {

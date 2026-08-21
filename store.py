@@ -13,7 +13,7 @@ from .knowledge_quality import (
     KnowledgeCandidateStatus,
     KnowledgeQualityStore,
 )
-from .memory_deck_store import MemoryDeckStore, ensure_memory_schema
+from .memory_deck_store import MemoryDeckStore
 from .mode_manager import normalize_mode
 from .models import (
     STORE_CONFIG,
@@ -1449,22 +1449,16 @@ class StudyStore:
         }
 
 
-from .store_schema import (
-    _ensure_column,
-    _init_db,
-    _load_seed_if_empty,
-    _trim_append_only_rows,
-)
-from .store_topics import (
-    average_latest_mastery,
-    count_topics,
-    count_tracked_mastery_topics,
-    ensure_topic,
-    find_topic_by_name,
-    get_topic,
-    list_topics,
-    load_knowledge_seed,
-    upsert_topic,
+from .store_fsrs import (
+    append_mastery_snapshot,
+    append_review_log,
+    get_fsrs_card,
+    get_latest_mastery,
+    list_fsrs_cards,
+    list_latest_mastery_for_topics,
+    list_mastery_overview,
+    list_review_log,
+    upsert_fsrs_card,
 )
 from .store_knowledge import (
     add_knowledge_evidence,
@@ -1485,6 +1479,7 @@ from .store_knowledge_contribution import (
     list_knowledge_contribution_queue,
     upsert_anonymous_knowledge_stat,
 )
+from .store_maintenance import json_loads, purge_all, transaction
 from .store_qa import (
     add_qa_record,
     add_wrong_question,
@@ -1497,18 +1492,23 @@ from .store_qa import (
     mark_wrong_question_resolved,
     record_wrong_question_correct,
 )
-from .store_fsrs import (
-    append_mastery_snapshot,
-    append_review_log,
-    get_fsrs_card,
-    get_latest_mastery,
-    list_fsrs_cards,
-    list_latest_mastery_for_topics,
-    list_mastery_overview,
-    list_review_log,
-    upsert_fsrs_card,
+from .store_schema import (
+    _ensure_column,
+    _init_db,
+    _load_seed_if_empty,
+    _trim_append_only_rows,
 )
-from .store_maintenance import json_loads, purge_all, transaction
+from .store_topics import (
+    average_latest_mastery,
+    count_topics,
+    count_tracked_mastery_topics,
+    ensure_topic,
+    find_topic_by_name,
+    get_topic,
+    list_topics,
+    load_knowledge_seed,
+    upsert_topic,
+)
 
 StudyStore._init_db = _init_db  # type: ignore[method-assign]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]

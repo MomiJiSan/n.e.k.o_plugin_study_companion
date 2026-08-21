@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import re
+from dataclasses import dataclass
 
 from utils.tokenize import count_tokens
-
 
 DOCUMENT_MAX_BYTES = 512 * 1024
 DOCUMENT_MAX_TOKENS = 160_000

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .fsrs_bridge import StudyFsrsRating
 
-
 WORD_ERROR_RATINGS = {
     "unknown_word": StudyFsrsRating.Again,
     "spelling": StudyFsrsRating.Hard,

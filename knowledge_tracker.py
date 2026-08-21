@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import logging
 import math
 import re
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .fsrs_bridge import (
-    FSRSBridge,
     REVIEW_IS_DUE_AFTER_KEY,
     REVIEW_WAS_DUE_BEFORE_KEY,
+    FSRSBridge,
     StudyFsrsCard,
     StudyFsrsRating,
     create_card,
@@ -20,14 +20,12 @@ from .fsrs_bridge import (
     retrievability,
 )
 from .knowledge_quality import (
-    KnowledgeCandidateStatus,
     KnowledgeCandidateType,
     KnowledgeEvidenceType,
     KnowledgeQualityStore,
 )
 from .memory_text import normalize_tags
 from .models import json_copy
-
 
 _LOGGER = logging.getLogger(__name__)
 

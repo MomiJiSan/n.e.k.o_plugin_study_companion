@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .entry_common import Any, StudyEvent, asyncio
 
-
 _ACTIVE_POMODORO_STATES = {"focusing", "short_break", "long_break"}
 _POMODORO_DEADLINE_EPSILON_SECONDS = 0.55
 

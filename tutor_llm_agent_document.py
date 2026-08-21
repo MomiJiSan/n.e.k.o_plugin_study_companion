@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from utils.tokenize import count_tokens
@@ -13,16 +13,15 @@ from .constants import (
     LLM_OPERATION_DOCUMENT_MERGE,
 )
 from .document_analysis import (
-    ValidatedDocument,
     _ANALYSIS_STRUCTURES,
     _LOCALE_OUTPUT_RULES,
+    ValidatedDocument,
     build_document_analysis_messages,
     contains_full_document_source,
 )
 from .document_chunking import DocumentChunk
 from .models import TutorReply, utc_now_iso
 from .tutor_llm_agent_common import SdkError, diagnostic_code_for_exception
-
 
 _DOCUMENT_FALLBACKS = {
     "en": "Document analysis failed. Please try again later.",

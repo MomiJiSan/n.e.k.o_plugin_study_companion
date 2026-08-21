@@ -8,7 +8,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-
 _ALLOWED_HOSTS = frozenset(
     {
         "dashscope.aliyuncs.com",

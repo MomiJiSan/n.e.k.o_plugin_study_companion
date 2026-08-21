@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from .entry_common import (
-    asyncio,
     Ok,
     _entry_exception_error,
+    asyncio,
     plugin_entry,
     tr,
     ui,

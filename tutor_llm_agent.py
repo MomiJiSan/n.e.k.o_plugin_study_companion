@@ -3,30 +3,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from .tutor_llm_agent_common import (
-    Any,
-    asyncio,
-    re,
-    STUDY_EMPTY_INPUT_DEFAULT,
-    STUDY_FALLBACK_EXPLANATION_DEFAULT,
-    STUDY_FALLBACK_FEEDBACK,
-    STUDY_FALLBACK_NEXT_ACTION,
-    STUDY_MARKDOWN_SECTION_EMPTY_ITEM,
-    SdkError,
-    LLM_OPERATION_ANSWER_EVALUATE,
-    LLM_OPERATION_CONCEPT_EXPLAIN,
-    LLM_OPERATION_KNOWLEDGE_TRACK,
-    LLM_OPERATION_QUESTION_GENERATE,
-    LLM_OPERATION_SUMMARIZE_SESSION,
-    build_operation_messages,
-    study_i18n_t,
-    StudyConfig,
-    TutorReply,
-    utc_now_iso,
-    _as_str,
-    _as_dict,
-    diagnostic_code_for_exception,
-)
 from .qwen_native_client import (
     QwenNativeResult,
     messages_have_image,
@@ -38,8 +14,31 @@ from .study_model_gateway import (
     StudyModelResult,
     StudyModelRuntimeSnapshot,
 )
+from .tutor_llm_agent_common import (
+    LLM_OPERATION_ANSWER_EVALUATE,
+    LLM_OPERATION_CONCEPT_EXPLAIN,
+    LLM_OPERATION_KNOWLEDGE_TRACK,
+    LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_SUMMARIZE_SESSION,
+    STUDY_EMPTY_INPUT_DEFAULT,
+    STUDY_FALLBACK_EXPLANATION_DEFAULT,
+    STUDY_FALLBACK_FEEDBACK,
+    STUDY_FALLBACK_NEXT_ACTION,
+    STUDY_MARKDOWN_SECTION_EMPTY_ITEM,
+    Any,
+    SdkError,
+    StudyConfig,
+    TutorReply,
+    _as_dict,
+    _as_str,
+    asyncio,
+    build_operation_messages,
+    diagnostic_code_for_exception,
+    re,
+    study_i18n_t,
+    utc_now_iso,
+)
 from .tutor_llm_agent_json_corrector import _JSONCorrector
-
 
 _bound_model_runtime: ContextVar[StudyModelRuntimeSnapshot | None] = ContextVar(
     "study_companion_model_runtime", default=None
@@ -391,21 +390,21 @@ class TutorLLMAgent:
         )
 
 
-from .tutor_llm_agent_concept_explain import concept_explain
-from .tutor_llm_agent_question_generate import (
-    _fallback_question,
-    _normalize_question,
-    question_generate,
-)
 from .tutor_llm_agent_answer_evaluate import (
     _fallback_evaluation,
     _normalize_evaluation,
     answer_evaluate,
 )
+from .tutor_llm_agent_concept_explain import concept_explain
 from .tutor_llm_agent_knowledge_track import (
     _fallback_track,
     _normalize_track,
     knowledge_track,
+)
+from .tutor_llm_agent_question_generate import (
+    _fallback_question,
+    _normalize_question,
+    question_generate,
 )
 from .tutor_llm_agent_summarize_session import (
     _fallback_summary,

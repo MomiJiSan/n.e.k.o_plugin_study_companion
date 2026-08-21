@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 import inspect
 import logging
 import secrets
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
-
 
 DOCUMENT_JOB_TIMEOUT_SECONDS = 20 * 60.0
 DOCUMENT_JOB_MERGE_RESERVED_SECONDS = 2 * 60.0
@@ -282,6 +281,7 @@ class DocumentAnalysisJobManager:
         runner: JobRunner,
         on_completed: CompletionCallback | None,
     ) -> None:
+        completion_callback = on_completed
         started_monotonic = time.monotonic()
         deadline_monotonic = started_monotonic + DOCUMENT_JOB_TIMEOUT_SECONDS
         merge_deadline_monotonic = (
@@ -321,9 +321,9 @@ class DocumentAnalysisJobManager:
                 job.cancellation_source = ""
                 job.completed_chunks = job.total_chunks
                 job.finished_at = time.monotonic()
-                if on_completed is not None:
+                if completion_callback is not None:
                     try:
-                        on_completed(job.result)
+                        completion_callback(job.result)
                     except Exception:
                         _logger.exception(
                             "document analysis completion callback failed"

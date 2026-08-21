@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 import re
 import uuid
+from dataclasses import asdict
 from typing import Any, Literal
 
 from .models import NotebookMeta, NoteItem, NoteSearchResult, utc_now_iso

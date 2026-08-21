@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from http import HTTPStatus
-import time
 from typing import Any, NoReturn
 from urllib.parse import urlsplit
 

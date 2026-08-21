@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import logging
 import math
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, TypedDict
 
 from .constants import (
     MODE_COMPANION,
-    MODE_CONCEPT_EXPLAIN,
-    MODE_INTERACTIVE,
-    MODE_TEACHING,
-    SUPPORTED_MODES,
 )
 from .json_utils import json_copy
 from .mode_manager import normalize_mode
-
 
 PLUGIN_ID = "study_companion"
 StudyMode = Literal["companion", "interactive", "teaching"]
