@@ -23,6 +23,66 @@ from .models import (
     build_config,
     json_copy,
 )
+from .store_fsrs import (
+    append_mastery_snapshot,
+    append_review_log,
+    get_fsrs_card,
+    get_latest_mastery,
+    list_fsrs_cards,
+    list_latest_mastery_for_topics,
+    list_mastery_overview,
+    list_review_log,
+    upsert_fsrs_card,
+)
+from .store_knowledge import (
+    add_knowledge_evidence,
+    candidate_status_counts,
+    get_candidate_by_key,
+    get_candidate_item,
+    list_candidate_items,
+    list_knowledge_evidence,
+    list_recent_knowledge_evidence,
+    update_candidate_score_status,
+    upsert_candidate_item,
+)
+from .store_knowledge_contribution import (
+    anonymous_knowledge_stats_summary,
+    clear_knowledge_contribution_queue,
+    enqueue_knowledge_contribution_snapshot,
+    list_anonymous_knowledge_stats,
+    list_knowledge_contribution_queue,
+    upsert_anonymous_knowledge_stat,
+)
+from .store_maintenance import json_loads, purge_all, transaction
+from .store_qa import (
+    add_qa_record,
+    add_wrong_question,
+    ensure_session,
+    get_retry_wrong_question,
+    list_qa_records,
+    list_qa_records_for_topic,
+    list_sessions,
+    list_wrong_questions,
+    mark_wrong_question_resolved,
+    record_wrong_question_correct,
+)
+from .store_schema import (
+    _ensure_column,
+    _init_db,
+    _load_seed_if_empty,
+    _trim_append_only_rows,
+)
+from .store_topics import (
+    average_latest_mastery,
+    count_topics,
+    count_tracked_mastery_topics,
+    ensure_topic,
+    find_topic_by_name,
+    get_topic,
+    list_topics,
+    load_knowledge_seed,
+    upsert_topic,
+)
 
 _DROP = object()
 _STATE_ITEM_FLOAT_KEYS = {"at", "created_at", "updated_at", "expires_at", "lock_until"}
@@ -1447,68 +1507,6 @@ class StudyStore:
             "memory_items": memory_decks.list_items(limit=5000, include_archived=True),
             "memory_due_reviews": memory_decks.due_reviews(limit=5000),
         }
-
-
-from .store_fsrs import (
-    append_mastery_snapshot,
-    append_review_log,
-    get_fsrs_card,
-    get_latest_mastery,
-    list_fsrs_cards,
-    list_latest_mastery_for_topics,
-    list_mastery_overview,
-    list_review_log,
-    upsert_fsrs_card,
-)
-from .store_knowledge import (
-    add_knowledge_evidence,
-    candidate_status_counts,
-    get_candidate_by_key,
-    get_candidate_item,
-    list_candidate_items,
-    list_knowledge_evidence,
-    list_recent_knowledge_evidence,
-    update_candidate_score_status,
-    upsert_candidate_item,
-)
-from .store_knowledge_contribution import (
-    anonymous_knowledge_stats_summary,
-    clear_knowledge_contribution_queue,
-    enqueue_knowledge_contribution_snapshot,
-    list_anonymous_knowledge_stats,
-    list_knowledge_contribution_queue,
-    upsert_anonymous_knowledge_stat,
-)
-from .store_maintenance import json_loads, purge_all, transaction
-from .store_qa import (
-    add_qa_record,
-    add_wrong_question,
-    ensure_session,
-    get_retry_wrong_question,
-    list_qa_records,
-    list_qa_records_for_topic,
-    list_sessions,
-    list_wrong_questions,
-    mark_wrong_question_resolved,
-    record_wrong_question_correct,
-)
-from .store_schema import (
-    _ensure_column,
-    _init_db,
-    _load_seed_if_empty,
-    _trim_append_only_rows,
-)
-from .store_topics import (
-    average_latest_mastery,
-    count_topics,
-    count_tracked_mastery_topics,
-    ensure_topic,
-    find_topic_by_name,
-    get_topic,
-    list_topics,
-    load_knowledge_seed,
-    upsert_topic,
-)
 
 StudyStore._init_db = _init_db  # type: ignore[method-assign]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]

@@ -14,6 +14,11 @@ from .study_model_gateway import (
     StudyModelResult,
     StudyModelRuntimeSnapshot,
 )
+from .tutor_llm_agent_answer_evaluate import (
+    _fallback_evaluation,
+    _normalize_evaluation,
+    answer_evaluate,
+)
 from .tutor_llm_agent_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
     LLM_OPERATION_CONCEPT_EXPLAIN,
@@ -38,7 +43,30 @@ from .tutor_llm_agent_common import (
     study_i18n_t,
     utc_now_iso,
 )
+from .tutor_llm_agent_concept_explain import concept_explain
+from .tutor_llm_agent_document import (
+    analyze_document_chunk,
+    build_document_merge_messages,
+    document_analyze,
+    merge_document_chunks,
+)
 from .tutor_llm_agent_json_corrector import _JSONCorrector
+from .tutor_llm_agent_knowledge_track import (
+    _fallback_track,
+    _normalize_track,
+    knowledge_track,
+)
+from .tutor_llm_agent_notebook import expand_note, summarize_to_note
+from .tutor_llm_agent_question_generate import (
+    _fallback_question,
+    _normalize_question,
+    question_generate,
+)
+from .tutor_llm_agent_summarize_session import (
+    _fallback_summary,
+    _normalize_summary,
+    summarize_session,
+)
 
 _bound_model_runtime: ContextVar[StudyModelRuntimeSnapshot | None] = ContextVar(
     "study_companion_model_runtime", default=None
@@ -389,29 +417,6 @@ class TutorLLMAgent:
             configured_timeout_seconds=self._config.llm_call_timeout_seconds,
         )
 
-
-from .tutor_llm_agent_answer_evaluate import (
-    _fallback_evaluation,
-    _normalize_evaluation,
-    answer_evaluate,
-)
-from .tutor_llm_agent_concept_explain import concept_explain
-from .tutor_llm_agent_knowledge_track import (
-    _fallback_track,
-    _normalize_track,
-    knowledge_track,
-)
-from .tutor_llm_agent_question_generate import (
-    _fallback_question,
-    _normalize_question,
-    question_generate,
-)
-from .tutor_llm_agent_summarize_session import (
-    _fallback_summary,
-    _normalize_summary,
-    summarize_session,
-)
-
 TutorLLMAgent.concept_explain = concept_explain  # type: ignore[method-assign]
 TutorLLMAgent.question_generate = question_generate  # type: ignore[method-assign]
 TutorLLMAgent._normalize_question = _normalize_question  # type: ignore[method-assign]
@@ -426,17 +431,8 @@ TutorLLMAgent.summarize_session = summarize_session  # type: ignore[method-assig
 TutorLLMAgent._normalize_summary = _normalize_summary  # type: ignore[method-assign]
 TutorLLMAgent._fallback_summary = _fallback_summary  # type: ignore[method-assign]
 
-from .tutor_llm_agent_notebook import expand_note, summarize_to_note
-
 TutorLLMAgent.expand_note = expand_note  # type: ignore[method-assign]
 TutorLLMAgent.summarize_to_note = summarize_to_note  # type: ignore[method-assign]
-
-from .tutor_llm_agent_document import (
-    analyze_document_chunk,
-    build_document_merge_messages,
-    document_analyze,
-    merge_document_chunks,
-)
 
 TutorLLMAgent.document_analyze = document_analyze  # type: ignore[attr-defined]
 TutorLLMAgent.analyze_document_chunk = analyze_document_chunk  # type: ignore[attr-defined]
