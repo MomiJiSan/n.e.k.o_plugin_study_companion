@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import io
+from typing import Any
+
 from .entry_common import (
     Err,
     Ok,
     SdkError,
     _entry_exception_error,
+    _normalize_submitted_image_payload,
     asyncio,
+    base64,
     build_ocr_payload,
     plugin_entry,
     rapidocr_support,
@@ -18,6 +23,76 @@ from .interactive_screenshot import (
     capture_interactive_region,
 )
 from .models import OcrSnapshot
+
+_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS = 45.0
+_DOCUMENT_PAGE_MAX_PIXELS = 8_000_000
+_DOCUMENT_PAGE_MAX_BYTES = 6 * 1024 * 1024
+_DOCUMENT_PAGE_DATA_URL_PREFIXES = (
+    "data:image/jpeg;base64,",
+    "data:image/png;base64,",
+)
+
+
+def _decode_document_page_data_url(image_data_url: str) -> Any:
+    payload = str(image_data_url or "").strip()
+    if not payload.lower().startswith(_DOCUMENT_PAGE_DATA_URL_PREFIXES):
+        raise ValueError("only JPEG/PNG data URLs are supported")
+
+    normalized = _normalize_submitted_image_payload(payload)
+    encoded = normalized.partition(",")[2]
+    raw = base64.b64decode(encoded, validate=True)
+    if len(raw) > _DOCUMENT_PAGE_MAX_BYTES:
+        raise ValueError("document_pdf_page_too_large")
+
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(raw)) as source:
+            width, height = source.size
+            if width <= 0 or height <= 0 or width * height > _DOCUMENT_PAGE_MAX_PIXELS:
+                raise ValueError("document_pdf_page_too_large")
+            source.load()
+            if source.format == "PNG" and (
+                "A" in source.getbands() or "transparency" in source.info
+            ):
+                rgba = source.convert("RGBA")
+                image = Image.new("RGB", source.size, "white")
+                image.paste(rgba, mask=rgba.getchannel("A"))
+                return image
+            return source.convert("RGB")
+    except Image.DecompressionBombError as exc:
+        raise ValueError("document_pdf_page_too_large") from exc
+
+
+def _document_page_ocr_payload(snapshot: OcrSnapshot) -> dict[str, str]:
+    return {
+        "text": str(snapshot.text or ""),
+        "status": str(snapshot.status or ""),
+        "diagnostic": str(snapshot.diagnostic or ""),
+        "backend": str(snapshot.backend or ""),
+    }
+
+
+def _release_document_page_image(task: Any, image: Any) -> None:
+    try:
+        task.exception()
+    except BaseException:
+        pass
+    try:
+        image.close()
+    except Exception:
+        pass
+
+
+def _release_decoded_document_page(task: Any) -> None:
+    try:
+        image = task.result()
+    except BaseException:
+        return
+    try:
+        image.close()
+    except Exception:
+        pass
 
 
 def _ocr_request_lanlan(kwargs: dict[str, object]) -> str | None:
@@ -145,6 +220,82 @@ class _OcrEntriesMixin:
             )
         await self._persist_state()
         return Ok(payload)
+
+    @plugin_entry(
+        id="study_ocr_document_page",
+        name="Study OCR Document Page",
+        description="Recognize one validated JPEG/PNG page from an imported document.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "image_data_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8_388_640,
+                }
+            },
+            "required": ["image_data_url"],
+            "additionalProperties": False,
+        },
+        timeout=50.0,
+        llm_result_fields=["status", "diagnostic", "backend"],
+    )
+    async def study_ocr_document_page(self, image_data_url: str, **_):
+        backend_name = str(
+            getattr(getattr(self, "_cfg", None), "ocr_backend_selection", "") or ""
+        ).strip()
+        if self._ocr_pipeline is None:
+            return Ok(
+                {
+                    "text": "",
+                    "status": "unavailable",
+                    "diagnostic": "document_pdf_ocr_unavailable",
+                    "backend": backend_name,
+                }
+            )
+
+        decode_task = asyncio.create_task(
+            asyncio.to_thread(
+                _decode_document_page_data_url,
+                image_data_url,
+            )
+        )
+        try:
+            image = await asyncio.shield(decode_task)
+        except asyncio.CancelledError:
+            decode_task.add_done_callback(_release_decoded_document_page)
+            raise
+        except (TypeError, ValueError, OSError) as exc:
+            return Err(SdkError(str(exc)))
+
+        ocr_task = asyncio.create_task(
+            asyncio.to_thread(self._ocr_pipeline.recognize_document_page, image)
+        )
+        try:
+            snapshot = await asyncio.wait_for(
+                asyncio.shield(ocr_task),
+                timeout=_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            return Ok(
+                {
+                    "text": "",
+                    "status": "timeout",
+                    "diagnostic": "document_pdf_ocr_timeout",
+                    "backend": backend_name,
+                }
+            )
+        finally:
+            if ocr_task.done():
+                try:
+                    image.close()
+                except Exception:
+                    pass
+            else:
+                ocr_task.add_done_callback(
+                    lambda task: _release_document_page_image(task, image)
+                )
+        return Ok(_document_page_ocr_payload(snapshot))
 
     @plugin_entry(
         id="study_install_tesseract",

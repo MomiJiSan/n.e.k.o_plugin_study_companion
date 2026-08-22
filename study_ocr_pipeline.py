@@ -194,6 +194,58 @@ class StudyOcrPipeline:
             return OcrSnapshot(status="empty", captured_at=utc_now_iso(), diagnostic="no image supplied")
         return self._extract_image(image, backend_name=backend_name or self._config.ocr_backend_selection)
 
+    def recognize_document_page(self, image: Any) -> OcrSnapshot:
+        """OCR one imported document page without changing live screen state."""
+        backend_name = str(self._config.ocr_backend_selection or "").strip()
+        if not self._config.ocr_enabled:
+            return OcrSnapshot(
+                status="disabled",
+                backend=backend_name,
+                captured_at=utc_now_iso(),
+                diagnostic="document_pdf_ocr_disabled",
+            )
+        if image is None:
+            return OcrSnapshot(
+                status="ocr_failed",
+                backend=backend_name,
+                captured_at=utc_now_iso(),
+                diagnostic="document_pdf_ocr_failed",
+            )
+
+        try:
+            backend = self._resolve_ocr_backend()
+            is_available = getattr(backend, "is_available", None)
+            if callable(is_available) and not bool(is_available()):
+                raise RuntimeError("OCR backend is unavailable")
+        except Exception:
+            return OcrSnapshot(
+                status="unavailable",
+                backend=backend_name,
+                captured_at=utc_now_iso(),
+                diagnostic="document_pdf_ocr_unavailable",
+            )
+
+        started = time.monotonic()
+        try:
+            raw = backend.extract_text(image)
+            text, boxes = self._normalize_ocr_output(raw)
+        except Exception:
+            return OcrSnapshot(
+                status="ocr_failed",
+                backend=backend_name,
+                captured_at=utc_now_iso(),
+                diagnostic="document_pdf_ocr_failed",
+            )
+        elapsed = max(0.0, time.monotonic() - started)
+        return OcrSnapshot(
+            text=text,
+            boxes=boxes,
+            status="ok" if text.strip() else "empty",
+            backend=backend_name,
+            captured_at=utc_now_iso(),
+            diagnostic=f"ocr_duration_seconds={elapsed:.3f}",
+        )
+
     def capture_snapshot(self, target: Any | None = None) -> OcrSnapshot:
         if not self._config.ocr_enabled:
             self._clear_vision_snapshot()
