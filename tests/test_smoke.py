@@ -41,6 +41,15 @@ def _module_level_symbols(path: Path) -> set[str]:
     return symbols
 
 
+def _relative_module_path(root: Path, module: str) -> Path | None:
+    candidate = root.joinpath(*module.split("."))
+    module_file = candidate.with_suffix(".py")
+    if module_file.is_file():
+        return module_file
+    package_file = candidate / "__init__.py"
+    return package_file if package_file.is_file() else None
+
+
 def test_plugin_manifest_exists() -> None:
     root = Path(__file__).resolve().parents[1]
     manifest = root / "plugin.toml"
@@ -84,12 +93,29 @@ def test_local_relative_imports_reference_exported_names() -> None:
 
     for consumer in root.glob("*.py"):
         tree = ast.parse(consumer.read_text(encoding="utf-8"), filename=str(consumer))
-        for node in tree.body:
-            if not isinstance(node, ast.ImportFrom) or node.level != 1 or not node.module:
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.level != 1:
                 continue
-            provider = root.joinpath(*node.module.split(".")).with_suffix(".py")
-            if not provider.is_file():
+
+            if node.module is None:
+                package_symbols = _module_level_symbols(root / "__init__.py")
+                for alias in node.names:
+                    if (
+                        _relative_module_path(root, alias.name) is None
+                        and alias.name not in package_symbols
+                    ):
+                        unresolved.append(
+                            f"{consumer.name}:{node.lineno} imports missing .{alias.name}"
+                        )
                 continue
+
+            provider = _relative_module_path(root, node.module)
+            if provider is None:
+                unresolved.append(
+                    f"{consumer.name}:{node.lineno} imports missing module .{node.module}"
+                )
+                continue
+
             available = _module_level_symbols(provider)
             for alias in node.names:
                 if alias.name != "*" and alias.name not in available:
