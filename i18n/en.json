@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "Companion, Interactive, and Teaching tune how the study companion responds.",
     "ui.onboarding.step.ocr.label":  "Step 2",
     "ui.onboarding.step.ocr.title":  "Check OCR capture",
-    "ui.onboarding.step.ocr.body":  "Use OCR when you want the companion to read the current learning material.",
+    "ui.onboarding.step.ocr.body":  "OCR only extracts text from the selected screen area. It does not automatically detect or split questions.",
     "ui.onboarding.step.goal.label":  "Step 3",
     "ui.onboarding.step.goal.title":  "Bind a study goal",
     "ui.onboarding.step.goal.body":  "Review cards, focus sessions, and summaries stay useful when tied to a goal.",
