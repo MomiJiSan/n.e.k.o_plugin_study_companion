@@ -42,6 +42,7 @@ type KnowledgeEdge = {
   to: string;
   relation?: string;
   reason?: string;
+  reason_template?: string;
   priority?: string;
   context?: string;
   confidence?: number;
@@ -52,6 +53,17 @@ const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'che
 function text(props: PluginSurfaceProps, key: string, fallback: string) {
   const value = props.t?.(key);
   return value && value !== key ? value : fallback;
+}
+
+function formatText(
+  props: PluginSurfaceProps,
+  key: string,
+  fallback: string,
+  values: Record<string, string | number>,
+): string {
+  const translated = props.t?.(key, values);
+  if (translated && translated !== key) return translated;
+  return fallback.replace(/\{([^}]+)\}/g, (_, name: string) => String(values[name] ?? ''));
 }
 
 function nodeMasteryLevel(node: KnowledgeNode) {
@@ -120,6 +132,51 @@ function relationLabel(props: PluginSurfaceProps, relation?: string) {
   return normalized || text(props, 'ui.knowledge.edge_relation.related', 'Related');
 }
 
+function enumLabel(props: PluginSurfaceProps, prefix: string, value?: string) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const keyValue = normalized.replace(/[\s-]+/g, '_');
+  return text(props, `${prefix}.${keyValue}`, normalized.replace(/_/g, ' '));
+}
+
+function edgePriorityLabel(props: PluginSurfaceProps, priority?: string) {
+  return enumLabel(props, 'ui.knowledge.edge_priority', priority);
+}
+
+function edgeContextLabel(props: PluginSurfaceProps, context?: string) {
+  return enumLabel(props, 'ui.knowledge.edge_context', context);
+}
+
+function questionTypeLabel(props: PluginSurfaceProps, questionType?: string) {
+  return enumLabel(props, 'ui.knowledge.question_type', questionType);
+}
+
+function edgeReason(props: PluginSurfaceProps, edge: KnowledgeEdge, source: string, target: string) {
+  const reason = String(edge.reason || '').trim();
+  if (reason) return reason;
+  const rawTemplate = String(edge.reason_template || '').trim().toLowerCase();
+  if (!rawTemplate) return '';
+  const template = rawTemplate === 'next'
+    ? 'extends'
+    : ['nearby', 'similar'].includes(rawTemplate)
+      ? 'co_occurs'
+      : ['prerequisite', 'procedure_step', 'application', 'confusable', 'extends', 'co_occurs', 'supports', 'analogy'].includes(rawTemplate)
+        ? rawTemplate
+        : 'related';
+  const fallbacks: Record<string, string> = {
+    prerequisite: 'Master {source} before studying {target}; it provides the foundation for this topic.',
+    procedure_step: 'After learning {source}, practice {target} next to connect the problem-solving steps.',
+    application: 'Apply {source} to problems about {target} to practice transferring concepts into use.',
+    confusable: '{source} and {target} are easy to confuse; compare their conditions, uses, and boundaries.',
+    extends: 'After mastering {source}, continue by extending the idea to {target}.',
+    co_occurs: '{source} and {target} are often reviewed together and work well side by side.',
+    supports: '{source} supports understanding {target} and can serve as useful explanatory context.',
+    analogy: 'Use {source} as an analogy for {target}, while keeping their applicable conditions in mind.',
+    related: '{source} is related to {target}; review them together to connect the ideas.',
+  };
+  return formatText(props, `ui.knowledge.edge_reason.${template}`, fallbacks[template], { source, target });
+}
+
 function relationColor(relation?: string) {
   const normalized = String(relation || 'related').trim().toLowerCase();
   if (normalized === 'prerequisite') return '#b7791f';
@@ -145,9 +202,9 @@ function edgeGroups(props: PluginSurfaceProps, nodes: KnowledgeNode[], edges: Kn
       rawRelation,
       to: labels.get(toId) || toId || '-',
       toId,
-      reason: String(edge.reason || '').trim(),
-      priority: String(edge.priority || '').trim(),
-      context: String(edge.context || '').trim(),
+      reason: edgeReason(props, edge, labels.get(fromId) || fromId || '-', labels.get(toId) || toId || '-'),
+      priority: edgePriorityLabel(props, edge.priority),
+      context: edgeContextLabel(props, edge.context),
       confidence: Number.isFinite(Number(edge.confidence)) ? `${Math.round(Number(edge.confidence) * 100)}%` : '',
     });
     groups.set(key, group);
@@ -252,17 +309,29 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [canonicalScope, setCanonicalScope] = useState<PracticeScope | null>(null);
   const [scopeRecoveryFailed, setScopeRecoveryFailed] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
+  const [practiceComingSoonOpen, setPracticeComingSoonOpen] = useState(false);
   const [summary, setSummary] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const practiceDialogRef = useRef<HTMLDivElement | null>(null);
+  const practiceCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const practiceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const nodeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   function closeNodeDetail() {
+    setPracticeComingSoonOpen(false);
     setSelectedNode(null);
     window.setTimeout(() => {
       if (nodeTriggerRef.current?.isConnected) nodeTriggerRef.current?.focus();
+    }, 0);
+  }
+
+  function closePracticeComingSoon() {
+    setPracticeComingSoonOpen(false);
+    window.setTimeout(() => {
+      if (practiceTriggerRef.current?.isConnected) practiceTriggerRef.current?.focus();
     }, 0);
   }
 
@@ -304,17 +373,23 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   }, [props.api]);
 
   useEffect(() => {
+    if (selectedNode) closeButtonRef.current?.focus();
+  }, [selectedNode]);
+
+  useEffect(() => {
     if (!selectedNode) return undefined;
-    closeButtonRef.current?.focus();
-    const closeNodeDialog = (event: KeyboardEvent) => {
+    if (practiceComingSoonOpen) practiceCloseButtonRef.current?.focus();
+    const closeActiveDialog = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        closeNodeDetail();
+        if (practiceComingSoonOpen) closePracticeComingSoon();
+        else closeNodeDetail();
         return;
       }
       if (event.key === 'Tab') {
-        const focusableElements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') || []);
+        const activeDialog = practiceComingSoonOpen ? practiceDialogRef.current : dialogRef.current;
+        const focusableElements = Array.from(activeDialog?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') || []);
         const first = focusableElements[0];
         const last = focusableElements[focusableElements.length - 1];
         if (!first || !last) {
@@ -328,9 +403,9 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         }
       }
     };
-    document.addEventListener('keydown', closeNodeDialog);
-    return () => document.removeEventListener('keydown', closeNodeDialog);
-  }, [selectedNode]);
+    document.addEventListener('keydown', closeActiveDialog);
+    return () => document.removeEventListener('keydown', closeActiveDialog);
+  }, [selectedNode, practiceComingSoonOpen]);
 
   async function activatePracticeScope(mode: 'explicit_scope' | 'explicit_topic') {
     if (scopeBusy) return;
@@ -726,6 +801,8 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           className="knowledge-node-detail-dialog"
           role="dialog"
           aria-modal="true"
+          aria-hidden={practiceComingSoonOpen ? 'true' : undefined}
+          inert={practiceComingSoonOpen ? true : undefined}
           aria-label={nodeLabel(currentNode)}
           onClick={(event: any) => {
             if (event.target === event.currentTarget) closeNodeDetail();
@@ -754,7 +831,12 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
                       const otherNode = visibleNodes.find((node) => node.id === otherId);
                       return (
                         <li key={`${edge.from}:${edge.to}:${index}`}>
-                          {relationLabel(props, edge.relation)}: {nodeLabel(otherNode || { id: otherId })}{edge.reason ? ` - ${edge.reason}` : ''}
+                          {relationLabel(props, edge.relation)}: {nodeLabel(otherNode || { id: otherId })}{(() => {
+                            const source = nodeLabel(visibleNodes.find((node) => node.id === edge.from) || { id: edge.from });
+                            const target = nodeLabel(visibleNodes.find((node) => node.id === edge.to) || { id: edge.to });
+                            const reason = edgeReason(props, edge, source, target);
+                            return reason ? ` - ${reason}` : '';
+                          })()}
                         </li>
                       );
                     })}
@@ -777,7 +859,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               <section className="knowledge-node-detail__section">
                 <h4>{text(props, 'ui.knowledge.node_detail.practice', 'Practice type')}</h4>
                 <ul className="knowledge-node-detail__list">
-                  {(currentNode.question_types || []).slice(0, 3).map((item) => <li key={item}>{item}</li>)}
+                  {(currentNode.question_types || []).slice(0, 3).map((item) => <li key={item}>{questionTypeLabel(props, item)}</li>)}
                   {!(currentNode.question_types || []).length ? <li>{emptyDetailItem}</li> : null}
                 </ul>
               </section>
@@ -790,13 +872,12 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               </section>
               <div className="study-panel__actions">
                 <button
+                  ref={practiceTriggerRef}
                   type="button"
-                  disabled={scopeBusy}
-                  onClick={() => void activatePracticeScope('explicit_topic')}
+                  disabled={false}
+                  onClick={() => setPracticeComingSoonOpen(true)}
                 >
-                  {scopeBusy
-                    ? text(props, 'ui.practice.scope_setting', 'Setting practice scope...')
-                    : text(props, 'ui.knowledge.practice_topic', 'Practice this topic')}
+                  {text(props, 'ui.knowledge.practice_topic', 'Practice this topic')}
                 </button>
                 <button
                   type="button"
@@ -807,6 +888,29 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
                 </button>
               </div>
             </article>
+          </div>
+        </div>
+      ) : null}
+      {currentNode && practiceComingSoonOpen ? (
+        <div
+          ref={practiceDialogRef}
+          className="knowledge-practice-coming-soon-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label={text(props, 'ui.knowledge.practice_coming_soon', 'This feature is under development.')}
+          onClick={(event: any) => {
+            if (event.target === event.currentTarget) closePracticeComingSoon();
+          }}
+        >
+          <div className="knowledge-practice-coming-soon-dialog__panel">
+            <p className="knowledge-practice-coming-soon-dialog__message">
+              {text(props, 'ui.knowledge.practice_coming_soon', 'This feature is under development.')}
+            </p>
+            <div className="knowledge-practice-coming-soon-dialog__actions">
+              <button ref={practiceCloseButtonRef} type="button" className="button button-primary" onClick={closePracticeComingSoon}>
+                {text(props, 'ui.button.close', 'Close')}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

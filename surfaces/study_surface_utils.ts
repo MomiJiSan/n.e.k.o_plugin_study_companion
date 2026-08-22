@@ -616,6 +616,40 @@ export const BRAND_CSS = `
     background: #ffffff;
   }
 
+  .knowledge-practice-coming-soon-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.46);
+  }
+
+  .knowledge-practice-coming-soon-dialog__panel {
+    display: grid;
+    gap: 18px;
+    width: min(400px, calc(100vw - 32px));
+    padding: 22px;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 22px 64px rgba(15, 23, 42, 0.28);
+  }
+
+  .knowledge-practice-coming-soon-dialog__message {
+    margin: 0;
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.6;
+  }
+
+  .knowledge-practice-coming-soon-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .knowledge-node-detail {
     display: grid;
     gap: 10px;
