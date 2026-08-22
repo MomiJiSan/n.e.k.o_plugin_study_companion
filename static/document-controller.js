@@ -14,6 +14,7 @@
         formatPluginError,
       },
       onAnalysisComplete,
+      scannedPdfOcr,
     } = dependencies;
 
     const studyInput = document.getElementById('studyInput');
@@ -45,6 +46,7 @@
     let documentSource = '';
     let documentKind = 'auto';
     let documentRequestController = null;
+    let documentImportActive = false;
     const listeners = [];
     const documentJobStorageKey = 'study_companion.document_analysis_job_id';
     const pendingDocumentJobId = '__pending__';
@@ -471,6 +473,15 @@
       return t(`ui.error.${code || 'document_read'}`);
     }
 
+    function renderScannedPdfProgress({ page = 0, completed = 0, total = 0, progress = 0 } = {}) {
+      studyDocumentProgressBar.value = Math.max(0, Math.min(1, Number(progress) || 0));
+      const current = Math.max(0, Number(page) || Number(completed) || 0);
+      studyDocumentProgressText.textContent = total
+        ? tf('ui.document.progress_ocr_pages', '', { page: current, total })
+        : `${Math.round(studyDocumentProgressBar.value * 100)}%`;
+      studyDocumentState.textContent = t('ui.document.scanned_pdf_ocr');
+    }
+
     function updateDocumentCard(options = {}) {
       if (!importedDocument) {
         if (studyDocumentCard) studyDocumentCard.hidden = true;
@@ -489,7 +500,12 @@
         chars: documentSource.length.toLocaleString(),
         tokens: tokens.toLocaleString(),
       });
-      if (studyDocumentTruncated) studyDocumentTruncated.hidden = !importedDocument.truncated;
+      if (studyDocumentTruncated) {
+        studyDocumentTruncated.hidden = !importedDocument.truncated;
+        studyDocumentTruncated.textContent = importedDocument.meta?.scannedPdfOcr
+          ? t('ui.document.ocr_truncated_warning')
+          : t('ui.document.truncated_warning');
+      }
       if (studyDocumentState && !documentBusy) {
         studyDocumentState.textContent = problem
           ? documentErrorMessage(problem)
@@ -504,6 +520,7 @@
       documentReadGeneration += 1;
       documentRequestController?.abort();
       documentRequestController = null;
+      documentImportActive = false;
       importedDocument = null;
       documentSource = '';
       documentKind = 'auto';
@@ -558,6 +575,7 @@
       studyDocumentCard.hidden = false;
       studyDocumentName.textContent = importedDocument.name;
       studyDocumentMeta.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+      documentImportActive = true;
       setDocumentBusy(true);
       studyDocumentState.textContent = t('ui.document.reading');
       try {
@@ -588,21 +606,41 @@
           }
           const body = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(body?.detail?.code || body?.code || 'document_parse_failed');
+            const parseCode = body?.detail?.code || body?.code || 'document_parse_failed';
+            if (scannedPdfOcr?.shouldFallback?.(sourceType, parseCode)) {
+              if (!scannedPdfOcr?.extract) throw new Error('document_pdf_ocr_unavailable');
+              const ocrDocument = await scannedPdfOcr.extract(file, {
+                signal: controller.signal,
+                onProgress: renderScannedPdfProgress,
+              });
+              decoded = { text: ocrDocument.text, encoding: ocrDocument.encoding };
+              importedDocument = {
+                ...importedDocument,
+                truncated: ocrDocument.truncated === true,
+                meta: {
+                  ...importedDocument.meta,
+                  pages: Number(ocrDocument.pageCount) || 0,
+                  scannedPdfOcr: true,
+                },
+              };
+            } else {
+              throw new Error(parseCode);
+            }
+          } else {
+            const payload = body?.document || body?.item || body;
+            const returnedType = String(payload?.sourceType || payload?.documentType || sourceType).toLowerCase();
+            if (returnedType !== sourceType || typeof payload?.content !== 'string') {
+              throw new Error('document_parse_failed');
+            }
+            decoded = { text: payload.content, encoding: String(payload.encoding || 'document-parser') };
+            importedDocument = {
+              ...importedDocument,
+              name: String(payload.name || importedDocument.name).slice(0, 255),
+              originalSize: Number(payload.originalSize ?? payload.size ?? file.size) || file.size,
+              truncated: payload.truncated === true,
+              meta: payload.meta && typeof payload.meta === 'object' ? payload.meta : {},
+            };
           }
-          const payload = body?.document || body?.item || body;
-          const returnedType = String(payload?.sourceType || payload?.documentType || sourceType).toLowerCase();
-          if (returnedType !== sourceType || typeof payload?.content !== 'string') {
-            throw new Error('document_parse_failed');
-          }
-          decoded = { text: payload.content, encoding: String(payload.encoding || 'document-parser') };
-          importedDocument = {
-            ...importedDocument,
-            name: String(payload.name || importedDocument.name).slice(0, 255),
-            originalSize: Number(payload.originalSize ?? payload.size ?? file.size) || file.size,
-            truncated: payload.truncated === true,
-            meta: payload.meta && typeof payload.meta === 'object' ? payload.meta : {},
-          };
         } else {
           decoded = decodeDocumentBuffer(await file.arrayBuffer());
         }
@@ -622,7 +660,10 @@
         }
         throw error;
       } finally {
-        if (documentRequestController === controller) documentRequestController = null;
+        if (documentRequestController === controller) {
+          documentRequestController = null;
+          documentImportActive = false;
+        }
         if (generation === documentReadGeneration) setDocumentBusy(false);
       }
     }
@@ -644,7 +685,21 @@
 
     function reportDocumentImportError(error) {
       studyDocumentInput.value = '';
+      if (error?.name === 'AbortError' || error?.message === 'plugin_call_aborted') {
+        setPasteError(studyInputPasteError, t('ui.error.document_canceled'));
+        return;
+      }
       setPasteError(studyInputPasteError, documentErrorMessage(error instanceof Error ? error.message : 'document_read'));
+    }
+
+    function cancelDocumentOperation() {
+      if (documentImportActive) {
+        studyDocumentCancelBtn.disabled = true;
+        studyDocumentState.textContent = t('ui.document.stage.canceling', 'Canceling analysis...');
+        documentRequestController?.abort();
+        return;
+      }
+      void documentJobs.cancel();
     }
 
     function handleDocumentPaste(event) {
@@ -755,7 +810,7 @@
         Promise.resolve().then(() => acceptDocumentFiles(studyDocumentInput.files)).catch(reportDocumentImportError);
       });
       listen(studyDocumentRemoveBtn, 'click', removeImportedDocument);
-      listen(studyDocumentCancelBtn, 'click', () => documentJobs.cancel());
+      listen(studyDocumentCancelBtn, 'click', cancelDocumentOperation);
       listen(studyDocumentKindSelect, 'change', () => {
         documentKind = studyDocumentKindSelect.value || 'auto';
       });
@@ -788,6 +843,7 @@
       disposed = true;
       documentRequestController?.abort();
       documentRequestController = null;
+      documentImportActive = false;
       for (const { target, type, listener, options } of listeners.splice(0)) {
         target.removeEventListener(type, listener, options);
       }

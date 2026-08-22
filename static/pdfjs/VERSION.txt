@@ -1,0 +1,64 @@
+PDF.js version: 6.2.108
+PDF.js build: 0365cbde0
+License: Apache-2.0
+
+Upstream release:
+https://github.com/mozilla/pdf.js/releases/tag/v6.2.108
+
+Official distribution archive:
+https://github.com/mozilla/pdf.js/releases/download/v6.2.108/pdfjs-6.2.108-dist.zip
+SHA-256: 7bf642d59582b475e8c48447da9b02b0108fad9742d7c2a35cb4ed6dd45e95ba
+
+Extracted files:
+- build/pdf.mjs -> pdf.mjs
+- build/pdf.worker.mjs -> pdf.worker.mjs
+- LICENSE -> LICENSE
+- web/wasm/openjpeg.wasm and openjpeg_nowasm_fallback.js -> wasm/
+- web/wasm/jbig2.wasm and jbig2_nowasm_fallback.js -> wasm/
+- web/wasm/qcms_bg.wasm -> wasm/
+- web/wasm/LICENSE_{OPENJPEG,JBIG2,QCMS} -> wasm/
+- web/wasm/LICENSE_PDFJS_{OPENJPEG,JBIG2,QCMS} -> wasm/
+- web/iccs/CGATS001Compat-v2-micro.icc and LICENSE -> iccs/
+
+Hosted Surface bundle:
+- pdf.hosted.js is generated from this release's pdf.mjs and pdf.worker.mjs
+  with esbuild. It exposes PDF.js through a classic script and creates a fresh
+  classic Blob Worker for each import (the worker's ESM-only export footer is
+  omitted; its runtime code is otherwise unchanged). This avoids cross-origin
+  ESM fetches from the opaque-origin Hosted Surface while keeping all code local.
+  The worker bundle also embeds the pinned OpenJPEG, JBIG2, QCMS and ICC assets
+  and resolves their fixed filenames in memory, so decoder loads do not make
+  opaque-origin network requests.
+
+Runtime notes:
+- Assets are vendored locally; no CDN is required at runtime.
+- The two upstream JavaScript files are official prebuilt ESM bundles with no static imports
+  and no importScripts calls. The worker is self-contained.
+- JPEG2000/JPX pages require the OpenJPEG assets. JBIG2, which is common in
+  monochrome scans, requires the JBIG2 assets. The WASM decoders are primary;
+  their same-origin JavaScript fallbacks are included for WASM failures.
+- QCMS is optional for basic rendering but improves ICCBased color conversion.
+  qcms_bg.wasm and the local CMYK ICC profile are included to avoid degraded
+  color handling on scans that carry ICC/CMYK color spaces.
+- Configure PDF.js with local URLs derived from the plugin UI module URL:
+    GlobalWorkerOptions.workerSrc = new URL("pdfjs/pdf.worker.mjs", import.meta.url).href
+    getDocument({
+      data,
+      wasmUrl: new URL("pdfjs/wasm/", import.meta.url).href,
+      iccUrl: new URL("pdfjs/iccs/", import.meta.url).href,
+    })
+  The base expression must be adjusted if the caller module is not located at
+  the root of static/. All three URLs must remain same-origin plugin UI URLs.
+- web/cmaps/ is not included. Predefined CMaps support CID text fonts and is
+  not required to render image-only scanning pages. If later needed for mixed
+  or text PDFs, vendor web/cmaps/ from this exact release under pdfjs/cmaps/
+  and pass local cMapUrl plus cMapPacked: true. Do not use a CDN URL.
+- web/standard_fonts/ is not included. It supports non-embedded standard text
+  fonts and is not required for image-only scans. If later needed, vendor it
+  from this exact release under pdfjs/standard_fonts/ and pass a local
+  standardFontDataUrl. Do not use a CDN URL.
+- QuickJS evaluation assets are intentionally omitted; PDF JavaScript/XFA
+  evaluation is outside the scanned-page OCR renderer's scope.
+- The N.E.K.O plugin UI route serves .mjs as application/javascript.
+- Compatibility target verified against N.E.K.O desktop Electron 41.2.0
+  (Chromium 146.0.7680.179).

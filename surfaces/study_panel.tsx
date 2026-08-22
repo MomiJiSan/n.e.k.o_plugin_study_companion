@@ -19,6 +19,12 @@ import {
   type StudyDocument,
   type StudyDocumentAnalysisKind,
 } from './study_document_utils';
+import {
+  createScannedPdfOcrController,
+  scannedPdfAssetBaseUrl,
+  shouldFallbackToScannedPdfOcr,
+  type ScannedPdfOcrProgress,
+} from './scanned_pdf_ocr';
 
 type StudyStatus = {
   status?: string;
@@ -398,6 +404,7 @@ const ENTRY_TIMEOUT_MS: Record<string, number> = {
   study_status: 15000,
   study_get_settings_config: 15000,
   study_ocr_snapshot: 60000,
+  study_ocr_document_page: 45000,
   study_set_mode: 15000,
   study_explain_text: 120000,
   study_start_document_analysis: 30000,
@@ -1037,6 +1044,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [documentInstruction, setDocumentInstruction] = useState('');
   const [documentDragging, setDocumentDragging] = useState(false);
   const [documentReading, setDocumentReading] = useState(false);
+  const [documentOcrProgress, setDocumentOcrProgress] = useState<ScannedPdfOcrProgress | null>(null);
+  const [documentOcrCanceling, setDocumentOcrCanceling] = useState(false);
   const [documentJob, setDocumentJob] = useState<DocumentJobState | null>(null);
   const explainControllerRef = useRef<AbortController | null>(null);
   const pasteControllerRef = useRef<AbortController | null>(null);
@@ -1290,11 +1299,18 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       encrypted_pdf_unsupported: ['ui.error.document_encrypted_pdf_unsupported', 'Encrypted PDF files are not supported.'],
       legacy_office_unsupported: ['ui.error.document_legacy_office_unsupported', 'Legacy Microsoft Office files are not supported. Use DOCX instead.'],
       macro_document_unsupported: ['ui.error.document_macro_document_unsupported', 'Macro-enabled Office documents are not supported.'],
-      no_readable_text: ['ui.error.document_no_readable_text', 'No readable text was found. Scanned PDF OCR is not supported yet.'],
+      no_readable_text: ['ui.error.document_no_readable_text', 'No readable text was found in the document.'],
       garbled_text: ['ui.error.document_garbled_text', 'The extracted document text is unreadable.'],
       document_parse_failed: ['ui.error.document_parse_failed', 'The document could not be parsed.'],
       document_parse_timeout: ['ui.error.document_parse_timeout', 'Document parsing timed out. Please retry.'],
       document_parse_permission_denied: ['ui.error.document_parse_permission_denied', 'This panel is not permitted to parse documents.'],
+      document_pdf_ocr_disabled: ['ui.error.document_pdf_ocr_disabled', 'Document OCR is disabled in Study Companion settings.'],
+      document_pdf_ocr_unavailable: ['ui.error.document_pdf_ocr_unavailable', 'The configured document OCR backend is unavailable.'],
+      document_pdf_ocr_too_many_pages: ['ui.error.document_pdf_ocr_too_many_pages', 'Scanned PDFs are limited to 20 pages.'],
+      document_pdf_render_failed: ['ui.error.document_pdf_render_failed', 'The scanned PDF page could not be rendered.'],
+      document_pdf_page_too_large: ['ui.error.document_pdf_page_too_large', 'A scanned PDF page exceeds the OCR image limit.'],
+      document_pdf_ocr_timeout: ['ui.error.document_pdf_ocr_timeout', 'Scanned PDF OCR timed out.'],
+      document_pdf_ocr_failed: ['ui.error.document_pdf_ocr_failed', 'Scanned PDF OCR failed.'],
     };
     const candidate = error as { code?: unknown; message?: unknown } | null;
     const code = error instanceof StudyDocumentError
@@ -1312,19 +1328,58 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     documentControllerRef.current = controller;
     setPastePendingState(true);
     setDocumentReading(true);
+    setDocumentOcrProgress(null);
+    setDocumentOcrCanceling(false);
     setDocumentError('');
     try {
       const file = oneStudyDocument(files);
-      let loaded;
+      let loaded: { document: StudyDocument; text: string } | undefined;
       if (isParsedStudyDocumentFile(file)) {
-        assertParsedStudyDocumentFile(file);
-        const response = await props.api.parseDocument(file, { timeoutMs: STUDY_DOCUMENT_PARSE_TIMEOUT_MS, signal: controller.signal });
-        if (controller.signal.aborted) return;
-        const raw = response && typeof response === 'object' ? response as Record<string, unknown> : {};
-        const payload = raw.document && typeof raw.document === 'object'
-          ? raw.document as Record<string, unknown>
-          : raw;
-        loaded = parsedStudyDocument(file, payload);
+        const definition = assertParsedStudyDocumentFile(file);
+        let response: unknown;
+        try {
+          response = await props.api.parseDocument(file, {
+            timeoutMs: STUDY_DOCUMENT_PARSE_TIMEOUT_MS,
+            signal: controller.signal,
+          });
+        } catch (error) {
+          if (!shouldFallbackToScannedPdfOcr(definition.sourceType, error)) throw error;
+          const scannedPdfOcr = createScannedPdfOcrController({
+            assetBaseUrl: scannedPdfAssetBaseUrl(props.plugin?.id),
+            callPageOcr: (args, signal) => callHostedPlugin(
+              props.api,
+              'study_ocr_document_page',
+              args,
+              { signal, timeoutMs: timeoutForEntry('study_ocr_document_page') },
+            ),
+          });
+          const ocr = await scannedPdfOcr.extract(file, {
+            signal: controller.signal,
+            onProgress: (progress) => {
+              if (mountedRef.current && documentControllerRef.current === controller) {
+                setDocumentOcrProgress(progress);
+              }
+            },
+          });
+          loaded = parsedStudyDocument(file, {
+            name: file.name,
+            sourceType: 'pdf',
+            mime: 'application/pdf',
+            originalSize: file.size,
+            encoding: ocr.encoding,
+            truncated: ocr.truncated,
+            content: ocr.text,
+            meta: { scannedPdfOcr: true, pages: ocr.pageCount },
+          });
+        }
+        if (!loaded) {
+          if (controller.signal.aborted) return;
+          const raw = response && typeof response === 'object' ? response as Record<string, unknown> : {};
+          const payload = raw.document && typeof raw.document === 'object'
+            ? raw.document as Record<string, unknown>
+            : raw;
+          loaded = parsedStudyDocument(file, payload);
+        }
       } else {
         loaded = await readStudyDocument(file, controller.signal);
       }
@@ -1334,16 +1389,20 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       setDocumentKind('auto');
       setDocumentEditorOpen(false);
     } catch (error) {
-      if (!controller.signal.aborted && mountedRef.current) {
+      if (controller.signal.aborted && mountedRef.current) {
+        setDocumentError(t('ui.error.document_canceled', 'Document analysis canceled.'));
+      } else if (mountedRef.current) {
         setDocumentError(formatDocumentError(error));
       }
     } finally {
       if (documentControllerRef.current === controller) {
         documentControllerRef.current = null;
-      }
-      if (!controller.signal.aborted && mountedRef.current) {
-        setPastePendingState(false);
-        setDocumentReading(false);
+        if (mountedRef.current) {
+          setPastePendingState(false);
+          setDocumentReading(false);
+          setDocumentOcrProgress(null);
+          setDocumentOcrCanceling(false);
+        }
       }
     }
   }
@@ -2481,20 +2540,35 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           {documentReading ? (
             <button
               type="button"
+              disabled={documentOcrCanceling}
               onClick={() => {
                 documentControllerRef.current?.abort();
-                documentControllerRef.current = null;
-                setDocumentReading(false);
-                setPastePendingState(false);
+                setDocumentOcrCanceling(true);
               }}
             >
-              {t('ui.document.cancel_reading', 'Cancel reading')}
+              {documentOcrCanceling
+                ? t('ui.document.stage.canceling', 'Canceling...')
+                : t('ui.document.cancel_reading', 'Cancel reading')}
             </button>
           ) : null}
           <span>{documentDragging
             ? t('ui.document.drop_now', 'Drop the document here')
             : t('ui.document.drop_hint', 'Drop a file here')}</span>
         </div>
+        {documentReading && documentOcrProgress ? (
+          <div className="study-panel__document-progress" aria-live="polite">
+            <span>{t('ui.document.scanned_pdf_ocr', 'Recognizing scanned PDF pages...')}</span>
+            <progress value={documentOcrProgress.progress} max={1} />
+            <small>{tf(
+              'ui.document.progress_ocr_pages',
+              'Recognizing page {page} of {total}',
+              {
+                page: documentOcrProgress.page.toLocaleString(),
+                total: documentOcrProgress.total.toLocaleString(),
+              },
+            )}</small>
+          </div>
+        ) : null}
         <textarea
           aria-label={t('ui.label.text', 'Text')}
           placeholder={t('ui.placeholder.input', 'Paste a concept, problem statement, or OCR text here.')}
@@ -2520,7 +2594,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
             )}</span>
             {studyDocument.truncated ? (
               <small className="study-panel__document-warning">
-                {t('ui.document.truncated_warning', 'The document exceeded the extraction limit. Only the extracted portion will be analyzed.')}
+                {studyDocument.meta.scannedPdfOcr === true
+                  ? t('ui.document.ocr_truncated_warning', 'OCR text was truncated at 32,000 characters. Only the retained text will be analyzed.')
+                  : t('ui.document.truncated_warning', 'The document exceeded the extraction limit. Only the extracted portion will be analyzed.')}
               </small>
             ) : null}
             <small>{studyDocument.modified
