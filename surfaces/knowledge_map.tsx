@@ -801,6 +801,8 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           className="knowledge-node-detail-dialog"
           role="dialog"
           aria-modal="true"
+          aria-hidden={practiceComingSoonOpen ? 'true' : undefined}
+          inert={practiceComingSoonOpen ? true : undefined}
           aria-label={nodeLabel(currentNode)}
           onClick={(event: any) => {
             if (event.target === event.currentTarget) closeNodeDetail();

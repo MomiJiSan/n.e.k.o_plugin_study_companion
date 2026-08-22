@@ -431,6 +431,11 @@ function knowledgeEdgeMeta(edge = {}) {
 function showKnowledgeTopicPracticeComingSoon(event) {
   if (document.querySelector('.knowledge-practice-coming-soon-dialog')) return;
   const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  const detailDialog = trigger?.closest('.knowledge-node-detail-dialog') || null;
+  const previousAriaHidden = detailDialog?.getAttribute('aria-hidden') ?? null;
+  const detailDialogWasInert = detailDialog?.hasAttribute('inert') || false;
+  detailDialog?.setAttribute('aria-hidden', 'true');
+  detailDialog?.setAttribute('inert', '');
   const message = t('ui.knowledge.practice_coming_soon', 'This feature is under development.');
   const dialog = drawerElement('div', 'knowledge-practice-coming-soon-dialog');
   dialog.setAttribute('role', 'dialog');
@@ -443,6 +448,11 @@ function showKnowledgeTopicPracticeComingSoon(event) {
   closeButton.type = 'button';
   const close = () => {
     dialog.remove();
+    if (detailDialog) {
+      if (previousAriaHidden === null) detailDialog.removeAttribute('aria-hidden');
+      else detailDialog.setAttribute('aria-hidden', previousAriaHidden);
+      if (!detailDialogWasInert) detailDialog.removeAttribute('inert');
+    }
     if (trigger?.isConnected) trigger.focus();
   };
   closeButton.addEventListener('click', close);

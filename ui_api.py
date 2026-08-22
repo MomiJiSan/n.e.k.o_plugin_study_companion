@@ -10,24 +10,8 @@ CORE_EDGE_RELATIONS = {"prerequisite", "procedure_step", "confusable"}
 USEFUL_EDGE_RELATIONS = {"application", "extends", "supports"}
 EDGE_CONTEXT_VALUES = {"diagnosis", "explanation", "practice", "review"}
 EDGE_PRIORITY_VALUES = {"core", "useful", "optional"}
-_ENGLISH_TEMPLATE_RE = re.compile(
-    r"\b("
-    r"Master|Practice|Review|Application|Contrast|Procedure step|Explain the role|"
-    r"Use .+ in a|Select the matching|Compute or reason|Identify the target|"
-    r"learning path|learning sequence|diagnosing adjacent|supplies the foundation|"
-    r"together with|before .+;|after .+;|handle .+\.|requires understanding|"
-    r"are often|are commonly|is often|is commonly|can be|should be"
-    r")\b",
-    re.IGNORECASE,
-)
-_ENGLISH_PROSE_RE = re.compile(
-    r"\b(?:a|an|the|and|or|to|of|in|on|for|from|with|before|after|is|are|be|"
-    r"can|could|should|would|must|often|commonly|together|requires?|understanding)\b",
-    re.IGNORECASE,
-)
-_LATIN_PROSE_RE = re.compile(
-    r"\b[A-Za-z][A-Za-z'-]{2,}(?:[\s,;:/()\"-]+[A-Za-z][A-Za-z'-]{2,}){2,}\b"
-)
+_CJK_CHARACTER_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+_LATIN_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
 
 
 def _topic_ref_id(value: Any) -> str:
@@ -39,15 +23,22 @@ def _topic_ref_id(value: Any) -> str:
 def _display_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [str(item).strip() for item in value if str(item).strip()]
+    return [
+        str(item).strip()
+        for item in value
+        if item is not None and str(item).strip()
+    ]
 
 
 def _knowledge_display_reason(*, raw_reason: str, relation: str) -> tuple[str, str]:
     reason = str(raw_reason or "").strip()
-    english_prose = bool(
-        _ENGLISH_PROSE_RE.search(reason) or _LATIN_PROSE_RE.search(reason)
-    )
-    if reason and not english_prose and not _ENGLISH_TEMPLATE_RE.search(reason):
+    if not reason:
+        return "", str(relation or "related").strip().lower() or "related"
+    cjk_count = len(_CJK_CHARACTER_RE.findall(reason))
+    latin_word_count = len(_LATIN_WORD_RE.findall(reason))
+    if cjk_count and cjk_count > latin_word_count * 2:
+        return reason, ""
+    if not latin_word_count:
         return reason, ""
     return "", str(relation or "related").strip().lower() or "related"
 

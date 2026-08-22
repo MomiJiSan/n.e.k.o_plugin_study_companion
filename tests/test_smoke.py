@@ -156,15 +156,26 @@ def test_knowledge_map_payload_marks_edge_templates_for_ui_i18n(monkeypatch: pyt
                             "of rational, irrational, and real numbers."
                         ),
                     },
+                    {
+                        "id": "foundation",
+                        "relation": "related",
+                        "reason": "Foundation concept",
+                    },
                 ],
             },
             {"id": "params", "name": "函数与参数传递", "subject": "math"},
             {"id": "number_sense", "name": "数感", "subject": "math"},
+            {"id": "foundation", "name": "基础概念", "subject": "math"},
             {
                 "id": "linear_func",
                 "name": "一次函数",
                 "subject": "math",
-                "question_types": ["concept_check", "applied calculation", "application"],
+                "question_types": [
+                    "concept_check",
+                    None,
+                    " applied calculation ",
+                    "application",
+                ],
                 "prerequisites": [
                     {
                         "id": "func",
@@ -202,6 +213,8 @@ def test_knowledge_map_payload_marks_edge_templates_for_ui_i18n(monkeypatch: pyt
     assert "reason" not in edges_by_relation["co_occurs"]
     assert edges_by_relation["supports"]["reason_template"] == "supports"
     assert "reason" not in edges_by_relation["supports"]
+    assert edges_by_relation["related"]["reason_template"] == "related"
+    assert "reason" not in edges_by_relation["related"]
 
 
 def test_knowledge_map_payload_keeps_chinese_reason_with_latin_terms(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,7 +225,7 @@ def test_knowledge_map_payload_keeps_chinese_reason_with_latin_terms(monkeypatch
     monkeypatch.setitem(sys.modules, package_name, package)
     ui_api = importlib.import_module(f"{package_name}.ui_api")
 
-    reason = "遗传信息传递需要先理解 DNA 复制，再分析转录与翻译的条件。"
+    reason = "分析 DNA replication fork 的形成条件，并结合复制方向判断其稳定机制。"
     payload = ui_api.build_knowledge_map_payload(
         topics=[
             {
@@ -281,6 +294,10 @@ def test_both_knowledge_map_uis_localize_internal_edge_values() -> None:
         assert "ui.knowledge.practice_coming_soon" in source
         assert "knowledge-practice-coming-soon-dialog" in source
         assert "window.alert" not in source
+
+    assert "detailDialog?.setAttribute('inert', '')" in static_source
+    assert "aria-hidden={practiceComingSoonOpen ? 'true' : undefined}" in hosted_source
+    assert "inert={practiceComingSoonOpen ? true : undefined}" in hosted_source
 
     assert "runKnowledgePracticeScopeAction(topicAction" not in static_source
     assert "activatePracticeScope('explicit_topic')" not in hosted_source
