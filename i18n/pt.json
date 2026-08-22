@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "Companion, Interactive e Teaching ajustam como o companheiro de estudo responde.",
     "ui.onboarding.step.ocr.label":  "Etapa 2",
     "ui.onboarding.step.ocr.title":  "Verifique a captura OCR",
-    "ui.onboarding.step.ocr.body":  "Use OCR quando quiser que o companheiro leia o material de estudo atual.",
+    "ui.onboarding.step.ocr.body":  "O OCR apenas extrai texto da área selecionada da tela; ele não detecta nem separa questões automaticamente.",
     "ui.onboarding.step.goal.label":  "Etapa 3",
     "ui.onboarding.step.goal.title":  "Vincule uma meta de estudo",
     "ui.onboarding.step.goal.body":  "Cartões de revisão, sessões de foco e resumos ficam mais úteis quando ligados a uma meta.",

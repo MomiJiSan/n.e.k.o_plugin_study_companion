@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "伴学、対話、指導で学習コンパニオンの返答スタイルを調整します。",
     "ui.onboarding.step.ocr.label":  "ステップ 2",
     "ui.onboarding.step.ocr.title":  "OCR キャプチャを確認",
-    "ui.onboarding.step.ocr.body":  "現在の学習資料を読み取らせたいときに OCR を使います。",
+    "ui.onboarding.step.ocr.body":  "OCR は選択した画面範囲から文字を抽出するだけで、問題を自動判定したり分割したりはしません。",
     "ui.onboarding.step.goal.label":  "ステップ 3",
     "ui.onboarding.step.goal.title":  "学習目標を結び付ける",
     "ui.onboarding.step.goal.body":  "復習カード、集中セッション、要約は目標に結び付けるとより役立ちます。",

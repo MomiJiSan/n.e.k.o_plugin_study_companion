@@ -645,7 +645,7 @@ function buildFirstRunSteps() {
     {
       label: t('ui.onboarding.step.ocr.label', 'Step 2'),
       title: t('ui.onboarding.step.ocr.title', 'Check OCR capture'),
-      body: t('ui.onboarding.step.ocr.body', 'Use OCR when you want the companion to read the current learning material.'),
+      body: t('ui.onboarding.step.ocr.body', 'OCR only extracts text from the selected screen area. It does not automatically detect or split questions.'),
     },
     {
       label: t('ui.onboarding.step.goal.label', 'Step 3'),

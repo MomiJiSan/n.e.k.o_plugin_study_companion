@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "Companion, Interactive и Teaching настраивают стиль ответов учебного помощника.",
     "ui.onboarding.step.ocr.label":  "Шаг 2",
     "ui.onboarding.step.ocr.title":  "Проверьте OCR-захват",
-    "ui.onboarding.step.ocr.body":  "Используйте OCR, когда помощник должен прочитать текущий учебный материал.",
+    "ui.onboarding.step.ocr.body":  "OCR только извлекает текст из выбранной области экрана и не определяет или разделяет задания автоматически.",
     "ui.onboarding.step.goal.label":  "Шаг 3",
     "ui.onboarding.step.goal.title":  "Привяжите учебную цель",
     "ui.onboarding.step.goal.body":  "Карточки, фокус-сессии и итоги полезнее, когда связаны с целью.",

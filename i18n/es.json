@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "Companion, Interactive y Teaching ajustan cómo responde el compañero de estudio.",
     "ui.onboarding.step.ocr.label":  "Paso 2",
     "ui.onboarding.step.ocr.title":  "Revisa la captura OCR",
-    "ui.onboarding.step.ocr.body":  "Usa OCR cuando quieras que el compañero lea el material de estudio actual.",
+    "ui.onboarding.step.ocr.body":  "El OCR solo extrae texto del área de pantalla seleccionada; no detecta ni separa preguntas automáticamente.",
     "ui.onboarding.step.goal.label":  "Paso 3",
     "ui.onboarding.step.goal.title":  "Vincula un objetivo de estudio",
     "ui.onboarding.step.goal.body":  "Las tarjetas, sesiones de enfoque y resúmenes son más útiles cuando están vinculados a un objetivo.",

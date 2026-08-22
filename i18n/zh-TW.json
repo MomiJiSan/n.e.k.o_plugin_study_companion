@@ -177,7 +177,7 @@
     "ui.onboarding.step.mode.body":  "伴學、互動、教學會調整貓娘伴學的回應方式。",
     "ui.onboarding.step.ocr.label":  "步驟 2",
     "ui.onboarding.step.ocr.title":  "檢查 OCR 擷取",
-    "ui.onboarding.step.ocr.body":  "當你希望貓娘讀取目前學習材料時使用 OCR。",
+    "ui.onboarding.step.ocr.body":  "OCR 只會擷取所選螢幕區域中的文字，不會自動辨識或拆分題目。",
     "ui.onboarding.step.goal.label":  "步驟 3",
     "ui.onboarding.step.goal.title":  "綁定學習目標",
     "ui.onboarding.step.goal.body":  "把複習卡片、專注時段和總結綁定到目標後會更有用。",
