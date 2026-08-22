@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import quote
 
@@ -9,12 +10,46 @@ CORE_EDGE_RELATIONS = {"prerequisite", "procedure_step", "confusable"}
 USEFUL_EDGE_RELATIONS = {"application", "extends", "supports"}
 EDGE_CONTEXT_VALUES = {"diagnosis", "explanation", "practice", "review"}
 EDGE_PRIORITY_VALUES = {"core", "useful", "optional"}
+_ENGLISH_TEMPLATE_RE = re.compile(
+    r"\b("
+    r"Master|Practice|Review|Application|Contrast|Procedure step|Explain the role|"
+    r"Use .+ in a|Select the matching|Compute or reason|Identify the target|"
+    r"learning path|learning sequence|diagnosing adjacent|supplies the foundation|"
+    r"together with|before .+;|after .+;|handle .+\.|requires understanding|"
+    r"are often|are commonly|is often|is commonly|can be|should be"
+    r")\b",
+    re.IGNORECASE,
+)
+_ENGLISH_PROSE_RE = re.compile(
+    r"\b(?:a|an|the|and|or|to|of|in|on|for|from|with|before|after|is|are|be|"
+    r"can|could|should|would|must|often|commonly|together|requires?|understanding)\b",
+    re.IGNORECASE,
+)
+_LATIN_PROSE_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z'-]{2,}(?:[\s,;:/()\"-]+[A-Za-z][A-Za-z'-]{2,}){2,}\b"
+)
 
 
 def _topic_ref_id(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("id") or value.get("topic_id") or "").strip()
     return str(value or "").strip()
+
+
+def _display_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _knowledge_display_reason(*, raw_reason: str, relation: str) -> tuple[str, str]:
+    reason = str(raw_reason or "").strip()
+    english_prose = bool(
+        _ENGLISH_PROSE_RE.search(reason) or _LATIN_PROSE_RE.search(reason)
+    )
+    if reason and not english_prose and not _ENGLISH_TEMPLATE_RE.search(reason):
+        return reason, ""
+    return "", str(relation or "related").strip().lower() or "related"
 
 
 def _knowledge_edge_priority(relation: str, ref: dict[str, Any]) -> str:
@@ -72,9 +107,15 @@ def _knowledge_edge_payload(
     if typed_relation:
         edge["relation"] = typed_relation
     relation = str(edge["relation"])
-    reason = str(ref_payload.get("reason") or "").strip()
+    raw_reason = str(ref_payload.get("reason") or "").strip()
+    reason, reason_template = _knowledge_display_reason(
+        raw_reason=raw_reason,
+        relation=relation,
+    )
     if reason:
         edge["reason"] = reason
+    if reason_template:
+        edge["reason_template"] = reason_template
     use_case_items: list[str] = []
     use_cases = ref_payload.get("use_cases")
     if isinstance(use_cases, list):
@@ -86,7 +127,7 @@ def _knowledge_edge_payload(
     edge["context"] = _knowledge_edge_context(relation, ref_payload)
     edge["confidence"] = _knowledge_edge_confidence(
         ref_payload,
-        reason=reason,
+        reason=raw_reason,
         use_cases=use_case_items,
     )
     return edge
@@ -138,6 +179,7 @@ def build_knowledge_map_payload(
             or ""
         )
         subject = str(topic.get("subject") or "")
+        course_family = str(topic.get("course_family") or "")
         chapter = str(topic.get("chapter") or "")
         unit = str(topic.get("unit") or chapter)
         stage_counts[stage] = stage_counts.get(stage, 0) + 1
@@ -154,12 +196,13 @@ def build_knowledge_map_payload(
                 "id": topic_id,
                 "label": str(topic.get("name") or topic_id),
                 "subject": subject,
+                "course_family": course_family,
                 "chapter": chapter,
                 "unit": unit,
                 "stage": stage,
                 "grade_level": stage,  # backward-compat alias for older consumers
-                "skills": list(topic.get("skills") or []),
-                "question_types": list(topic.get("question_types") or []),
+                "skills": _display_list(topic.get("skills")),
+                "question_types": _display_list(topic.get("question_types")),
                 "examples": list(topic.get("examples") or []),
                 "typical_misconceptions": list(
                     topic["typical_misconceptions"]

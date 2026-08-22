@@ -25,25 +25,6 @@ function topicIdFromNode(node = {}) {
   return String(node.id || node.topic_id || '').trim();
 }
 
-function knowledgePracticeScopeFromNode(node = {}) {
-  const stage = stageValueFromNode(node);
-  const subject = subjectValueFromNode(node);
-  const courseFamily = courseFamilyValueFromNode(node);
-  const topicId = topicIdFromNode(node);
-  if (!stage || !subject || !topicId || (stage === 'college' && !courseFamily)) return null;
-  const chapter = String(node.chapter || '').trim();
-  return {
-    schema_version: 1,
-    mode: 'explicit_topic',
-    stage,
-    subject,
-    course_family: courseFamily,
-    chapter,
-    unit: chapter ? String(node.unit || '').trim() : '',
-    topic_id: topicId,
-  };
-}
-
 function knowledgeCurrentPracticeScope(nodes = []) {
   const stage = knowledgeMapActiveStage();
   const stageNodes = visibleKnowledgeNodes(nodes, stage, 'all');
@@ -438,13 +419,96 @@ function renderKnowledgeStageSelector(nodes = []) {
 
 function knowledgeEdgeMeta(edge = {}) {
   const parts = [
-    String(edge.priority || '').trim(),
-    String(edge.context || '').trim(),
+    knowledgeEdgePriorityLabel(edge.priority),
+    knowledgeEdgeContextLabel(edge.context),
   ].filter(Boolean);
   if (Number.isFinite(Number(edge.confidence))) {
     parts.push(`${Math.round(Number(edge.confidence) * 100)}%`);
   }
   return parts.join(' / ');
+}
+
+function showKnowledgeTopicPracticeComingSoon(event) {
+  if (document.querySelector('.knowledge-practice-coming-soon-dialog')) return;
+  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  const message = t('ui.knowledge.practice_coming_soon', 'This feature is under development.');
+  const dialog = drawerElement('div', 'knowledge-practice-coming-soon-dialog');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-label', message);
+  const panel = drawerElement('div', 'knowledge-practice-coming-soon-dialog__panel');
+  panel.appendChild(drawerElement('p', 'knowledge-practice-coming-soon-dialog__message', message));
+  const actions = drawerElement('div', 'knowledge-practice-coming-soon-dialog__actions');
+  const closeButton = drawerElement('button', 'button button-primary', t('ui.button.close', 'Close'));
+  closeButton.type = 'button';
+  const close = () => {
+    dialog.remove();
+    if (trigger?.isConnected) trigger.focus();
+  };
+  closeButton.addEventListener('click', close);
+  actions.appendChild(closeButton);
+  panel.appendChild(actions);
+  dialog.appendChild(panel);
+  dialog.addEventListener('click', (clickEvent) => {
+    if (clickEvent.target === dialog) close();
+  });
+  dialog.addEventListener('keydown', (keyEvent) => {
+    if (keyEvent.key === 'Escape') {
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      close();
+    } else if (keyEvent.key === 'Tab') {
+      keyEvent.preventDefault();
+      closeButton.focus();
+    }
+  });
+  document.body.appendChild(dialog);
+  window.setTimeout(() => closeButton.focus(), 0);
+}
+
+function knowledgeEnumLabel(prefix, value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const keyValue = normalized.replace(/[\s-]+/g, '_');
+  return t(`${prefix}.${keyValue}`, normalized.replace(/_/g, ' '));
+}
+
+function knowledgeEdgePriorityLabel(priority) {
+  return knowledgeEnumLabel('ui.knowledge.edge_priority', priority);
+}
+
+function knowledgeEdgeContextLabel(context) {
+  return knowledgeEnumLabel('ui.knowledge.edge_context', context);
+}
+
+function knowledgeQuestionTypeLabel(questionType) {
+  return knowledgeEnumLabel('ui.knowledge.question_type', questionType);
+}
+
+function knowledgeEdgeReason(edge = {}, source = '', target = '') {
+  const reason = String(edge.reason || '').trim();
+  if (reason) return reason;
+  const rawTemplate = String(edge.reason_template || '').trim().toLowerCase();
+  if (!rawTemplate) return '';
+  const template = rawTemplate === 'next'
+    ? 'extends'
+    : ['nearby', 'similar'].includes(rawTemplate)
+      ? 'co_occurs'
+      : ['prerequisite', 'procedure_step', 'application', 'confusable', 'extends', 'co_occurs', 'supports', 'analogy'].includes(rawTemplate)
+        ? rawTemplate
+        : 'related';
+  const fallbacks = {
+    prerequisite: 'Master {source} before studying {target}; it provides the foundation for this topic.',
+    procedure_step: 'After learning {source}, practice {target} next to connect the problem-solving steps.',
+    application: 'Apply {source} to problems about {target} to practice transferring concepts into use.',
+    confusable: '{source} and {target} are easy to confuse; compare their conditions, uses, and boundaries.',
+    extends: 'After mastering {source}, continue by extending the idea to {target}.',
+    co_occurs: '{source} and {target} are often reviewed together and work well side by side.',
+    supports: '{source} supports understanding {target} and can serve as useful explanatory context.',
+    analogy: 'Use {source} as an analogy for {target}, while keeping their applicable conditions in mind.',
+    related: '{source} is related to {target}; review them together to connect the ideas.',
+  };
+  return tf(`ui.knowledge.edge_reason.${template}`, fallbacks[template], { source, target });
 }
 
 function renderKnowledgeNodeDetail(node = {}, edges = [], labelById = new Map()) {
@@ -474,7 +538,9 @@ function renderKnowledgeNodeDetail(node = {}, edges = [], labelById = new Map())
     const otherId = String(edge.from || '') === nodeId ? String(edge.to || '') : String(edge.from || '');
     const other = labelById.get(otherId) || otherId || '-';
     const relation = knowledgeRelationLabel(edge.relation);
-    const reason = String(edge.reason || '').trim();
+    const source = labelById.get(String(edge.from || '')) || String(edge.from || '') || '-';
+    const target = labelById.get(String(edge.to || '')) || String(edge.to || '') || '-';
+    const reason = knowledgeEdgeReason(edge, source, target);
     const meta = knowledgeEdgeMeta(edge);
     const prefix = meta ? `${relation} (${meta}): ${other}` : `${relation}: ${other}`;
     return reason ? `${prefix} - ${reason}` : prefix;
@@ -483,14 +549,13 @@ function renderKnowledgeNodeDetail(node = {}, edges = [], labelById = new Map())
     const target = labelById.get(String(edge.to || '')) || String(edge.to || '') || '-';
     return `${knowledgeRelationLabel(edge.relation)}: ${target}`;
   }));
-  addSection('ui.knowledge.node_detail.practice', 'Practice type', (Array.isArray(node.question_types) ? node.question_types : []).map((item) => String(item || '').trim()).filter(Boolean));
+  addSection('ui.knowledge.node_detail.practice', 'Practice type', (Array.isArray(node.question_types) ? node.question_types : []).map(knowledgeQuestionTypeLabel).filter(Boolean));
   addSection('ui.knowledge.node_detail.misconceptions', 'Common misconceptions', (Array.isArray(node.typical_misconceptions) ? node.typical_misconceptions : []).map((item) => String(item || '').trim()).filter(Boolean));
   const actions = drawerElement('div', 'knowledge-node-detail__actions');
-  const topicScope = knowledgePracticeScopeFromNode(node);
   const topicAction = drawerElement('button', 'button button-primary', t('ui.knowledge.practice_topic', 'Practice this topic'));
   topicAction.type = 'button';
-  topicAction.disabled = !topicScope;
-  topicAction.addEventListener('click', () => runKnowledgePracticeScopeAction(topicAction, topicScope));
+  topicAction.disabled = false;
+  topicAction.addEventListener('click', showKnowledgeTopicPracticeComingSoon);
   const allNodes = Array.isArray(lastKnowledgeMapPayload?.nodes) ? lastKnowledgeMapPayload.nodes : [];
   const currentScope = knowledgeCurrentPracticeScope(allNodes);
   const scopeAction = drawerElement('button', 'button button-secondary', t('ui.knowledge.practice_current_scope', 'Practice current scope'));
@@ -793,9 +858,13 @@ function renderKnowledgeEdges(nodes = [], edges = [], edgeCount = 0, topicCount 
       toId,
       relation: knowledgeRelationLabel(edge.relation),
       rawRelation: String(edge.relation || 'related').trim().toLowerCase(),
-      reason: String(edge.reason || '').trim(),
-      priority: String(edge.priority || '').trim(),
-      context: String(edge.context || '').trim(),
+      reason: knowledgeEdgeReason(
+        edge,
+        labelById.get(fromId) || fromId || '-',
+        labelById.get(toId) || toId || '-',
+      ),
+      priority: knowledgeEdgePriorityLabel(edge.priority),
+      context: knowledgeEdgeContextLabel(edge.context),
       confidence: Number.isFinite(Number(edge.confidence)) ? `${Math.round(Number(edge.confidence) * 100)}%` : '',
     });
     groups.set(groupKey, group);
