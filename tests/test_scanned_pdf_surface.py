@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,9 +13,27 @@ CONTROLLER = ROOT / "surfaces" / "scanned_pdf_ocr.ts"
 PANEL = ROOT / "surfaces" / "study_panel.tsx"
 PDFJS_LOADER = ROOT / "static" / "pdfjs-loader.mjs"
 PDFJS_HOSTED = ROOT / "static" / "pdfjs" / "pdf.hosted.js"
-SUCRASE = (
-    Path(r"E:\Work\CODE\N.E.K.O\frontend\plugin-manager\node_modules\sucrase")
-)
+
+
+def _resolve_sucrase() -> Path | None:
+    override = os.environ.get("STUDY_COMPANION_SUCRASE_PATH", "").strip()
+    if override:
+        return Path(override)
+    relative_candidates = (
+        Path("node_modules/sucrase"),
+        Path("frontend/plugin-manager/node_modules/sucrase"),
+        Path("N.E.K.O/frontend/plugin-manager/node_modules/sucrase"),
+        Path("neko/frontend/plugin-manager/node_modules/sucrase"),
+    )
+    for base in (ROOT, *ROOT.parents):
+        for relative in relative_candidates:
+            candidate = base / relative
+            if candidate.is_dir():
+                return candidate
+    return None
+
+
+SUCRASE = _resolve_sucrase()
 
 
 def test_hosted_surface_uses_local_pdfjs_and_exact_fallback_contract() -> None:
@@ -68,7 +87,7 @@ def test_scanned_pdf_surface_executable_contract() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is not available")
-    if not SUCRASE.is_dir():
+    if SUCRASE is None or not SUCRASE.is_dir():
         pytest.skip("The Hosted Surface TypeScript runtime is not available")
 
     harness = r"""
@@ -78,7 +97,11 @@ const sucrase = require(SUCRASE_PATH);
 let source = fs.readFileSync(CONTROLLER_PATH, 'utf8');
 const compiled = sucrase.transform(source, { transforms: ['typescript', 'imports'] }).code;
 const moduleUnderTest = { exports: {} };
-new Function('module', 'exports', compiled)(moduleUnderTest, moduleUnderTest.exports);
+new Function('module', 'exports', 'require', compiled)(
+  moduleUnderTest,
+  moduleUnderTest.exports,
+  require,
+);
 const {
   SCANNED_PDF_OCR_LIMITS,
   createScannedPdfOcrController,
@@ -274,6 +297,17 @@ async function run() {
   const truncated = await truncation.extract({ async arrayBuffer() { return new ArrayBuffer(1); } });
   assert.strictEqual(truncated.text.length, 32000);
   assert.strictEqual(truncated.truncated, true);
+
+  const surrogateState = state();
+  const surrogate = createScannedPdfOcrController(dependencies(
+    surrogateState,
+    makePdf(surrogateState, 1),
+    async () => ({ status: 'ok', text: 'x'.repeat(31989) + '\ud83d\ude00tail' }),
+  ));
+  const surrogateSafe = await surrogate.extract({ async arrayBuffer() { return new ArrayBuffer(1); } });
+  assert.strictEqual(surrogateSafe.truncated, true);
+  assert.strictEqual(surrogateSafe.text.length, 31999);
+  assert.ok(!/[\ud800-\udfff]$/.test(surrogateSafe.text));
 
   const cancelState = state();
   const cancelController = new AbortController();

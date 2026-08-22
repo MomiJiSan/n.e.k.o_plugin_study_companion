@@ -151,7 +151,10 @@
     const chunk = `${current ? '\n\n' : ''}# Page ${pageNumber}\n\n${pageText}`;
     const available = MAX_TEXT_CHARS - current.length;
     if (chunk.length <= available) return { text: current + chunk, truncated: false };
-    return { text: current + chunk.slice(0, Math.max(0, available)), truncated: true };
+    let cut = Math.max(0, available);
+    const lastCode = chunk.charCodeAt(cut - 1);
+    if (cut > 0 && lastCode >= 0xd800 && lastCode <= 0xdbff) cut -= 1;
+    return { text: current + chunk.slice(0, cut), truncated: true };
   }
 
   async function destroyPdf(pdfDocument, loadingTask, deadline) {
@@ -159,7 +162,10 @@
       const destroy = pdfDocument?.destroy
         ? pdfDocument.destroy()
         : loadingTask?.destroy?.();
-      if (destroy) await waitWithinDeadline(destroy, deadline);
+      if (destroy) {
+        const cleanup = Promise.resolve(destroy).catch(() => undefined);
+        if (timeLeft(deadline) > 0) await waitWithinDeadline(cleanup, deadline);
+      }
     } catch (_error) {}
   }
 

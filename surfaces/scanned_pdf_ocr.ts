@@ -187,10 +187,10 @@ function appendPageText(current: string, pageNumber: number, pageText: string) {
   const chunk = `${current ? '\n\n' : ''}# Page ${pageNumber}\n\n${pageText}`;
   const available = SCANNED_PDF_OCR_LIMITS.maxTextChars - current.length;
   if (chunk.length <= available) return { text: current + chunk, truncated: false };
-  return {
-    text: current + chunk.slice(0, Math.max(0, available)),
-    truncated: true,
-  };
+  let cut = Math.max(0, available);
+  const lastCode = chunk.charCodeAt(cut - 1);
+  if (cut > 0 && lastCode >= 0xd800 && lastCode <= 0xdbff) cut -= 1;
+  return { text: current + chunk.slice(0, cut), truncated: true };
 }
 
 export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDependencies) {
@@ -276,7 +276,10 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
       const destroy = pdfDocument?.destroy
         ? pdfDocument.destroy()
         : loadingTask?.destroy?.();
-      if (destroy) await withinDeadline(destroy, deadline);
+      if (destroy) {
+        const cleanup = Promise.resolve(destroy).catch(() => undefined);
+        if (remaining(deadline) > 0) await withinDeadline(cleanup, deadline);
+      }
     } catch {
       // Cleanup failures must not mask the import result.
     }

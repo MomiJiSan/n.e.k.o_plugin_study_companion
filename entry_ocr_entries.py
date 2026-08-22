@@ -285,6 +285,15 @@ class _OcrEntriesMixin:
                     "backend": backend_name,
                 }
             )
+        except Exception:
+            return Ok(
+                {
+                    "text": "",
+                    "status": "ocr_failed",
+                    "diagnostic": "document_pdf_ocr_failed",
+                    "backend": backend_name,
+                }
+            )
         finally:
             if ocr_task.done():
                 try:

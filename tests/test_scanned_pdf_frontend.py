@@ -334,6 +334,24 @@ async function run() {{
   }});
   assert.strictEqual(truncated.text.length, 32000);
   assert.strictEqual(truncated.truncated, true);
+
+  const surrogateScanner = window.StudyScannedPdfOcr.create({{
+    canvasFactory: makeCanvas,
+    loadPdfJs: async () => ({{
+      GlobalWorkerOptions: {{}},
+      getDocument() {{ return {{ promise: Promise.resolve(makePdf(1)) }}; }},
+    }}),
+    callPlugin: async () => ({{
+      status: 'ok',
+      text: 'x'.repeat(31989) + '\\ud83d\\ude00tail',
+    }}),
+  }});
+  const surrogateSafe = await surrogateScanner.extract({{
+    async arrayBuffer() {{ return new ArrayBuffer(1); }},
+  }});
+  assert.strictEqual(surrogateSafe.truncated, true);
+  assert.strictEqual(surrogateSafe.text.length, 31999);
+  assert.ok(!/[\\ud800-\\udfff]$/.test(surrogateSafe.text));
 }}
 
 run().catch((error) => {{ process.stderr.write(String(error.stack || error)); process.exit(1); }});

@@ -485,10 +485,12 @@ def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
 ) -> None:
     entry = document_ocr_modules.entry
     monkeypatch.setattr(entry, "_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS", 0.005)
+    worker_finished = threading.Event()
 
     class SlowPipeline:
         def recognize_document_page(self, _image: Any) -> _OcrSnapshot:
             time.sleep(0.02)
+            worker_finished.set()
             return _OcrSnapshot(text="late text", status="ok", backend="rapidocr")
 
     owner = SimpleNamespace(
@@ -502,10 +504,8 @@ def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
             owner,
             f"data:image/jpeg;base64,{encoded}",
         )
-        for _ in range(100):
-            if document_ocr_modules.image_api.last_image.closed:
-                break
-            await asyncio.sleep(0.001)
+        assert await asyncio.to_thread(worker_finished.wait, 1.0)
+        await asyncio.sleep(0)
         return result
 
     result = asyncio.run(scenario())
@@ -515,6 +515,35 @@ def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
         "text": "",
         "status": "timeout",
         "diagnostic": "document_pdf_ocr_timeout",
+        "backend": "rapidocr",
+    }
+    assert document_ocr_modules.image_api.last_image.closed is True
+
+
+def test_document_page_entry_maps_unexpected_worker_failure(
+    document_ocr_modules: Any,
+) -> None:
+    class FailingPipeline:
+        def recognize_document_page(self, _image: Any) -> _OcrSnapshot:
+            raise RuntimeError("sensitive worker detail")
+
+    owner = SimpleNamespace(
+        _ocr_pipeline=FailingPipeline(),
+        _cfg=SimpleNamespace(ocr_backend_selection="rapidocr"),
+    )
+    encoded = base64.b64encode(b"\xff\xd8\xffpage").decode("ascii")
+    result = asyncio.run(
+        document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page(
+            owner,
+            f"data:image/jpeg;base64,{encoded}",
+        )
+    )
+
+    assert isinstance(result, _Ok)
+    assert result.value == {
+        "text": "",
+        "status": "ocr_failed",
+        "diagnostic": "document_pdf_ocr_failed",
         "backend": "rapidocr",
     }
     assert document_ocr_modules.image_api.last_image.closed is True
