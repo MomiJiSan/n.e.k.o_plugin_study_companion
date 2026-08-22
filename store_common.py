@@ -7,7 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .memory_deck_store import MemoryDeckStore, ensure_memory_schema
+from .memory_deck_store import MemoryDeckStore
+from .memory_schema import ensure_memory_schema
 from .mode_manager import normalize_mode
 from .models import (
     STORE_CONFIG,

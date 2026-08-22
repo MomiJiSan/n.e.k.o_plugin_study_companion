@@ -43,6 +43,7 @@ from .constants import (
     LLM_OPERATION_QUESTION_GENERATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
     MODE_COMPANION,
+    MODE_CONCEPT_EXPLAIN,
     MODE_INTERACTIVE,
     MODE_TEACHING,
 )
@@ -58,7 +59,6 @@ from .mode_manager import (
     normalize_mode,
 )
 from .models import (
-    MODE_CONCEPT_EXPLAIN,
     STATUS_ERROR,
     STATUS_READY,
     STATUS_STOPPED,
