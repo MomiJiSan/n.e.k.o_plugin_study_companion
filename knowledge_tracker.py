@@ -502,8 +502,30 @@ class KnowledgeTracker:
         mode: str,
         session_id: str = "default",
         response_time_ms: int | None = None,
+        allow_knowledge_update: bool = True,
+        require_existing_topic: bool = False,
+        origin_wrong_question_id: str = "",
+        attempt_id: str = "",
     ) -> dict[str, Any]:
+        if not allow_knowledge_update:
+            return self._record_qa_only_answer(
+                question=question,
+                user_answer=user_answer,
+                eval_result=eval_result,
+                mode=mode,
+                session_id=session_id,
+                response_time_ms=response_time_ms,
+            )
         if not self._can_batch_answer_data():
+            if require_existing_topic:
+                return self._record_qa_only_answer(
+                    question=question,
+                    user_answer=user_answer,
+                    eval_result=eval_result,
+                    mode=mode,
+                    session_id=session_id,
+                    response_time_ms=response_time_ms,
+                )
             return self._on_answer_legacy(
                 topic_id=topic_id,
                 question=question,
@@ -512,11 +534,21 @@ class KnowledgeTracker:
                 mode=mode,
                 session_id=session_id,
                 response_time_ms=response_time_ms,
+                origin_wrong_question_id=origin_wrong_question_id,
             )
 
         answer_lock = self.store.answer_write_lock()
         try:
             with answer_lock:
+                if require_existing_topic and not self.store.get_topic(topic_id):
+                    return self._record_qa_only_answer(
+                        question=question,
+                        user_answer=user_answer,
+                        eval_result=eval_result,
+                        mode=mode,
+                        session_id=session_id,
+                        response_time_ms=response_time_ms,
+                    )
                 return self._on_answer_batch(
                     topic_id=topic_id,
                     question=question,
@@ -525,8 +557,12 @@ class KnowledgeTracker:
                     mode=mode,
                     session_id=session_id,
                     response_time_ms=response_time_ms,
+                    origin_wrong_question_id=origin_wrong_question_id,
+                    attempt_id=attempt_id,
                 )
         except _BatchAnswerWriteFailed as exc:
+            if origin_wrong_question_id or require_existing_topic:
+                raise exc.original
             self._log_exception(
                 "study batch answer write failed; falling back to legacy path: {}",
                 exc.original,
@@ -539,7 +575,41 @@ class KnowledgeTracker:
                 mode=mode,
                 session_id=session_id,
                 response_time_ms=response_time_ms,
+                origin_wrong_question_id=origin_wrong_question_id,
             )
+
+    def _record_qa_only_answer(
+        self,
+        *,
+        question: dict[str, Any],
+        user_answer: str,
+        eval_result: dict[str, Any],
+        mode: str,
+        session_id: str,
+        response_time_ms: int | None,
+    ) -> dict[str, Any]:
+        question_payload = dict(question or {})
+        question_payload.pop("target_binding", None)
+        qa_result = dict(eval_result or {})
+        qa_result["knowledge_tracking_status"] = "qa_only"
+        self.store.ensure_session(session_id=session_id, mode=mode)
+        self.store.add_qa_record(
+            session_id=session_id,
+            topic_id="",
+            question=question_payload,
+            user_answer=user_answer,
+            eval_result=qa_result,
+            mode=mode,
+            response_time_ms=response_time_ms,
+        )
+        return {
+            "topic_id": "",
+            "mastery": {},
+            "wrong_question_id": "",
+            "wrong_question_attempt": {},
+            "fsrs": {},
+            "knowledge_tracking_status": "qa_only",
+        }
 
     def _on_answer_batch(
         self,
@@ -551,6 +621,8 @@ class KnowledgeTracker:
         mode: str,
         session_id: str,
         response_time_ms: int | None,
+        origin_wrong_question_id: str = "",
+        attempt_id: str = "",
     ) -> dict[str, Any]:
         (
             topic_id,
@@ -561,6 +633,8 @@ class KnowledgeTracker:
             topic_id, question=question, eval_result=eval_result
         )
         question_payload = dict(question or {})
+        if attempt_id:
+            question_payload["attempt_id"] = str(attempt_id)
         question_payload.setdefault("topic", topic_id)
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
@@ -580,22 +654,31 @@ class KnowledgeTracker:
         )
 
         wrong_question_data: dict[str, Any] | None = None
+        wrong_question_attempt_data: dict[str, Any] | None = None
         error_candidates: list[dict[str, Any]] = []
         positive_candidate: dict[str, Any] | None = None
-        if verdict in {"wrong", "partial", "dont_know"}:
-            wrong_question_data = {
-                "id": str(uuid.uuid4()),
+        if origin_wrong_question_id:
+            wrong_question_attempt_data = {
+                "question_id": str(origin_wrong_question_id),
                 "topic_id": topic_id,
-                "question": question_payload,
-                "user_answer": user_answer,
-                "expected_answer": str(
-                    question_payload.get("answer")
-                    or eval_result.get("expected_answer")
-                    or ""
-                ),
-                "error_type": error_type,
                 "verdict": verdict,
+                "difficulty": _difficulty_to_level(difficulty),
             }
+        if verdict in {"wrong", "partial", "dont_know"}:
+            if not origin_wrong_question_id:
+                wrong_question_data = {
+                    "id": str(uuid.uuid4()),
+                    "topic_id": topic_id,
+                    "question": question_payload,
+                    "user_answer": user_answer,
+                    "expected_answer": str(
+                        question_payload.get("answer")
+                        or eval_result.get("expected_answer")
+                        or ""
+                    ),
+                    "error_type": error_type,
+                    "verdict": verdict,
+                }
             error_candidates = self._build_error_candidate_data(
                 topic_id=topic_id,
                 question=question_payload,
@@ -622,6 +705,7 @@ class KnowledgeTracker:
                 response_time_ms=response_time_ms,
                 mastery_snapshot=snapshot.to_dict(),
                 wrong_question_data=wrong_question_data,
+                wrong_question_attempt_data=wrong_question_attempt_data,
                 fsrs_card=updated_card.to_dict(),
                 fsrs_rating=int(rating),
                 review_log_data={
@@ -635,22 +719,31 @@ class KnowledgeTracker:
                 positive_candidate_data=positive_candidate,
                 topic_upsert_data=topic_upsert_data,
                 topic_candidate_data=topic_candidate_data,
+                attempt_id=attempt_id,
             )
         except Exception as exc:
             raise _BatchAnswerWriteFailed(exc) from exc
         if topic_upsert_data:
             self.graph.mark_dirty()
-        if verdict == "correct":
-            self.store.record_wrong_question_correct(
-                topic_id=topic_id,
-                error_type=error_type,
-                difficulty=_difficulty_to_level(difficulty),
-            )
-
+        if batch_result.get("duplicate_attempt"):
+            return {
+                "topic_id": str(batch_result.get("topic_id") or topic_id),
+                "mastery": {},
+                "wrong_question_id": "",
+                "wrong_question_attempt": {},
+                "fsrs": {},
+                "knowledge_tracking_status": "duplicate_attempt",
+                "existing_eval_result": dict(
+                    batch_result.get("existing_eval_result") or {}
+                ),
+            }
         return {
             "topic_id": topic_id,
             "mastery": snapshot.to_dict(),
             "wrong_question_id": str(batch_result.get("wrong_question_id") or ""),
+            "wrong_question_attempt": dict(
+                batch_result.get("wrong_question_attempt") or {}
+            ),
             "fsrs": schedule,
         }
 
@@ -676,6 +769,7 @@ class KnowledgeTracker:
         mode: str,
         session_id: str = "default",
         response_time_ms: int | None = None,
+        origin_wrong_question_id: str = "",
     ) -> dict[str, Any]:
         topic_id = self._ensure_topic(
             topic_id, question=question, eval_result=eval_result
@@ -735,7 +829,27 @@ class KnowledgeTracker:
         self.store.append_mastery_snapshot(snapshot.to_dict())
 
         wrong_question_id = ""
-        if verdict in {"wrong", "partial", "dont_know"}:
+        wrong_question_attempt: dict[str, Any] = {}
+        if origin_wrong_question_id:
+            wrong_question_attempt = self.store.record_wrong_question_attempt(
+                question_id=origin_wrong_question_id,
+                topic_id=topic_id,
+                verdict=verdict,
+                difficulty=_difficulty_to_level(difficulty),
+            )
+            if verdict in {"wrong", "partial", "dont_know"}:
+                self._record_error_candidates(
+                    topic_id=topic_id,
+                    question=question_payload,
+                    eval_result=eval_result,
+                    error_type=error_type,
+                    verdict=verdict,
+                )
+            elif verdict == "correct":
+                self._record_positive_question_type(
+                    topic_id=topic_id, question=question_payload
+                )
+        elif verdict in {"wrong", "partial", "dont_know"}:
             wrong_question_id = self.wrong_store.add(
                 topic_id=topic_id,
                 question=question_payload,
@@ -756,11 +870,6 @@ class KnowledgeTracker:
                 verdict=verdict,
             )
         elif verdict == "correct":
-            self.store.record_wrong_question_correct(
-                topic_id=topic_id,
-                error_type=error_type,
-                difficulty=_difficulty_to_level(difficulty),
-            )
             self._record_positive_question_type(
                 topic_id=topic_id, question=question_payload
             )
@@ -784,6 +893,7 @@ class KnowledgeTracker:
             "topic_id": topic_id,
             "mastery": snapshot.to_dict(),
             "wrong_question_id": wrong_question_id,
+            "wrong_question_attempt": wrong_question_attempt,
             "fsrs": schedule,
         }
 

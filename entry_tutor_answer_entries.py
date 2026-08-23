@@ -14,6 +14,7 @@ from .entry_common import (
     tr,
     ui,
 )
+from .evaluation_contract import canonicalize_evaluation, validate_evaluation
 from .models import public_current_question_payload
 
 
@@ -75,6 +76,20 @@ class _TutorAnswerEntriesMixin:
         async with self._lock:
             current_question = dict(self._state.current_question)
             active_mode = self._state.active_mode
+            previous_answer_state = {
+                "last_answer_evaluation": dict(
+                    getattr(self._state, "last_answer_evaluation", {}) or {}
+                ),
+                "last_answer_evaluated_at": str(
+                    getattr(self._state, "last_answer_evaluated_at", "") or ""
+                ),
+                "recent_learning_events": list(
+                    getattr(self._state, "recent_learning_events", []) or []
+                ),
+                "session_summary_seed": dict(
+                    getattr(self._state, "session_summary_seed", {}) or {}
+                ),
+            }
         supplied_question = str(question or "").strip()
         supplied_expected = str(expected_answer or "").strip()
         state_question = str(current_question.get("question") or "").strip()
@@ -129,7 +144,9 @@ class _TutorAnswerEntriesMixin:
                         code="ATTEMPT_ALREADY_EVALUATED",
                     )
                 )
-        resolved_question = state_question if using_current_question else supplied_question
+        resolved_question = (
+            state_question if using_current_question else supplied_question
+        )
         if not resolved_question:
             return Err(SdkError("study tutor requires a question to evaluate against"))
         vision_image_payload = str(kwargs.get("vision_image_base64") or "").strip()
@@ -178,7 +195,9 @@ class _TutorAnswerEntriesMixin:
                 )
             )
         selected_topic_id = (
-            question_topic_id if using_current_question else client_topic_id or question_topic_id
+            question_topic_id
+            if using_current_question
+            else client_topic_id or question_topic_id
         )
         if selected_topic_id:
             question_payload["selected_topic_id"] = selected_topic_id
@@ -215,18 +234,18 @@ class _TutorAnswerEntriesMixin:
                     "question": resolved_question,
                     "expected_answer": resolved_expected,
                     "answer": answer_text,
-                    "current_question": current_question
-                    if using_current_question
-                    else {},
-                    "public_current_question": public_current_question_payload(
-                        current_question
-                    )
-                    if using_current_question
-                    else {},
+                    "current_question": (
+                        current_question if using_current_question else {}
+                    ),
+                    "public_current_question": (
+                        public_current_question_payload(current_question)
+                        if using_current_question
+                        else {}
+                    ),
                     "question_payload": question_payload,
-                    "question_source": "current_question"
-                    if using_current_question
-                    else "supplied",
+                    "question_source": (
+                        "current_question" if using_current_question else "supplied"
+                    ),
                     "run_id": run_id,
                     "session_id": session_id,
                     "question_id": supplied_question_id or state_question_id,
@@ -250,6 +269,44 @@ class _TutorAnswerEntriesMixin:
                 mode=active_mode,
                 context=tutor_context,
             )
+            evaluation_validation = validate_evaluation(
+                dict(reply.payload or {}), learner_answer=answer_text
+            )
+            if not reply.degraded and not evaluation_validation.valid:
+                repair_context = {
+                    **tutor_context,
+                    "evaluation_correction": {
+                        "invalid_evaluation": dict(reply.payload or {}),
+                        "violations": list(evaluation_validation.errors),
+                    },
+                }
+                repaired_reply = await self._agent.answer_evaluate(
+                    question=resolved_question,
+                    answer=answer_text,
+                    expected_answer=resolved_expected,
+                    mode=active_mode,
+                    context=repair_context,
+                )
+                repaired_validation = validate_evaluation(
+                    dict(repaired_reply.payload or {}), learner_answer=answer_text
+                )
+                if not repaired_reply.degraded and repaired_validation.valid:
+                    reply = repaired_reply
+                    tutor_context = repair_context
+                    evaluation_validation = repaired_validation
+                else:
+                    if reserved_attempt:
+                        await self._clear_attempt_evaluation_reservation(
+                            state_attempt_id
+                        )
+                    return Err(
+                        SdkError(
+                            "answer evaluation remained inconsistent after one correction",
+                            code="EVALUATION_INCONSISTENT",
+                        )
+                    )
+            if not reply.degraded:
+                reply.payload = canonicalize_evaluation(dict(reply.payload or {}))
             payload = await self._finalize_tutor_call(
                 LLM_OPERATION_ANSWER_EVALUATE,
                 reply,
@@ -261,9 +318,7 @@ class _TutorAnswerEntriesMixin:
                     "degraded": reply.degraded,
                     "diagnostic": reply.diagnostic,
                     "payload": reply.payload,
-                    "screen_classification": tutor_context.get(
-                        "screen_classification"
-                    )
+                    "screen_classification": tutor_context.get("screen_classification")
                     or {},
                 },
                 extra_context=tutor_context,
@@ -369,6 +424,21 @@ class _TutorAnswerEntriesMixin:
                 with contextlib.suppress(Exception):
                     await self._persist_state()
             raise
+        except SdkError as exc:
+            if reserved_attempt:
+                await self._clear_attempt_evaluation_reservation(
+                    state_attempt_id,
+                    recover_cached=final_attempt_state_staged,
+                )
+            persistence_failed = getattr(exc, "code", "") == "ANSWER_PERSISTENCE_FAILED"
+            if persistence_failed:
+                async with self._lock:
+                    for key, value in previous_answer_state.items():
+                        setattr(self._state, key, value)
+            if reserved_attempt or persistence_failed:
+                with contextlib.suppress(Exception):
+                    await self._persist_state()
+            return Err(exc)
         except Exception as exc:
             if reserved_attempt:
                 await self._clear_attempt_evaluation_reservation(
@@ -377,6 +447,4 @@ class _TutorAnswerEntriesMixin:
                 )
                 with contextlib.suppress(Exception):
                     await self._persist_state()
-            return _entry_exception_error(
-                self, exc, operation="study_evaluate_answer"
-            )
+            return _entry_exception_error(self, exc, operation="study_evaluate_answer")

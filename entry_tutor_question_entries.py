@@ -17,8 +17,8 @@ from .entry_common import (
     tr,
     ui,
 )
-from .models import public_current_question_payload
 from .llm_prompts import ensure_targeted_prompt_context_fits
+from .models import public_current_question_payload
 from .practice_scope import (
     filter_question_params_to_scope,
     ordered_scope_topics,
@@ -125,6 +125,26 @@ def _safe_wrong_question_summary(value: dict[str, Any]) -> dict[str, Any]:
         key: source.get(key)
         for key in ("id", "topic_id", "error_type", "verdict")
         if source.get(key) not in (None, "")
+    }
+
+
+def _server_target_binding(
+    targeted_context: dict[str, Any], *, generated_at: str
+) -> dict[str, Any]:
+    target_topic_id = str(targeted_context.get("selected_topic_id") or "").strip()
+    params = dict(targeted_context.get("question_params") or {})
+    retry = dict(params.get("retry_wrong_question") or {})
+    origin_wrong_question_id = ""
+    if (
+        str(targeted_context.get("selection_reason") or "").strip() == "retry"
+        and str(retry.get("topic_id") or "").strip() == target_topic_id
+    ):
+        origin_wrong_question_id = str(retry.get("id") or "").strip()
+    return {
+        "target_topic_id": target_topic_id,
+        "validation_status": "passed",
+        "generated_at": str(generated_at or "").strip() or str(time.time()),
+        "origin_wrong_question_id": origin_wrong_question_id,
     }
 
 
@@ -705,6 +725,10 @@ class _TutorQuestionEntriesMixin:
                 dict(reply.payload or {}),
                 {
                     "source": "targeted_question",
+                    "target_binding": _server_target_binding(
+                        targeted_context,
+                        generated_at=reply.created_at,
+                    ),
                     "selected_topic_id": targeted_context.get("selected_topic_id")
                     or "",
                     "topic": targeted_context.get("selected_topic_id") or "",

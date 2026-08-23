@@ -57,13 +57,16 @@ from .store_maintenance import json_loads, purge_all, transaction
 from .store_qa import (
     add_qa_record,
     add_wrong_question,
+    apply_wrong_question_attempt,
     ensure_session,
     get_retry_wrong_question,
+    get_wrong_question,
     list_qa_records,
     list_qa_records_for_topic,
     list_sessions,
     list_wrong_questions,
     mark_wrong_question_resolved,
+    record_wrong_question_attempt,
     record_wrong_question_correct,
 )
 from .store_schema import (
@@ -367,7 +370,9 @@ class StudyStore:
         self, conn: sqlite3.Connection, *, role: str
     ) -> str:
         try:
-            mode = self._journal_mode_from_cursor(conn.execute("PRAGMA journal_mode=WAL"))
+            mode = self._journal_mode_from_cursor(
+                conn.execute("PRAGMA journal_mode=WAL")
+            )
         except sqlite3.DatabaseError as exc:
             self._log_warning(
                 "StudyStore %s connection WAL unavailable; falling back to DELETE journal mode: %s",
@@ -386,7 +391,9 @@ class StudyStore:
 
     def _configure_delete_journal(self, conn: sqlite3.Connection, *, role: str) -> str:
         try:
-            mode = self._journal_mode_from_cursor(conn.execute("PRAGMA journal_mode=DELETE"))
+            mode = self._journal_mode_from_cursor(
+                conn.execute("PRAGMA journal_mode=DELETE")
+            )
             return mode or "delete"
         except sqlite3.DatabaseError as fallback_exc:
             self._log_warning(
@@ -490,9 +497,7 @@ class StudyStore:
             "question_types": StudyStore._json_loads(row["question_types"], []),
             "examples": StudyStore._json_loads(row["examples"], []),
             "course_family": str(row["course_family"] or ""),
-            "curriculum_version": StudyStore._json_loads(
-                row["curriculum_version"], []
-            ),
+            "curriculum_version": StudyStore._json_loads(row["curriculum_version"], []),
             "exam_region": StudyStore._json_loads(row["exam_region"], []),
             "exam_type": StudyStore._json_loads(row["exam_type"], []),
             "aliases": StudyStore._json_loads(row["aliases"], []),
@@ -728,6 +733,7 @@ class StudyStore:
         response_time_ms: int | None,
         mastery_snapshot: dict[str, Any] | None = None,
         wrong_question_data: dict[str, Any] | None = None,
+        wrong_question_attempt_data: dict[str, Any] | None = None,
         fsrs_card: dict[str, Any] | None = None,
         fsrs_rating: int | None = None,
         review_log_data: dict[str, Any] | None = None,
@@ -736,17 +742,47 @@ class StudyStore:
         positive_evidence_data: dict[str, Any] | None = None,
         topic_upsert_data: dict[str, Any] | None = None,
         topic_candidate_data: dict[str, Any] | None = None,
+        attempt_id: str = "",
         history_limit: int = _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
     ) -> dict[str, Any]:
         session_key = str(session_id or "default")
         topic_key = str(topic_id or "").strip()
+        attempt_key = str(attempt_id or "").strip()
+        question_payload = dict(question or {})
+        if attempt_key:
+            question_payload["attempt_id"] = attempt_key
         db_topic_key = topic_key or None
         wrong_question_id = ""
+        wrong_question_attempt_result: dict[str, Any] = {}
         with self._lock:
             conn = self._require_conn()
             conn.execute("BEGIN IMMEDIATE")
             step = "begin"
             try:
+                if attempt_key:
+                    existing_attempt = conn.execute(
+                        """
+                        SELECT topic_id, eval_result
+                        FROM qa_records
+                        WHERE json_valid(question)
+                          AND json_extract(question, '$.attempt_id') = ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (attempt_key,),
+                    ).fetchone()
+                    if existing_attempt is not None:
+                        conn.commit()
+                        return {
+                            "ok": True,
+                            "duplicate_attempt": True,
+                            "topic_id": str(existing_attempt["topic_id"] or ""),
+                            "existing_eval_result": self._json_loads(
+                                existing_attempt["eval_result"], {}
+                            ),
+                            "wrong_question_id": "",
+                            "wrong_question_attempt": {},
+                        }
                 if topic_upsert_data:
                     step = "topic_upsert"
                     self._batch_upsert_topic(conn, topic_upsert_data)
@@ -762,7 +798,7 @@ class StudyStore:
                     conn,
                     session_key=session_key,
                     topic_key=db_topic_key,
-                    question=question,
+                    question=question_payload,
                     user_answer=user_answer,
                     eval_result=eval_result,
                     mode=mode,
@@ -784,6 +820,22 @@ class StudyStore:
                     wrong_question_data=wrong_question_data,
                     topic_key=topic_key,
                 )
+                if wrong_question_attempt_data:
+                    step = "wrong_question_attempt"
+                    wrong_question_attempt_result = apply_wrong_question_attempt(
+                        self,
+                        conn,
+                        question_id=str(
+                            wrong_question_attempt_data.get("question_id") or ""
+                        ),
+                        topic_id=str(
+                            wrong_question_attempt_data.get("topic_id") or topic_key
+                        ),
+                        verdict=str(wrong_question_attempt_data.get("verdict") or ""),
+                        difficulty=int(
+                            wrong_question_attempt_data.get("difficulty") or 0
+                        ),
+                    )
                 step = "fsrs_card"
                 self._batch_write_fsrs_card(
                     conn,
@@ -818,7 +870,11 @@ class StudyStore:
                     topic_key,
                 )
                 raise
-        return {"ok": True, "wrong_question_id": wrong_question_id}
+        return {
+            "ok": True,
+            "wrong_question_id": wrong_question_id,
+            "wrong_question_attempt": wrong_question_attempt_result,
+        }
 
     def _batch_write_answer_candidates_noncritical(
         self,
@@ -830,7 +886,9 @@ class StudyStore:
         positive_candidate_data: dict[str, Any] | None,
         positive_evidence_data: dict[str, Any] | None,
     ) -> None:
-        if not (error_candidate_data or positive_candidate_data or positive_evidence_data):
+        if not (
+            error_candidate_data or positive_candidate_data or positive_evidence_data
+        ):
             return
         conn.execute("SAVEPOINT answer_candidates")
         try:
@@ -923,9 +981,7 @@ class StudyStore:
         row = conn.execute(
             "SELECT topics_touched FROM sessions WHERE id = ?", (session_key,)
         ).fetchone()
-        touched = (
-            self._json_loads(row["topics_touched"], []) if row is not None else []
-        )
+        touched = self._json_loads(row["topics_touched"], []) if row is not None else []
         if topic_key and topic_key not in touched:
             touched.append(topic_key)
         conn.execute(
@@ -1197,7 +1253,9 @@ class StudyStore:
                     else []
                 ),
                 self._json_dumps(
-                    topic.get("related") if isinstance(topic.get("related"), list) else []
+                    topic.get("related")
+                    if isinstance(topic.get("related"), list)
+                    else []
                 ),
                 self._json_dumps(
                     topic.get("typical_misconceptions")
@@ -1213,7 +1271,9 @@ class StudyStore:
                     else []
                 ),
                 self._json_dumps(
-                    topic.get("examples") if isinstance(topic.get("examples"), list) else []
+                    topic.get("examples")
+                    if isinstance(topic.get("examples"), list)
+                    else []
                 ),
                 str(topic.get("course_family") or "").strip(),
                 self._json_dumps(
@@ -1232,7 +1292,9 @@ class StudyStore:
                     else []
                 ),
                 self._json_dumps(
-                    topic.get("aliases") if isinstance(topic.get("aliases"), list) else []
+                    topic.get("aliases")
+                    if isinstance(topic.get("aliases"), list)
+                    else []
                 ),
                 str(topic.get("source") or "runtime"),
             ),
@@ -1319,7 +1381,9 @@ class StudyStore:
             table="knowledge_evidence",
             group_column="item_id",
             group_value=item_id,
-            history_limit=safe_int(evidence.get("history_limit"), _DEFAULT_APPEND_ONLY_HISTORY_LIMIT),
+            history_limit=safe_int(
+                evidence.get("history_limit"), _DEFAULT_APPEND_ONLY_HISTORY_LIMIT
+            ),
         )
 
     def _batch_recompute_candidate_score(
@@ -1486,7 +1550,10 @@ class StudyStore:
             "notebooks": [asdict(nb) for nb in notebooks.list_notebooks(limit=5000)],
             # include_content=True: a JSON backup must carry full note bodies,
             # not the snippet-only rows the UI list path returns.
-            "notes": [asdict(note) for note in notebooks.list_notes(limit=5000, include_content=True)],
+            "notes": [
+                asdict(note)
+                for note in notebooks.list_notes(limit=5000, include_content=True)
+            ],
             "interactions": self.list_interactions(limit=1000),
             "topics": self.list_topics(limit=5000),
             "mastery_overview": self.list_mastery_overview(limit=5000),
@@ -1507,6 +1574,7 @@ class StudyStore:
             "memory_items": memory_decks.list_items(limit=5000, include_archived=True),
             "memory_due_reviews": memory_decks.due_reviews(limit=5000),
         }
+
 
 StudyStore._init_db = _init_db  # type: ignore[method-assign]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]
@@ -1533,9 +1601,7 @@ StudyStore.candidate_status_counts = candidate_status_counts  # type: ignore[met
 StudyStore.upsert_anonymous_knowledge_stat = upsert_anonymous_knowledge_stat  # type: ignore[method-assign]
 StudyStore.list_anonymous_knowledge_stats = list_anonymous_knowledge_stats  # type: ignore[method-assign]
 StudyStore.anonymous_knowledge_stats_summary = anonymous_knowledge_stats_summary  # type: ignore[method-assign]
-StudyStore.enqueue_knowledge_contribution_snapshot = (
-    enqueue_knowledge_contribution_snapshot  # type: ignore[method-assign]
-)
+StudyStore.enqueue_knowledge_contribution_snapshot = enqueue_knowledge_contribution_snapshot  # type: ignore[method-assign]
 StudyStore.list_knowledge_contribution_queue = list_knowledge_contribution_queue  # type: ignore[method-assign]
 StudyStore.clear_knowledge_contribution_queue = clear_knowledge_contribution_queue  # type: ignore[method-assign]
 StudyStore.ensure_session = ensure_session  # type: ignore[method-assign]
@@ -1545,8 +1611,10 @@ StudyStore.list_qa_records = list_qa_records  # type: ignore[method-assign]
 StudyStore.list_qa_records_for_topic = list_qa_records_for_topic  # type: ignore[method-assign]
 StudyStore.add_wrong_question = add_wrong_question  # type: ignore[method-assign]
 StudyStore.get_retry_wrong_question = get_retry_wrong_question  # type: ignore[method-assign]
+StudyStore.get_wrong_question = get_wrong_question  # type: ignore[method-assign]
 StudyStore.list_wrong_questions = list_wrong_questions  # type: ignore[method-assign]
 StudyStore.mark_wrong_question_resolved = mark_wrong_question_resolved  # type: ignore[method-assign]
+StudyStore.record_wrong_question_attempt = record_wrong_question_attempt  # type: ignore[method-assign]
 StudyStore.record_wrong_question_correct = record_wrong_question_correct  # type: ignore[method-assign]
 StudyStore.append_mastery_snapshot = append_mastery_snapshot  # type: ignore[method-assign]
 StudyStore.get_latest_mastery = get_latest_mastery  # type: ignore[method-assign]

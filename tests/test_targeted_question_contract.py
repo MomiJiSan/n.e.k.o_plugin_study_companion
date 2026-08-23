@@ -134,6 +134,10 @@ def test_targeted_prompt_excludes_ambient_and_learner_data(
             "recent_learning_events": ["PRIVATE_EVENT"],
             "screen_classification": {"text": "PRIVATE_SCREEN"},
             "vision_image_base64": "PRIVATE_IMAGE",
+            "target_binding": {
+                "target_topic_id": "PRIVATE_BINDING",
+                "origin_wrong_question_id": "PRIVATE_WRONG_ID",
+            },
         }
     )
     rendered = json.dumps(safe)
@@ -145,6 +149,8 @@ def test_targeted_prompt_excludes_ambient_and_learner_data(
         "PRIVATE_EVENT",
         "PRIVATE_SCREEN",
         "PRIVATE_IMAGE",
+        "PRIVATE_BINDING",
+        "PRIVATE_WRONG_ID",
     ):
         assert sentinel not in rendered
 
@@ -230,14 +236,30 @@ def _load_entries(monkeypatch: pytest.MonkeyPatch, package: str):
     common._entry_exception_error = lambda *_args, **_kwargs: None
     common._validate_optional_vision_image_payload = lambda *_args, **_kwargs: ""
     common.asyncio = asyncio
-    common.plugin_entry = lambda **_kwargs: (lambda value: value)
+    common.plugin_entry = lambda **_kwargs: lambda value: value
     common.time = __import__("time")
     common.tr = lambda *_args, **kwargs: kwargs.get("default", "")
     common.ui = _Ui()
     monkeypatch.setitem(sys.modules, f"{package}.entry_common", common)
 
     models = ModuleType(f"{package}.models")
-    models.public_current_question_payload = lambda value: dict(value or {})
+
+    def public_current_question_payload(value):
+        payload = dict(value or {})
+        for key in (
+            "answer",
+            "reference_answer",
+            "accepted_answers",
+            "key_points",
+            "rubric",
+            "solution_steps",
+            "internal_private_payload",
+            "target_binding",
+        ):
+            payload.pop(key, None)
+        return payload
+
+    models.public_current_question_payload = public_current_question_payload
     monkeypatch.setitem(sys.modules, f"{package}.models", models)
     scope = ModuleType(f"{package}.practice_scope")
     scope.filter_question_params_to_scope = lambda params, _eligible: dict(params)
@@ -291,6 +313,142 @@ def test_unscoped_selection_refocuses_on_retry_with_complete_params(
     assert result["question_params"]["mastery"]["mastery"] == 0.41
     assert result["question_params"]["blockers"] == [{"id": "pre"}]
     assert result["question_params"]["retry_wrong_question"]["id"] == "wrong-1"
+
+
+def test_server_target_binding_uses_only_selected_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_binding_test")
+    binding = entries._server_target_binding(
+        {
+            "selected_topic_id": "target",
+            "selection_reason": "retry",
+            "question_params": {
+                "retry_wrong_question": {
+                    "id": "wrong-1",
+                    "topic_id": "target",
+                }
+            },
+        },
+        generated_at="generated",
+    )
+    assert binding == {
+        "target_topic_id": "target",
+        "validation_status": "passed",
+        "generated_at": "generated",
+        "origin_wrong_question_id": "wrong-1",
+    }
+
+    mismatched = entries._server_target_binding(
+        {
+            "selected_topic_id": "target",
+            "selection_reason": "retry",
+            "question_params": {
+                "retry_wrong_question": {
+                    "id": "wrong-2",
+                    "topic_id": "outside",
+                }
+            },
+        },
+        generated_at="generated",
+    )
+    assert mismatched["origin_wrong_question_id"] == ""
+
+
+async def _server_binding_overrides_model_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_binding_override_test")
+
+    class Agent:
+        async def question_generate(self, *_args, **_kwargs):
+            return _Reply(
+                "question_generate",
+                "",
+                "Question",
+                {
+                    "question": "Question",
+                    "answer": "Answer",
+                    "reference_answer": "Answer",
+                    "question_type": "short_answer",
+                    "difficulty": 2,
+                    "hint": "Recall the definition.",
+                    "topic": "Forged",
+                    "target_binding": {
+                        "target_topic_id": "forged",
+                        "validation_status": "passed",
+                        "origin_wrong_question_id": "forged-wrong",
+                    },
+                },
+            )
+
+        async def question_validate(self, **_kwargs):
+            return _Reply(
+                "question_validate",
+                "",
+                "ok",
+                {"relevant": True, "answer_supported": True, "retry": False},
+            )
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+        private_payload = None
+        public_payload = None
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "zh-CN"}
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        @asynccontextmanager
+        async def _practice_scope_write_lock(self):
+            yield
+
+        async def _finalize_tutor_call(self, _operation, reply, **kwargs):
+            self.private_payload = dict(reply.payload)
+            self.public_payload = dict(kwargs.get("public_payload") or {})
+            return dict(self.public_payload)
+
+    targeted = {
+        "selected_topic_id": "target",
+        "selected_topic_name": "Target",
+        "selection_context_id": "ctx",
+        "selection_reason": "retry",
+        "scope_revision": 0,
+        "scope_key": "",
+        "question_params": {
+            "target_topic_id": "target",
+            "target_topic": {"id": "target", "name": "Target"},
+            "retry_wrong_question": {
+                "id": "wrong-1",
+                "topic_id": "target",
+                "question": {"question": "Old question"},
+            },
+        },
+    }
+    subject = Subject()
+    await subject._generate_question_payload(
+        source_text="Generate",
+        source="targeted_question",
+        targeted_context=targeted,
+    )
+    assert subject.private_payload["target_binding"] == {
+        "target_topic_id": "target",
+        "validation_status": "passed",
+        "generated_at": "now",
+        "origin_wrong_question_id": "wrong-1",
+    }
+    assert "target_binding" not in subject.public_payload
+    assert "answer" not in subject.public_payload
+
+
+def test_server_binding_overrides_model_claim_and_stays_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_server_binding_overrides_model_claim(monkeypatch))
 
 
 async def _second_semantic_failure_never_finalizes_question(

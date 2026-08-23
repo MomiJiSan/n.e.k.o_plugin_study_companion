@@ -163,7 +163,8 @@ STUDY_ANSWER_EVALUATE_REQUIREMENTS = (
     "9. reference_answer may be returned after evaluation.\n"
     "10. math_equivalence_engine.enabled must be false; do not claim symbolic equivalence verification.\n"
     "11. Use expected_answer and current question as the reference, but do not invent facts.\n"
-    "12. Output must match this JSON structure:\n"
+    "12. When context.evaluation_correction is present, repair every listed contract violation and return one internally consistent evaluation.\n"
+    "13. Output must match this JSON structure:\n"
 )
 
 STUDY_KNOWLEDGE_TRACK_SYSTEM_PROMPT = (

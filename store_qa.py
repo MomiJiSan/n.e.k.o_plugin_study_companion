@@ -206,6 +206,18 @@ def get_retry_wrong_question(self, topic_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def get_wrong_question(self, question_id: str) -> dict[str, Any] | None:
+    question_key = str(question_id or "").strip()
+    if not question_key:
+        return None
+    row = (
+        self._require_read_conn()
+        .execute("SELECT * FROM wrong_questions WHERE id = ?", (question_key,))
+        .fetchone()
+    )
+    return self._wrong_question_from_row(row) if row is not None else None
+
+
 def list_wrong_questions(
     self,
     *,
@@ -286,6 +298,112 @@ def mark_wrong_question_resolved(self, question_id: str) -> None:
             (str(question_id or ""),),
         )
         self._require_conn().commit()
+
+
+def apply_wrong_question_attempt(
+    self,
+    conn,
+    *,
+    question_id: str,
+    topic_id: str,
+    verdict: str,
+    difficulty: int,
+) -> dict[str, Any]:
+    question_key = str(question_id or "").strip()
+    topic_key = str(topic_id or "").strip()
+    normalized_verdict = str(verdict or "").strip().lower()
+    if not question_key or not topic_key:
+        return {"status": "unbound", "wrong_question_id": question_key}
+    row = conn.execute(
+        """
+        SELECT *
+        FROM wrong_questions
+        WHERE id = ? AND topic_id = ? AND status IN ('active', 'retrying')
+        """,
+        (question_key, topic_key),
+    ).fetchone()
+    if row is None:
+        return {"status": "stale", "wrong_question_id": question_key}
+
+    if normalized_verdict in {"wrong", "partial", "dont_know"}:
+        conn.execute(
+            """
+            UPDATE wrong_questions
+            SET status = 'retrying',
+                verdict = ?,
+                retry_count = retry_count + 1,
+                consecutive_correct = 0,
+                max_correct_difficulty = 0,
+                last_error_at = datetime('now'),
+                last_retry_at = datetime('now'),
+                resolved_at = NULL,
+                updated_at = datetime('now')
+            WHERE id = ? AND topic_id = ?
+            """,
+            (normalized_verdict, question_key, topic_key),
+        )
+        return {"status": "retrying", "wrong_question_id": question_key}
+
+    if normalized_verdict != "correct":
+        return {"status": "ignored", "wrong_question_id": question_key}
+
+    consecutive = int(row["consecutive_correct"] or 0) + 1
+    max_difficulty = max(int(row["max_correct_difficulty"] or 0), int(difficulty or 0))
+    old_enough = bool(
+        conn.execute(
+            "SELECT (julianday('now') - julianday(?)) >= 1.0 AS ok",
+            (str(row["last_error_at"] or ""),),
+        ).fetchone()["ok"]
+    )
+    status = (
+        "resolved"
+        if consecutive >= 3 and max_difficulty >= 3 and old_enough
+        else "retrying"
+    )
+    conn.execute(
+        """
+        UPDATE wrong_questions
+        SET status = ?,
+            retry_count = retry_count + 1,
+            consecutive_correct = ?,
+            max_correct_difficulty = ?,
+            last_retry_at = datetime('now'),
+            resolved_at = CASE WHEN ? = 'resolved' THEN datetime('now') ELSE NULL END,
+            updated_at = datetime('now')
+        WHERE id = ? AND topic_id = ?
+        """,
+        (
+            status,
+            consecutive,
+            max_difficulty,
+            status,
+            question_key,
+            topic_key,
+        ),
+    )
+    return {"status": status, "wrong_question_id": question_key}
+
+
+def record_wrong_question_attempt(
+    self,
+    *,
+    question_id: str,
+    topic_id: str,
+    verdict: str,
+    difficulty: int,
+) -> dict[str, Any]:
+    with self._lock:
+        conn = self._require_conn()
+        result = apply_wrong_question_attempt(
+            self,
+            conn,
+            question_id=question_id,
+            topic_id=topic_id,
+            verdict=verdict,
+            difficulty=difficulty,
+        )
+        conn.commit()
+        return result
 
 
 def record_wrong_question_correct(

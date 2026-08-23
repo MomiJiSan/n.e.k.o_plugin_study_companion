@@ -28,6 +28,7 @@ PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
         "math_equivalence_engine",
         "internal_private_payload",
         "current_question_private",
+        "target_binding",
         "attempt_evaluated",
     }
 )
@@ -597,16 +598,16 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
     awareness = (
         study.get("awareness")
         if isinstance(study.get("awareness"), dict)
-        else raw.get("awareness")
-        if isinstance(raw.get("awareness"), dict)
-        else {}
+        else raw.get("awareness") if isinstance(raw.get("awareness"), dict) else {}
     )
     communication = (
         study_companion.get("communication")
         if isinstance(study_companion.get("communication"), dict)
-        else raw.get("communication")
-        if isinstance(raw.get("communication"), dict)
-        else {}
+        else (
+            raw.get("communication")
+            if isinstance(raw.get("communication"), dict)
+            else {}
+        )
     )
 
     def _raw(
