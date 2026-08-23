@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="./katex.min.css?v=study-hotfix-20260615v" />
     <link rel="stylesheet" href="./style.css?v=study-notebook-migration-20260823" />
     <link rel="stylesheet" href="./notebook.css?v=study-notebook-migration-20260823" />
+    <link rel="stylesheet" href="./workspace.css?v=study-workspace-shell-pr1" />
   </head>
   <body>
     <main class="page-shell">
@@ -17,10 +18,24 @@
           <span class="hero-paw" aria-hidden="true">🐾</span>
           <div class="hero__copy">
             <p class="hero__eyebrow" data-i18n="ui.eyebrow">N.E.K.O Study</p>
-            <h1 class="hero-title">
-              <span class="hero-title__cat" aria-hidden="true">🐱</span>
-              <span data-i18n="ui.title">Study Companion</span>
-            </h1>
+            <div class="hero-title-row">
+              <h1 class="hero-title">
+                <span class="hero-title__cat" aria-hidden="true">🐱</span>
+                <span data-i18n="ui.title">Study Companion</span>
+              </h1>
+              <button
+                id="workspaceHomeButton"
+                class="workspace-home-button"
+                type="button"
+                data-workspace-target="overview"
+                aria-controls="overviewPanel"
+                data-i18n-aria-label="ui.workspace.overview.aria_label"
+                aria-label="Open overview"
+              >
+                <span aria-hidden="true">⌂</span>
+                <span data-i18n="ui.workspace.overview.title">Overview</span>
+              </button>
+            </div>
             <p id="statusLine" class="hero__status" data-i18n="ui.status.starting">Starting...</p>
           </div>
 
@@ -71,59 +86,58 @@
             <div class="toolbar-actions">
               <button id="refreshBtn" class="button button-secondary" type="button" data-i18n="ui.button.refresh">Refresh</button>
               <button id="ocrBtn" class="button button-primary" type="button" data-i18n="ui.button.ocr">OCR</button>
+              <button
+                id="advancedToggleBtn"
+                class="button button-secondary workspace-menu-button"
+                type="button"
+                aria-expanded="false"
+                aria-controls="advancedSettings"
+                data-i18n-aria-label="ui.button.advanced_settings"
+                aria-label="Advanced Settings"
+              >
+                <span aria-hidden="true">⚙</span>
+                <span class="workspace-menu-button__label" data-i18n="ui.button.advanced_settings">Advanced Settings</span>
+              </button>
             </div>
           </div>
         </header>
 
-        <nav class="feature-dock" data-i18n-aria-label="ui.feature.nav_label" aria-label="Study companion features">
-          <button class="feature-action" type="button" data-feature-action="memory" data-open-surface="memory-deck-list">
-            <span class="feature-action__icon" aria-hidden="true">◫</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.memory.title">Deck Management</strong>
-              <span data-i18n="ui.feature.memory.body">Manage decks, imports, and review goals</span>
-            </span>
+        <nav
+          id="workspaceNav"
+          class="workspace-nav"
+          role="tablist"
+          data-i18n-aria-label="ui.workspace.nav_label"
+          aria-label="Study workspaces"
+        >
+          <button id="workspaceTabStudy" class="workspace-tab" type="button" role="tab" data-workspace-target="study" aria-controls="explainPanel" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">✦</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.study.title">Study</span>
+            <span id="workspaceStudyStatus" class="workspace-tab__status" data-i18n="ui.status.ready">Ready</span>
           </button>
-          <button class="feature-action" type="button" data-feature-action="review" data-open-surface="due-review-panel">
-            <span class="feature-action__icon" aria-hidden="true">↻</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.review.title">Review</strong>
-              <span data-i18n="ui.feature.review.body">Open due reviews in the side panel</span>
-            </span>
+          <button id="workspaceTabPractice" class="workspace-tab" type="button" role="tab" data-workspace-target="practice" aria-controls="practicePanel" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">◇</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.practice.title">Practice</span>
+            <span id="workspacePracticeStatus" class="workspace-tab__status" data-i18n="ui.status.ready">Ready</span>
           </button>
-          <button class="feature-action" type="button" data-feature-action="knowledge" data-open-surface="knowledge-map">
-            <span class="feature-action__icon" aria-hidden="true">⌁</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.knowledge.title">Knowledge Map</strong>
-              <span data-i18n="ui.feature.knowledge.body">Inspect weak topics and relationships</span>
-            </span>
+          <button id="workspaceTabMemory" class="workspace-tab" type="button" role="tab" data-workspace-target="memory" aria-controls="memoryPanel" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">◫</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.memory.title">Memory</span>
+            <span id="workspaceMemoryStatus" class="workspace-tab__status" data-i18n="ui.status.ready">Ready</span>
           </button>
-          <button class="feature-action" type="button" data-feature-action="pomodoro" data-open-surface="pomodoro-panel">
-            <span class="feature-action__icon" aria-hidden="true">◷</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.pomodoro.title">Pomodoro</strong>
-              <span data-i18n="ui.feature.pomodoro.body">Start or manage focus timing</span>
-            </span>
+          <button id="workspaceTabKnowledge" class="workspace-tab" type="button" role="tab" data-workspace-target="knowledge" aria-controls="knowledgeWorkspacePanel" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">⌁</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.knowledge.title">Knowledge</span>
+            <span id="workspaceKnowledgeStatus" class="workspace-tab__status" data-i18n="ui.status.ready">Ready</span>
           </button>
-          <button class="feature-action" type="button" data-feature-action="checkin" data-open-surface="habit-dashboard">
-            <span class="feature-action__icon" aria-hidden="true">✓</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.checkin.title">Check-in</strong>
-              <span data-i18n="ui.feature.checkin.body">Track today and daily goals</span>
-            </span>
+          <button id="workspaceTabFocus" class="workspace-tab" type="button" role="tab" data-workspace-target="focus" aria-controls="focusWorkspaceHost" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">◷</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.focus.title">Focus</span>
+            <span id="workspaceFocusStatus" class="workspace-tab__status" data-i18n="ui.status.screen.idle">Idle</span>
           </button>
-          <button class="feature-action" type="button" data-feature-action="notebook" data-open-surface="notebook-panel">
-            <span class="feature-action__icon" aria-hidden="true">▤</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.notebook.title">Notebook</strong>
-              <span data-i18n="ui.feature.notebook.body">Write, search, and export study notes</span>
-            </span>
-          </button>
-          <button class="feature-action" type="button" data-feature-action="export" data-open-surface="note-exporter">
-            <span class="feature-action__icon" aria-hidden="true">⇩</span>
-            <span class="feature-action__copy">
-              <strong data-i18n="ui.feature.export.title">Export</strong>
-              <span data-i18n="ui.feature.export.body">Export notes or session artifacts</span>
-            </span>
+          <button id="workspaceTabNotebook" class="workspace-tab" type="button" role="tab" data-workspace-target="notebook" aria-controls="notebookWorkspaceHost" aria-selected="false" tabindex="-1">
+            <span class="workspace-tab__icon" aria-hidden="true">▤</span>
+            <span class="workspace-tab__label" data-i18n="ui.workspace.notebook.title">Notebook</span>
+            <span id="workspaceNotebookStatus" class="workspace-tab__status" data-i18n="ui.status.ready">Ready</span>
           </button>
         </nav>
 
@@ -142,8 +156,19 @@
           </div>
         </aside>
 
-        <section class="study-hub" data-i18n-aria-label="ui.label.study_hub" aria-label="Study hub">
-          <section id="firstRunGuide" class="first-run-guide" aria-labelledby="firstRunTitle" hidden>
+        <div id="workspaceLayout" class="workspace-layout">
+          <section id="workspaceStage" class="workspace-stage">
+            <div class="workspace-stage__accent" aria-hidden="true"></div>
+            <section class="study-hub" data-i18n-aria-label="ui.label.study_hub" aria-label="Study hub">
+              <section
+                id="overviewPanel"
+                class="workspace-panel workspace-overview"
+                data-workspace-panel="overview"
+                role="tabpanel"
+                tabindex="0"
+                aria-labelledby="workspaceHomeButton"
+              >
+                <section id="firstRunGuide" class="first-run-guide" aria-labelledby="firstRunTitle" hidden>
             <div class="section-heading">
               <div>
                 <span class="diagnosis-label" data-i18n="ui.onboarding.label">First Run</span>
@@ -152,33 +177,34 @@
               <button id="firstRunSkipBtn" class="button button-secondary" type="button" data-i18n="ui.button.skip">Skip</button>
             </div>
             <div id="firstRunSteps" class="first-run-steps"></div>
-          </section>
+                </section>
 
-          <div class="primary-diagnosis" id="primaryDiagnosis" data-severity="info" aria-live="polite">
+                <div class="primary-diagnosis" id="primaryDiagnosis" data-severity="info" aria-live="polite">
             <div>
               <span class="diagnosis-label" data-i18n="ui.diagnosis.default.label">Study Hub</span>
               <strong id="diagnosisTitle" data-i18n="ui.diagnosis.default.title">Ready for a study session</strong>
             </div>
             <p id="diagnosisBody" data-i18n="ui.diagnosis.default.body">Capture text, generate a question, or review due memory cards.</p>
-          </div>
+                </div>
 
-          <div class="quick-panels" data-i18n-aria-label="ui.label.quick_panels" aria-label="Quick study panels">
-            <button class="quick-card" type="button" data-open-surface="pomodoro-panel">
+                <div class="quick-panels" data-i18n-aria-label="ui.label.quick_panels" aria-label="Quick study panels">
+            <button class="quick-card" type="button" data-workspace-link="focus">
               <span data-i18n="ui.quick.focus">Focus</span>
               <strong id="quickFocusState" data-i18n="ui.quick.focus_default">25 min</strong>
             </button>
-            <button class="quick-card" type="button" data-open-surface="due-review-panel">
+            <button class="quick-card" type="button" data-workspace-link="memory" data-workspace-secondary="due-review-panel">
               <span data-i18n="ui.quick.due">Due</span>
               <strong id="quickReviewCount">0</strong>
             </button>
-            <button class="quick-card" type="button" data-open-surface="habit-dashboard">
+            <button class="quick-card" type="button" data-workspace-link="focus" data-workspace-secondary="habit-dashboard">
               <span data-i18n="ui.quick.checkin">Check-in</span>
               <strong id="quickCheckinStatus" data-i18n="ui.status.pending">Pending</strong>
             </button>
-          </div>
+                </div>
+              </section>
 
-          <div class="study-workflow">
-            <details id="practicePanel" class="adaptive-practice panel" data-i18n-aria-label="ui.label.practice_flow" aria-label="Adaptive practice flow">
+              <div class="study-workflow">
+            <details id="practicePanel" class="adaptive-practice panel workspace-panel" data-workspace-panel="practice" role="tabpanel" tabindex="0" aria-labelledby="workspaceTabPractice" open hidden>
               <summary class="section-heading practice-panel__summary">
                 <h2 data-i18n="ui.practice.title">Adaptive Practice</h2>
                 <span class="practice-panel__summary-meta">
@@ -233,7 +259,7 @@
               </div>
             </details>
 
-            <details id="memoryPanel" class="memory-panel panel" aria-live="polite" data-i18n-aria-label="ui.memory.quick_title" aria-label="Quick Cards and Review">
+            <details id="memoryPanel" class="memory-panel panel workspace-panel" data-workspace-panel="memory" role="tabpanel" tabindex="0" aria-labelledby="workspaceTabMemory" aria-live="polite" open hidden>
               <summary class="section-heading">
                 <h2 data-i18n="ui.memory.quick_title">Quick Cards and Review</h2>
                 <span id="memoryDeckStatus">-</span>
@@ -270,7 +296,7 @@
               </div>
             </details>
 
-            <section id="explainPanel" class="study-workspace panel" data-i18n-aria-label="ui.label.study_workspace" aria-label="Study workspace">
+            <section id="explainPanel" class="study-workspace panel workspace-panel" data-workspace-panel="study" role="tabpanel" tabindex="0" aria-labelledby="workspaceTabStudy" hidden>
               <div class="section-heading">
                 <h2 data-i18n="ui.label.text">Text</h2>
                 <span data-i18n="ui.label.explain_input">Explain input</span>
@@ -332,19 +358,101 @@
                 <pre id="replyText"></pre>
               </section>
             </section>
-          </div>
-        </section>
 
-        <div class="advanced-toggle-row">
-          <button
-            id="advancedToggleBtn"
-            class="button button-secondary"
-            type="button"
-            aria-expanded="false"
-            aria-controls="advancedSettings"
-          >
-            <span data-i18n="ui.button.advanced_settings">Advanced Settings</span>
-          </button>
+                <section
+                  id="knowledgeWorkspacePanel"
+                  class="workspace-panel workspace-placeholder"
+                  data-workspace-panel="knowledge"
+                  role="tabpanel"
+                  tabindex="0"
+                  aria-labelledby="workspaceTabKnowledge"
+                  hidden
+                >
+                  <span class="workspace-placeholder__icon" aria-hidden="true">⌁</span>
+                  <div>
+                    <h2 data-i18n="ui.workspace.knowledge.title">Knowledge</h2>
+                    <p data-i18n="ui.workspace.knowledge.pr1_hint">The knowledge map opens in its full-screen view.</p>
+                  </div>
+                </section>
+
+                <section
+                  id="focusWorkspaceHost"
+                  class="workspace-panel workspace-surface-host"
+                  data-workspace-panel="focus"
+                  data-workspace-surface="pomodoro-panel"
+                  role="tabpanel"
+                  tabindex="0"
+                  aria-labelledby="workspaceTabFocus"
+                  hidden
+                >
+                  <div class="workspace-placeholder" data-workspace-placeholder>
+                    <span class="workspace-placeholder__icon" aria-hidden="true">◷</span>
+                    <div>
+                      <h2 data-i18n="ui.workspace.focus.title">Focus</h2>
+                      <p data-i18n="ui.workspace.loading">Loading workspace...</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section
+                  id="notebookWorkspaceHost"
+                  class="workspace-panel workspace-surface-host"
+                  data-workspace-panel="notebook"
+                  data-workspace-surface="notebook-panel"
+                  role="tabpanel"
+                  tabindex="0"
+                  aria-labelledby="workspaceTabNotebook"
+                  hidden
+                >
+                  <div class="workspace-placeholder" data-workspace-placeholder>
+                    <span class="workspace-placeholder__icon" aria-hidden="true">▤</span>
+                    <div>
+                      <h2 data-i18n="ui.workspace.notebook.title">Notebook</h2>
+                      <p data-i18n="ui.workspace.loading">Loading workspace...</p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </section>
+          </section>
+
+          <aside id="nekoCoachPanel" class="neko-coach" data-scene="idle" aria-labelledby="nekoCoachTitle">
+            <div class="neko-coach__body">
+              <span class="diagnosis-label" data-i18n="ui.coach.label">Neko Coach</span>
+              <h2 id="nekoCoachTitle" data-i18n="ui.coach.title">猫娘伴学</h2>
+              <p id="nekoCoachMessage" class="neko-coach__message" data-i18n="ui.coach.message.idle">我会看着学习状态，自己切换表情陪你。</p>
+              <div class="neko-coach__scene">
+                <span data-i18n="ui.coach.scene_label">Scene</span>
+                <strong id="nekoCoachScene" data-i18n="ui.coach.scene.idle">待机</strong>
+              </div>
+              <div class="neko-coach__stats" data-i18n-aria-label="ui.coach.stats_label" aria-label="Neko coach study status">
+                <span>
+                  <em data-i18n="ui.coach.stat.mode">模式</em>
+                  <strong id="nekoCoachMode">-</strong>
+                </span>
+                <span>
+                  <em data-i18n="ui.coach.stat.timer">本轮</em>
+                  <strong id="nekoCoachTimer">-</strong>
+                </span>
+                <span>
+                  <em data-i18n="ui.coach.stat.goal">目标</em>
+                  <strong id="nekoCoachGoal">0/0</strong>
+                </span>
+                <span>
+                  <em data-i18n="ui.coach.stat.review">复习</em>
+                  <strong id="nekoCoachReview">0</strong>
+                </span>
+              </div>
+              <div class="neko-coach__recommendation">
+                <span data-i18n="ui.coach.recommendation_label">当前建议</span>
+                <strong id="nekoCoachRecommendation" data-i18n="ui.coach.recommendation.idle">我会根据状态给你一个下一步。</strong>
+              </div>
+              <div class="neko-coach__actions" data-i18n-aria-label="ui.coach.actions_label" aria-label="Neko coach actions">
+                <button id="nekoCoachPrimaryAction" class="button button-primary" type="button" data-neko-coach-action="explain-current" data-i18n="ui.coach.action.explain_current">解释这题</button>
+                <button id="nekoCoachSecondaryAction" class="button button-secondary" type="button" data-neko-coach-action="quiz-me" data-i18n="ui.coach.action.quiz_me">生成练习</button>
+              </div>
+            </div>
+          </aside>
         </div>
 
         <section id="advancedSettings" class="advanced-settings panel" data-i18n-aria-label="ui.label.advanced_settings" aria-label="Advanced settings" hidden>
@@ -548,43 +656,6 @@
         </section>
       </section>
     </main>
-    <aside id="nekoCoachPanel" class="neko-coach" data-scene="idle" aria-labelledby="nekoCoachTitle">
-      <div class="neko-coach__body">
-        <span class="diagnosis-label" data-i18n="ui.coach.label">Neko Coach</span>
-        <h2 id="nekoCoachTitle" data-i18n="ui.coach.title">猫娘伴学</h2>
-        <p id="nekoCoachMessage" class="neko-coach__message" data-i18n="ui.coach.message.idle">我会看着学习状态，自己切换表情陪你。</p>
-        <div class="neko-coach__scene">
-          <span data-i18n="ui.coach.scene_label">Scene</span>
-          <strong id="nekoCoachScene" data-i18n="ui.coach.scene.idle">待机</strong>
-        </div>
-        <div class="neko-coach__stats" data-i18n-aria-label="ui.coach.stats_label" aria-label="Neko coach study status">
-          <span>
-            <em data-i18n="ui.coach.stat.mode">模式</em>
-            <strong id="nekoCoachMode">-</strong>
-          </span>
-          <span>
-            <em data-i18n="ui.coach.stat.timer">本轮</em>
-            <strong id="nekoCoachTimer">-</strong>
-          </span>
-          <span>
-            <em data-i18n="ui.coach.stat.goal">目标</em>
-            <strong id="nekoCoachGoal">0/0</strong>
-          </span>
-          <span>
-            <em data-i18n="ui.coach.stat.review">复习</em>
-            <strong id="nekoCoachReview">0</strong>
-          </span>
-        </div>
-        <div class="neko-coach__recommendation">
-          <span data-i18n="ui.coach.recommendation_label">当前建议</span>
-          <strong id="nekoCoachRecommendation" data-i18n="ui.coach.recommendation.idle">我会根据状态给你一个下一步。</strong>
-        </div>
-        <div class="neko-coach__actions" data-i18n-aria-label="ui.coach.actions_label" aria-label="Neko coach actions">
-          <button id="nekoCoachPrimaryAction" class="button button-primary" type="button" data-neko-coach-action="explain-current" data-i18n="ui.coach.action.explain_current">解释这题</button>
-          <button id="nekoCoachSecondaryAction" class="button button-secondary" type="button" data-neko-coach-action="quiz-me" data-i18n="ui.coach.action.quiz_me">生成练习</button>
-        </div>
-      </div>
-    </aside>
     <dialog id="memoryDeckDialog" class="memory-deck-dialog" aria-labelledby="memoryDeckDialogTitle" aria-describedby="memoryDeckDialogBody">
       <div class="memory-deck-dialog__panel">
         <span id="memoryDeckDialogLabel" class="diagnosis-label" data-i18n="ui.memory.first_deck_label">First card</span>
@@ -618,6 +689,7 @@
     <script src="./outcome-formatters.js?v=study-hotfix-20260812"></script>
     <script src="./model-runtime.js?v=study-provider-gateway-20260813"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
+    <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
     <script src="./main.js?v=study-notebook-migration-20260823"></script>
   </body>
 </html>

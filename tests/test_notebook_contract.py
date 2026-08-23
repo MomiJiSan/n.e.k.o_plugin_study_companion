@@ -15,7 +15,8 @@ def test_notebook_static_assets_are_loaded_in_dependency_order() -> None:
     )
     panels = (ROOT / "static" / "surface-panels.js").read_text(encoding="utf-8")
 
-    assert 'data-open-surface="notebook-panel"' in index
+    assert 'data-workspace-target="notebook"' in index
+    assert 'data-workspace-surface="notebook-panel"' in index
     assert "./notebook.css" in index
     assert index.index("./notebook-controller.js") < index.index(
         "./surface-panels.js"
@@ -23,7 +24,8 @@ def test_notebook_static_assets_are_loaded_in_dependency_order() -> None:
     assert index.index("./scanned-pdf-ocr.js") < index.index(
         "./document-controller.js"
     )
-    assert "openSurface: openSurfaceDrawer" in main
+    assert index.index("./workspace-controller.js") < index.index("./main.js")
+    assert "openSurface: routeSurfaceEntry" in main
     assert "study_note_ai_expand: 90000" in main
     assert "selectedNoteIds" in controller
     assert "note_ids: notebookNoteIds" in panels

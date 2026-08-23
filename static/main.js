@@ -130,7 +130,14 @@ const advancedSettings = $id('advancedSettings');
 const settingsTabs = Array.from(document.querySelectorAll('[data-settings-tab]'));
 const settingsTabPanels = Array.from(document.querySelectorAll('[data-settings-tab-panel]'));
 const surfaceOpenButtons = Array.from(document.querySelectorAll('[data-open-surface]'));
-const featureActionButtons = Array.from(document.querySelectorAll('[data-feature-action]'));
+const workspaceLinkButtons = Array.from(document.querySelectorAll('[data-workspace-link]'));
+const workspaceHomeButton = $id('workspaceHomeButton');
+const workspaceStudyStatus = $id('workspaceStudyStatus');
+const workspacePracticeStatus = $id('workspacePracticeStatus');
+const workspaceMemoryStatus = $id('workspaceMemoryStatus');
+const workspaceKnowledgeStatus = $id('workspaceKnowledgeStatus');
+const workspaceFocusStatus = $id('workspaceFocusStatus');
+const workspaceNotebookStatus = $id('workspaceNotebookStatus');
 const surfaceDrawer = $id('surfaceDrawer');
 const surfaceDrawerTitle = $id('surfaceDrawerTitle');
 const surfaceDrawerBody = $id('surfaceDrawerBody');
@@ -182,6 +189,8 @@ let currentPracticeScope=null;
 let learningProfile = readLearningProfile();
 let knowledgeMapStage = '';
 let lastKnowledgeMapPayload = null;
+let workspaceController = null;
+let suspendedWorkspaceId = '';
 const pasteControllers = { study: null, answer: null };
 
 function t(key, fallback) {
@@ -1300,9 +1309,44 @@ function setStatusLine(data) {
   renderDiagnosis(data);
   renderFirstRunGuide(data);
   updateStudySummaries(data);
+  updateWorkspaceCardStatuses(data);
   renderNekoCoach(data);
   setModeButtons(modeValue, false);
   setStudyState(data);
+}
+
+function setWorkspaceCardStatus(element, value, state = '') {
+  if (!element) return;
+  element.textContent = String(value ?? '-');
+  if (state) {
+    element.dataset.state = state;
+  } else {
+    delete element.dataset.state;
+  }
+}
+
+function updateWorkspaceCardStatuses(data = {}) {
+  const statusValue = String(data.status || 'ready');
+  const screenValue = data.screen_classification?.screen_type || data.screen_type || 'idle';
+  const dueCount = dueReviewCount(data);
+  const knowledge = data.knowledge_summary || {};
+  const topicCount = countFromSummary(knowledge, ['topic_count', 'topics', 'node_count', 'nodes']);
+  const focusState = pomodoroStatus(data);
+  setWorkspaceCardStatus(workspaceStudyStatus, screenLabel(screenValue), statusValue);
+  setWorkspaceCardStatus(
+    workspacePracticeStatus,
+    currentQuestion ? (questionStatus?.textContent || t('ui.status.ready', 'Ready')) : t('ui.status.ready', 'Ready'),
+    currentQuestion ? 'active' : statusValue,
+  );
+  setWorkspaceCardStatus(workspaceMemoryStatus, String(dueCount), dueCount > 0 ? 'attention' : statusValue);
+  setWorkspaceCardStatus(workspaceKnowledgeStatus, String(topicCount), topicCount > 0 ? 'ready' : 'empty');
+  setWorkspaceCardStatus(workspaceFocusStatus, pomodoroStateLabel(focusState), focusState);
+  const selectedNoteCount = window.StudyCompanionNotebook?.getSelectedNoteIds?.().length || 0;
+  setWorkspaceCardStatus(
+    workspaceNotebookStatus,
+    selectedNoteCount ? String(selectedNoteCount) : t('ui.status.ready', 'Ready'),
+    selectedNoteCount ? 'active' : statusValue,
+  );
 }
 
 function setAdvancedSettingsOpen(open) {
@@ -1358,28 +1402,23 @@ function hostedSurfaceLabel(surfaceId) {
   return window.StudyCompanionSurfacePanels.label(surfaceId, t);
 }
 
-function setActiveFeature(action) {
-  featureActionButtons.forEach((button) => {
-    button.classList.toggle('is-active', button.getAttribute('data-feature-action') === action);
-  });
-}
-
-function focusAfterScroll(target, focusTarget) {
-  if (!target) return;
-  if (typeof target.scrollIntoView === 'function') {
-    target.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
-  if (focusTarget && typeof focusTarget.focus === 'function') {
-    window.setTimeout(() => focusTarget.focus(), 220);
-  }
-}
-
-function closeSurfaceDrawer() {
+function closeSurfaceDrawer(options = {}) {
   if (!surfaceDrawer) return true;
   if (window.StudyCompanionSurfacePanels?.close?.() === false) return false;
   mapRequestId += 1;
   surfaceDrawer.dataset.open = 'false';
   surfaceDrawer.setAttribute('aria-hidden', 'true');
+  const workspaceId = suspendedWorkspaceId;
+  suspendedWorkspaceId = '';
+  if (options.resumeWorkspace !== false
+      && workspaceId
+      && workspaceController?.getActiveWorkspace?.() === workspaceId) {
+    workspaceController.activateWorkspace(workspaceId, { force: true, focus: 'none', resumedFromDrawer: true })
+      .catch((error) => {
+        setStatus(t('ui.status.error', 'Error'));
+        setReply(formatPluginError(error));
+      });
+  }
   return true;
 }
 
@@ -1492,14 +1531,18 @@ function renderGenericLocalPanel(surfaceId) {
   return root;
 }
 
-function renderSurfaceDrawerBody(surfaceId) {
-  const hostedPanel = window.StudyCompanionSurfacePanels?.render?.(surfaceId, {
+function studySurfaceContext() {
+  return {
     t,
     tf,
     label: hostedSurfaceLabel,
     callPlugin,
-    openSurface: openSurfaceDrawer,
-  });
+    openSurface: routeSurfaceEntry,
+  };
+}
+
+function renderSurfaceDrawerBody(surfaceId) {
+  const hostedPanel = window.StudyCompanionSurfacePanels?.render?.(surfaceId, studySurfaceContext());
   if (hostedPanel === false) return null;
   if (hostedPanel) return hostedPanel;
   if (surfaceId === 'knowledge-map') return renderKnowledgePanel();
@@ -1528,8 +1571,12 @@ function openSurfaceDrawer(surfaceId) {
   if (!surfaceDrawer || !surfaceDrawerBody) {
     return false;
   }
+  const activeWorkspaceId = workspaceController?.getActiveWorkspace?.() || '';
+  const activeEntry = workspaceController?.getRegistry?.()?.[activeWorkspaceId];
+  const suspendsWorkspace = activeEntry?.kind === 'surface' && activeEntry.surfaceId !== surfaceId;
   const drawerBody = renderSurfaceDrawerBody(surfaceId);
   if (!drawerBody) return false;
+  if (suspendsWorkspace) suspendedWorkspaceId = activeWorkspaceId;
   if (surfaceDrawerTitle) {
     surfaceDrawerTitle.textContent = hostedSurfaceLabel(surfaceId);
   }
@@ -1556,34 +1603,87 @@ function openSurfaceDrawer(surfaceId) {
   return true;
 }
 
-function openHostedSurface(surfaceId, featureAction = '') {
-  if (!surfaceId) {
-    return;
-  }
-  if (openSurfaceDrawer(surfaceId) === false) return;
-  setActiveFeature(featureAction);
+const SURFACE_WORKSPACE_ROUTES = Object.freeze({
+  'pomodoro-panel': { workspaceId: 'focus' },
+  'notebook-panel': { workspaceId: 'notebook' },
+  'knowledge-map': { workspaceId: 'knowledge' },
+  'due-review-panel': { workspaceId: 'memory', secondary: true },
+  'memory-deck-list': { workspaceId: 'memory', secondary: true },
+  'memory-importer': { workspaceId: 'memory', secondary: true },
+  'habit-dashboard': { workspaceId: 'focus', secondary: true },
+  'daily-goal-editor': { workspaceId: 'focus', secondary: true },
+  'note-exporter': { workspaceId: 'notebook', secondary: true },
+  'session-summary': { workspaceId: 'notebook', secondary: true },
+  'knowledge-contribution-settings': { workspaceId: 'knowledge', secondary: true },
+});
+
+async function activateWorkspace(workspaceId, options = {}) {
+  if (!workspaceController) return { ok: false, workspaceId: null };
+  return workspaceController.activateWorkspace(workspaceId, options);
 }
 
-function openPracticePanel() {
-  const practicePanel=$id('practicePanel');
-  if(practicePanel)practicePanel.open=true;
-  return practicePanel
+async function routeSurfaceEntry(surfaceId, options = {}) {
+  const normalizedSurfaceId = String(surfaceId || '').trim();
+  const route = SURFACE_WORKSPACE_ROUTES[normalizedSurfaceId];
+  if (!route) return openSurfaceDrawer(normalizedSurfaceId);
+  const result = await activateWorkspace(route.workspaceId, {
+    focus: options.focus || (route.secondary ? 'none' : 'workspace'),
+    secondarySurface: route.secondary ? normalizedSurfaceId : '',
+    source: options.source || 'surface-entry',
+  });
+  if (!result?.ok) return false;
+  if (route.secondary) return openSurfaceDrawer(normalizedSurfaceId);
+  return true;
 }
 
-function handleFeatureAction(action) {
-  if (closeSurfaceDrawer() === false) return;
-  setActiveFeature(action);
-  if (action === 'practice') {
-    focusAfterScroll(openPracticePanel(), generateQuestionBtn);
-  } else if (action === 'explain') {
-    focusAfterScroll($id('explainPanel'), studyInput);
-  } else if (action === 'memory') {
-    const memoryPanel = $id('memoryPanel');
-    if (memoryPanel) {
-      memoryPanel.open = true;
-    }
-    focusAfterScroll(memoryPanel, memoryFrontInput);
+function canLeaveWorkspace(context) {
+  if (surfaceDrawer?.dataset.open === 'true'
+      && closeSurfaceDrawer({ resumeWorkspace: false }) === false) {
+    return false;
   }
+  if (context.from === 'notebook') {
+    return window.StudyCompanionNotebook?.close?.() !== false;
+  }
+  return true;
+}
+
+function closeWorkspaceSurface() {
+  return window.StudyCompanionSurfacePanels?.close?.() !== false;
+}
+
+function mountWorkspaceSurface(surfaceId) {
+  const panel = window.StudyCompanionSurfacePanels?.render?.(surfaceId, studySurfaceContext());
+  if (!panel) return false;
+  return panel;
+}
+
+function activateKnowledgeWorkspace(context) {
+  if (context.options.secondarySurface) return { focusHandled: true };
+  if (openSurfaceDrawer('knowledge-map') === false) return false;
+  return { focusHandled: true };
+}
+
+function initializeWorkspaceController() {
+  const factory = window.StudyCompanionWorkspaceController;
+  if (!factory?.create) {
+    throw new Error('StudyCompanionWorkspaceController failed to load');
+  }
+  workspaceController = factory.create({
+    initialWorkspace: 'overview',
+    registry: {
+      study: { focusTarget: '#studyInput' },
+      practice: { focusTarget: '#generateQuestionBtn' },
+      memory: { focusTarget: '#memoryFrontInput' },
+    },
+    canLeave: canLeaveWorkspace,
+    closeSurface: closeWorkspaceSurface,
+    mountSurface: mountWorkspaceSurface,
+    activateKnowledge: activateKnowledgeWorkspace,
+    onChange: ({ to }) => {
+      document.body.dataset.activeWorkspace = to;
+    },
+  });
+  return workspaceController.ready;
 }
 
 function trustedStudySurfaceOrigin(origin) {
@@ -2031,7 +2131,6 @@ async function explainText(options = {}) {
 }
 
 async function generateQuestion() {
-  openPracticePanel();
   currentSelectionContext = null;
   await loadPracticeScope();
   const context = await loadQuestionContext({ silent: true });
@@ -2232,6 +2331,8 @@ function bindButton(button, handler) {
 async function handleNekoCoachAction(action) {
   const normalized = String(action || '').trim();
   if (normalized === 'explain-current') {
+    const navigation = await activateWorkspace('study', { focus: 'none', source: 'neko-coach' });
+    if (!navigation?.ok) return;
     const ocrData = await runOcr({ clearWhenEmpty: true });
     if (String(ocrData?.text || '').trim() || studyInputImageValue) {
       await explainText({ notice: ocrN });
@@ -2239,15 +2340,18 @@ async function handleNekoCoachAction(action) {
     return;
   }
   if (normalized === 'quiz-me') {
+    const navigation = await activateWorkspace('practice', { focus: 'none', source: 'neko-coach' });
+    if (!navigation?.ok) return;
     await generateQuestion();
+    generateQuestionBtn?.focus?.();
     return;
   }
   if (normalized === 'start-review') {
-    openHostedSurface('due-review-panel', 'review');
+    await routeSurfaceEntry('due-review-panel', { source: 'neko-coach' });
     return;
   }
   if (normalized === 'session-summary') {
-    openHostedSurface('session-summary', 'export');
+    await routeSurfaceEntry('session-summary', { source: 'neko-coach' });
   }
 }
 
@@ -2272,6 +2376,7 @@ async function bootstrap() {
     await window.I18n.init(PLUGIN_ID);
     window.I18n.scanDOM();
   }
+  await initializeWorkspaceController();
   document.title = t('ui.title', 'Study Companion');
   syncLearningProfileUi();
   bindButton(refreshBtn, refreshStatus);
@@ -2400,21 +2505,25 @@ async function bootstrap() {
     tab.addEventListener('keydown', handleSettingsTabKeydown);
   });
   surfaceOpenButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      openHostedSurface(
-        button.getAttribute('data-open-surface'),
-        button.getAttribute('data-feature-action') || '',
-      );
+    bindButton(button, () => routeSurfaceEntry(button.getAttribute('data-open-surface'), {
+      source: 'surface-button',
+    }));
+  });
+  workspaceLinkButtons.forEach((button) => {
+    bindButton(button, () => {
+      const secondarySurface = button.getAttribute('data-workspace-secondary');
+      return secondarySurface
+        ? routeSurfaceEntry(secondarySurface, { source: 'workspace-link' })
+        : activateWorkspace(button.getAttribute('data-workspace-link'), {
+          focus: 'workspace',
+          source: 'workspace-link',
+        });
     });
   });
-  featureActionButtons.forEach((button) => {
-    if (button.getAttribute('data-open-surface')) {
-      return;
-    }
-    button.addEventListener('click', () => {
-      handleFeatureAction(button.getAttribute('data-feature-action'));
-    });
-  });
+  bindButton(workspaceHomeButton, () => activateWorkspace('overview', {
+    focus: 'workspace',
+    source: 'home-button',
+  }));
   if (surfaceDrawerCloseBtn) {
     surfaceDrawerCloseBtn.addEventListener('click', closeSurfaceDrawer);
   }
