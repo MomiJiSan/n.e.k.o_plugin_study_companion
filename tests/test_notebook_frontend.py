@@ -11,6 +11,27 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_TEST_ROOT = Path(__file__).resolve().parent / "frontend"
 
 
+def _run_frontend_script(script: str, timeout: float = 60.0) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    if not (FRONTEND_TEST_ROOT / "node_modules" / "happy-dom").is_dir():
+        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
+    completed = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=FRONTEND_TEST_ROOT,
+        env={
+            **os.environ,
+            "STUDY_COMPANION_STATIC_DIR": str(PLUGIN_ROOT / "static"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
 def test_study_companion_notebook_is_integrated_with_static_exporter() -> None:
     plugin_dir = PLUGIN_ROOT
     index_html = (plugin_dir / "static" / "index.html").read_text(encoding="utf-8")
@@ -59,13 +80,6 @@ def test_study_companion_notebook_is_integrated_with_static_exporter() -> None:
 
 
 def test_study_companion_selected_notebooks_reach_export_entry() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -202,25 +216,10 @@ if (!standaloneExportCall || JSON.stringify(standaloneExportCall.args.note_ids) 
   throw new Error(`standalone exporter reused stale note IDs: ${JSON.stringify(standaloneExportCall)}`);
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
+
 
 def test_study_companion_notebook_ignores_stale_note_detail_responses() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -448,27 +447,10 @@ if (noteListCallCount !== noteListCallsBeforeOverlap + 1) {
   throw new Error('a superseded notebook refresh continued into an extra note-list request');
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_keeps_next_name_typed_during_create() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -534,27 +516,10 @@ if (newNotebookInput.value !== 'Second Book') {
   throw new Error(`notebook create cleared a newer typed name: ${newNotebookInput.value}`);
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_invalidates_pending_lists_after_deletions() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -716,26 +681,10 @@ if (notebookDeletePanel.querySelector('.notebook-note-row')) {
 noteListRequests[1].resolve({ notes: [] });
 await settle();
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_keeps_saved_note_body_after_list_refresh() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -829,26 +778,10 @@ if (savedUnload.defaultPrevented) {
   throw new Error('saved editor kept the page-unload guard registered');
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_preserves_tags_and_blocks_concurrent_ai_save() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -1076,26 +1009,10 @@ if (notebook.querySelector('.notebook-note-row') || notebook.querySelector('.not
   throw new Error('deleted notebook left stale notes or pagination visible after refresh failure');
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_reports_open_failures_and_confirms_drafts() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -1199,26 +1116,10 @@ if (closedUnload.defaultPrevented) {
   throw new Error('closed notebook kept the page-unload guard registered');
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
 
 
 def test_study_companion_notebook_preserves_drafts_across_refresh_and_reopen() -> None:
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    plugin_dir = PLUGIN_ROOT
-    frontend_dir = FRONTEND_TEST_ROOT
-    if not (frontend_dir / "node_modules" / "happy-dom").is_dir():
-        pytest.skip("tests/frontend node_modules with happy-dom is not installed")
-
     script = r"""
 import { Window } from 'happy-dom';
 import fs from 'node:fs';
@@ -1589,13 +1490,4 @@ if (!failedNotebookDeleteUnload.defaultPrevented) {
   throw new Error('failed notebook deletion did not restore the dirty draft guard');
 }
 """
-    completed = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        cwd=frontend_dir,
-        env={**os.environ, "STUDY_COMPANION_STATIC_DIR": str(plugin_dir / "static")},
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
+    _run_frontend_script(script)
