@@ -39,7 +39,8 @@ def test_study_companion_notebook_is_integrated_with_static_exporter() -> None:
     notebook = (plugin_dir / "static" / "notebook-controller.js").read_text(encoding="utf-8")
     exporter = (plugin_dir / "static" / "surface-panels.js").read_text(encoding="utf-8")
 
-    assert 'data-open-surface="notebook-panel"' in index_html
+    assert 'data-workspace-target="notebook"' in index_html
+    assert 'data-workspace-surface="notebook-panel"' in index_html
     assert "./notebook-controller.js" in index_html
     assert "./notebook.css" in index_html
     for entry_id in (
@@ -55,7 +56,7 @@ def test_study_companion_notebook_is_integrated_with_static_exporter() -> None:
         assert entry_id in notebook
     assert "selectedNoteIds" in notebook
     assert "ctx.openSurface('note-exporter')" in notebook
-    assert "openSurface: openSurfaceDrawer" in main_js
+    assert "openSurface: routeSurfaceEntry" in main_js
     assert "study_note_ai_expand: 90000" in main_js
     assert "listFromCsv(value)" in notebook
     assert ".split(/[,，]+/)" in notebook

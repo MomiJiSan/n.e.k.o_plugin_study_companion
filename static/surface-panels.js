@@ -1,5 +1,6 @@
 (function () {
   let panelToken = 0;
+  let activeRoot = null;
 
   function t(ctx, key, fallback) {
     return ctx.t ? ctx.t(key, fallback) : fallback;
@@ -237,6 +238,19 @@
     return token === panelToken && (allowDetached || root.isConnected);
   }
 
+  function disposeActiveRoot() {
+    const dispose = activeRoot?.__studySurfaceDispose;
+    activeRoot = null;
+    if (typeof dispose === 'function') {
+      dispose();
+    }
+  }
+
+  function trackActiveRoot(root) {
+    activeRoot = root || null;
+    return root;
+  }
+
   function replace(root, ctx, surfaceId, subtitle, children) {
     const next = panel(ctx, surfaceId, subtitle);
     root.className = next.className;
@@ -351,6 +365,8 @@
         refreshTimer = 0;
       }
     }
+
+    root.__studySurfaceDispose = stopTimer;
 
     function scheduleRefresh() {
       stopTimer();
@@ -1070,23 +1086,24 @@
   }
 
   function render(surfaceId, ctx) {
-    panelToken += 1;
     if (window.StudyCompanionNotebook?.close?.() === false) {
       window.StudyCompanionNotebook?.consumeExportSelectionIntent?.();
       return false;
     }
+    disposeActiveRoot();
+    panelToken += 1;
     const notebookPanel = window.StudyCompanionNotebook?.render?.(surfaceId, ctx);
-    if (notebookPanel) return notebookPanel;
+    if (notebookPanel) return trackActiveRoot(notebookPanel);
     const token = panelToken;
-    if (surfaceId === 'due-review-panel') return renderDueReview(ctx, token);
-    if (surfaceId === 'pomodoro-panel') return renderPomodoro(ctx, token);
-    if (surfaceId === 'habit-dashboard') return renderHabit(ctx, token);
-    if (surfaceId === 'daily-goal-editor') return renderDailyGoals(ctx, token);
-    if (surfaceId === 'memory-deck-list') return renderDeckList(ctx, token);
-    if (surfaceId === 'memory-importer') return renderMemoryImporter(ctx, token);
-    if (surfaceId === 'note-exporter') return renderExporter(ctx, token);
-    if (surfaceId === 'session-summary') return renderSessionSummary(ctx, token);
-    if (surfaceId === 'knowledge-contribution-settings') return renderKnowledgeContributionSettings(ctx, token);
+    if (surfaceId === 'due-review-panel') return trackActiveRoot(renderDueReview(ctx, token));
+    if (surfaceId === 'pomodoro-panel') return trackActiveRoot(renderPomodoro(ctx, token));
+    if (surfaceId === 'habit-dashboard') return trackActiveRoot(renderHabit(ctx, token));
+    if (surfaceId === 'daily-goal-editor') return trackActiveRoot(renderDailyGoals(ctx, token));
+    if (surfaceId === 'memory-deck-list') return trackActiveRoot(renderDeckList(ctx, token));
+    if (surfaceId === 'memory-importer') return trackActiveRoot(renderMemoryImporter(ctx, token));
+    if (surfaceId === 'note-exporter') return trackActiveRoot(renderExporter(ctx, token));
+    if (surfaceId === 'session-summary') return trackActiveRoot(renderSessionSummary(ctx, token));
+    if (surfaceId === 'knowledge-contribution-settings') return trackActiveRoot(renderKnowledgeContributionSettings(ctx, token));
     return null;
   }
 
@@ -1097,6 +1114,7 @@
     loadDecks,
     close() {
       if (window.StudyCompanionNotebook?.close?.() === false) return false;
+      disposeActiveRoot();
       panelToken += 1;
       return true;
     },
