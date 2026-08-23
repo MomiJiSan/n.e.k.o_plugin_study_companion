@@ -99,14 +99,12 @@ class _MemoryImportEntriesMixin:
             "properties": {
                 "draft_type": {
                     "type": "string",
-                    "enum": ["word_example", "sentence_cloze", "recitation_error"],
+                    "enum": ["word_example", "sentence_cloze"],
                     "default": "word_example",
                 },
                 "word": {"type": "string", "default": ""},
                 "meaning": {"type": "string", "default": ""},
                 "sentence": {"type": "string", "default": ""},
-                "expected": {"type": "string", "default": ""},
-                "actual": {"type": "string", "default": ""},
             },
         },
         llm_result_fields=["id", "payload", "status"],
@@ -117,8 +115,6 @@ class _MemoryImportEntriesMixin:
         word: str = "",
         meaning: str = "",
         sentence: str = "",
-        expected: str = "",
-        actual: str = "",
         **_,
     ):
         try:
@@ -127,12 +123,6 @@ class _MemoryImportEntriesMixin:
                 candidate = await asyncio.to_thread(
                     self._memory_deck_store.create_cloze_draft,
                     sentence=sentence,
-                )
-            elif normalized == "recitation_error":
-                candidate = await asyncio.to_thread(
-                    self._memory_deck_store.create_recitation_error_draft,
-                    expected=expected,
-                    actual=actual,
                 )
             else:
                 candidate = await asyncio.to_thread(

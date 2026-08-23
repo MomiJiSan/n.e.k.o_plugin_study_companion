@@ -1,2 +1,3 @@
+static/pdfjs/** -text
 static/pdfjs/wasm/LICENSE_OPENJPEG whitespace=-blank-at-eol
 static/pdfjs/wasm/LICENSE_QCMS whitespace=-blank-at-eol
