@@ -1,6 +1,6 @@
 [project]
 name = "study_companion"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = []
 
 [tool.pytest.ini_options]

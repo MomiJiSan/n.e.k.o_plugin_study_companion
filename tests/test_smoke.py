@@ -269,7 +269,13 @@ def test_knowledge_map_i18n_keys_are_complete_for_all_locales() -> None:
                 "related",
             )
         ),
-        "ui.knowledge.practice_coming_soon",
+        "ui.practice.attempt.correct",
+        "ui.practice.attempt.partial",
+        "ui.practice.attempt.wrong",
+        "ui.practice.attempt.dont_know",
+        "ui.practice.mastery.mastered",
+        "ui.error.question_validation_failed",
+        "ui.error.evaluation_inconsistent",
     }
 
     for locale in locales:
@@ -291,17 +297,26 @@ def test_both_knowledge_map_uis_localize_internal_edge_values() -> None:
         assert "ui.knowledge.question_type" in source
         assert "ui.knowledge.edge_reason" in source
         assert "reason_template" in source
-        assert "ui.knowledge.practice_coming_soon" in source
-        assert "knowledge-practice-coming-soon-dialog" in source
         assert "window.alert" not in source
 
-    assert "detailDialog?.setAttribute('inert', '')" in static_source
-    assert "aria-hidden={practiceComingSoonOpen ? 'true' : undefined}" in hosted_source
-    assert "inert={practiceComingSoonOpen ? true : undefined}" in hosted_source
-
-    assert "runKnowledgePracticeScopeAction(topicAction" not in static_source
-    assert "activatePracticeScope('explicit_topic')" not in hosted_source
-    assert "topicAction.disabled = false" in static_source
-    assert "disabled={false}" in hosted_source
+    assert "knowledgeTopicPracticeScope(node)" in static_source
+    assert "runKnowledgePracticeScopeAction(topicAction, topicScope)" in static_source
+    assert "activatePracticeScope('explicit_topic')" in hosted_source
+    assert "practiceComingSoonOpen" not in hosted_source
     assert "./style.css?v=study-notebook-migration-20260823" in static_index
-    assert "./knowledge-map.js?v=study-topic-practice-dialog-enabled-20260822" in static_index
+    assert "./knowledge-map.js?v=study-mastery-status-20260824" in static_index
+
+
+def test_release_versions_stay_in_sync() -> None:
+    root = Path(__file__).resolve().parents[1]
+    plugin_version = next(
+        line.split('"', 2)[1]
+        for line in (root / "plugin.toml").read_text(encoding="utf-8").splitlines()
+        if line.startswith("version = ")
+    )
+    project_version = next(
+        line.split('"', 2)[1]
+        for line in (root / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+        if line.startswith("version = ")
+    )
+    assert plugin_version == project_version == "0.1.6"

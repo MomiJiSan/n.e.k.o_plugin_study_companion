@@ -1337,6 +1337,22 @@ function pluginErrorMessage(error: unknown) {
   return 'Plugin call failed';
 }
 
+function pluginErrorCode(error: unknown) {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : '';
+  }
+  return '';
+}
+
+function structuredPluginError(error: unknown, fallback?: unknown) {
+  const message = pluginErrorMessage(error || fallback);
+  const structured = new Error(message) as Error & { code?: string };
+  const code = pluginErrorCode(error) || pluginErrorCode(fallback);
+  if (code) structured.code = code;
+  return structured;
+}
+
 function abortError() {
   return new DOMException('Aborted', 'AbortError');
 }
@@ -1360,7 +1376,7 @@ function unwrapPluginResult<T>(rawResult: unknown): T {
     // data (e.g. `{available: false, error: "..."}` for a disabled state), so the
     // mere presence of `error` must not be turned into a thrown exception.
     if (payload.success === false) {
-      throw new Error(pluginErrorMessage(payload.error || payload.message));
+      throw structuredPluginError(payload.error, payload.message);
     }
     if ('data' in payload) {
       return (payload.data ?? {}) as T;

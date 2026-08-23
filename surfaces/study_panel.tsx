@@ -1026,7 +1026,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [question, setQuestion] = useState('');
   const [questionContext, setQuestionContext] = useState<QuestionContext | null>(null);
   const [activePracticeScope, setActivePracticeScope] = useState<PracticeScope | null>(null);
-  const [practiceScopeCompleted, setPracticeScopeCompleted] = useState(false);
+  const [practiceScopeReviewing, setPracticeScopeReviewing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<GeneratedQuestion | null>(null);
   const [answer, setAnswer] = useState('');
   const [reply, setReply] = useState('');
@@ -1052,6 +1052,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const documentControllerRef = useRef<AbortController | null>(null);
   const documentJobControllerRef = useRef<AbortController | null>(null);
   const contextRefreshControllerRef = useRef<AbortController | null>(null);
+  const activePracticeScopeRef = useRef<PracticeScope | null>(null);
   const documentJobIdRef = useRef('');
   const documentPendingStartTokenRef = useRef('');
   const documentPendingStartDeadlineRef = useRef(0);
@@ -1069,6 +1070,11 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const interactionBusy = busy || pastePending;
   const documentJobBusy = Boolean(documentJob && ['starting', 'queued', 'running', 'cancel_requested'].includes(documentJob.status));
   const documentInteractionBusy = interactionBusy || documentReading || documentJobBusy;
+
+  function applyActivePracticeScope(scope: PracticeScope | null) {
+    activePracticeScopeRef.current = scope;
+    setActivePracticeScope(scope);
+  }
 
   useEffect(() => {
     ensureBrandCSS();
@@ -1181,6 +1187,20 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   }
 
   function formatPluginError(error: unknown) {
+    const candidate = error as { code?: unknown; message?: unknown } | null;
+    const code = String(candidate?.code || candidate?.message || '').trim();
+    if (code === 'QUESTION_VALIDATION_FAILED') {
+      return t(
+        'ui.error.question_validation_failed',
+        'The generated question did not pass validation. Please generate another one.',
+      );
+    }
+    if (code === 'EVALUATION_INCONSISTENT') {
+      return t(
+        'ui.error.evaluation_inconsistent',
+        'The answer evaluation was inconsistent. Please try evaluating again.',
+      );
+    }
     return error instanceof Error && error.message === 'plugin_call_timeout'
       ? t('ui.error.plugin_call_timeout', 'Plugin call timed out')
       : error instanceof Error && error.message === 'run_id_missing'
@@ -1190,6 +1210,23 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           : error instanceof Error
             ? error.message
             : String(error);
+  }
+
+  function isRetryablePracticeError(error: unknown) {
+    const candidate = error as { code?: unknown; message?: unknown } | null;
+    const code = String(candidate?.code || candidate?.message || '').trim();
+    return code === 'QUESTION_VALIDATION_FAILED' || code === 'EVALUATION_INCONSISTENT';
+  }
+
+  function practiceAttemptMessage(status: unknown) {
+    const messages: Record<string, [string, string]> = {
+      correct: ['ui.practice.attempt.correct', 'This answer is correct.'],
+      partial: ['ui.practice.attempt.partial', 'This answer is partially correct.'],
+      wrong: ['ui.practice.attempt.wrong', 'This answer is not correct yet.'],
+      dont_know: ['ui.practice.attempt.dont_know', 'This attempt is marked as not known yet.'],
+    };
+    const message = messages[String(status || '').trim().toLowerCase()];
+    return message ? t(message[0], message[1]) : '';
   }
 
   function formatTutorDiagnostic(diagnostic?: string, documentOperation = false) {
@@ -1927,7 +1964,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     if (!signal?.aborted) {
       setQuestionContext(data);
       if (data.practice_scope?.display_path) {
-        setActivePracticeScope(data.practice_scope);
+        applyActivePracticeScope(data.practice_scope);
       }
     }
     return data;
@@ -1944,11 +1981,15 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         ? data.scope
         : null;
       if (!signal?.aborted) {
-        setActivePracticeScope(scope);
+        applyActivePracticeScope(scope);
+        setPracticeScopeReviewing(false);
       }
       return scope;
     } catch (error) {
-      if (!signal?.aborted) setActivePracticeScope(null);
+      if (!signal?.aborted) {
+        applyActivePracticeScope(null);
+        setPracticeScopeReviewing(false);
+      }
       throw error;
     }
   }
@@ -2118,11 +2159,11 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       }
       setQuestion(data.question || '');
       setCurrentQuestion(data);
-      setPracticeScopeCompleted(false);
+      setPracticeScopeReviewing(false);
       if (context.practice_scope?.display_path) {
-        setActivePracticeScope(context.practice_scope);
+        applyActivePracticeScope(context.practice_scope);
       } else {
-        setActivePracticeScope(freshScope);
+        applyActivePracticeScope(freshScope);
       }
       setQuestionContext({ ...context, ...data, no_data: false, selection_context_id: '' });
       setAnswer('');
@@ -2171,6 +2212,11 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         reply?: string;
         degraded?: boolean;
         diagnostic?: string;
+        attempt_status?: string;
+        verdict?: string;
+        scope_status?: string;
+        mastery_status?: string;
+        scope_key?: string;
         practice_scope_status?: string;
         can_continue_review?: boolean;
       };
@@ -2183,11 +2229,16 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         return;
       }
       shouldClearAnswerImage = true;
-      const scopeCompleted = data.practice_scope_status === 'completed';
-      setPracticeScopeCompleted(scopeCompleted);
+      const responseScopeKey = String(data.scope_key || '').trim();
+      const activeScopeKey = String(activePracticeScopeRef.current?.scope_key || '').trim();
+      const scopeReviewing = data.scope_status === 'reviewing'
+        && Boolean(responseScopeKey)
+        && responseScopeKey === activeScopeKey;
+      setPracticeScopeReviewing(scopeReviewing);
       const replyParts = [
-        scopeCompleted
-          ? t('ui.practice.scope_completed', 'Scope complete. You can continue reviewing this topic.')
+        practiceAttemptMessage(data.attempt_status || data.verdict),
+        data.mastery_status === 'mastered'
+          ? t('ui.practice.mastery.mastered', 'This knowledge point is now mastered.')
           : '',
         data.feedback || data.reply || '',
         data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
@@ -2196,7 +2247,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       await refresh(controller.signal, { updateReply: false });
     } catch (error) {
       if (!controller.signal.aborted) {
-        shouldClearAnswerImage = true;
+        shouldClearAnswerImage = !isRetryablePracticeError(error);
         setReply(formatPluginError(error));
       }
     } finally {
@@ -2743,7 +2794,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         >
           {interactionBusy
             ? t('ui.button.loading', 'Loading...')
-            : practiceScopeCompleted
+            : practiceScopeReviewing
               ? t('ui.button.continue_practice_review', 'Continue review')
               : t('ui.button.generate_question', 'Generate Question')}
         </button>
