@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from .constants import LLM_OPERATION_QUESTION_VALIDATE
 from .qwen_native_client import (
     QwenNativeResult,
     messages_have_image,
@@ -24,7 +25,6 @@ from .tutor_llm_agent_common import (
     LLM_OPERATION_CONCEPT_EXPLAIN,
     LLM_OPERATION_KNOWLEDGE_TRACK,
     LLM_OPERATION_QUESTION_GENERATE,
-    LLM_OPERATION_QUESTION_VALIDATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
     STUDY_EMPTY_INPUT_DEFAULT,
     STUDY_FALLBACK_EXPLANATION_DEFAULT,
