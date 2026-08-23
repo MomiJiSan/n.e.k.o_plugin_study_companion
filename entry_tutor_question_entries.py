@@ -17,8 +17,8 @@ from .entry_common import (
     tr,
     ui,
 )
-from .models import public_current_question_payload
 from .llm_prompts import ensure_targeted_prompt_context_fits
+from .models import public_current_question_payload
 from .practice_scope import (
     filter_question_params_to_scope,
     ordered_scope_topics,
