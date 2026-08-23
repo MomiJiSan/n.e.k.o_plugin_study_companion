@@ -66,10 +66,11 @@ def _normalize_question(
         for item in _as_list(raw.get("solution_steps"))
         if _as_str(item, str(item)).strip()
     ]
-    answer = _as_str(raw.get("answer")).strip() or _as_str(
-        raw.get("reference_answer")
-    ).strip()
-    return {
+    answer = (
+        _as_str(raw.get("answer")).strip()
+        or _as_str(raw.get("reference_answer")).strip()
+    )
+    normalized = {
         "question": question,
         "answer": answer,
         "reference_answer": _as_str(raw.get("reference_answer")).strip() or answer,
@@ -84,8 +85,17 @@ def _normalize_question(
         "hint": _as_str(raw.get("hint")).strip(),
         "difficulty": _clamp_int(raw.get("difficulty"), 1, 5, 3),
         "topic": topic,
+        "target_topic_id": _as_str(raw.get("target_topic_id")).strip(),
         "screen_type": self._screen_type_from_context(context),
     }
+    if bool(context.get("targeted_question")):
+        raw_difficulty = raw.get("difficulty")
+        normalized["_targeted_difficulty_valid"] = (
+            isinstance(raw_difficulty, int)
+            and not isinstance(raw_difficulty, bool)
+            and 1 <= raw_difficulty <= 5
+        )
+    return normalized
 
 
 def _fallback_question(self, context: dict[str, Any]) -> dict[str, Any]:

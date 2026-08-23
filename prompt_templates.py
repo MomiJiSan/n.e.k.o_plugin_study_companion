@@ -3,6 +3,7 @@
 STUDY_PROMPT_CONTEXT_MAX_TOKENS = {
     "concept_explain": 6000,
     "question_generate": 4500,
+    "question_validate": 1200,
     "answer_evaluate": 3000,
     "knowledge_track": 2500,
     "summarize_session": 2000,
@@ -55,6 +56,7 @@ STUDY_QUESTION_GENERATE_EXAMPLE = {
     "hint": "Look for the main definition or rule that appears most often in the source.",
     "difficulty": 2,
     "topic": "core concept",
+    "target_topic_id": "",
 }
 
 STUDY_ANSWER_EVALUATE_EXAMPLE = {
@@ -99,6 +101,29 @@ STUDY_QUESTION_GENERATE_SYSTEM_PROMPT = (
     "Return exactly one valid JSON object."
 )
 
+STUDY_QUESTION_VALIDATE_EXAMPLE = {
+    "relevant": True,
+    "answer_supported": True,
+    "retry": False,
+    "reason": "The question and reference answer directly assess the target topic.",
+}
+
+STUDY_QUESTION_VALIDATE_SYSTEM_PROMPT = (
+    "You are a conservative study-question contract validator. "
+    "Judge only the supplied question, reference answer, target topic, and graph relations. "
+    "Return exactly one valid JSON object."
+)
+
+STUDY_QUESTION_VALIDATE_REQUIREMENTS = (
+    "Task: Validate whether a generated question is safe to use for the target topic.\n"
+    "Requirements:\n"
+    "1. relevant: true only when the question directly assesses the target topic.\n"
+    "2. answer_supported: true only when the reference answer is supported by the target metadata or necessary relations.\n"
+    "3. retry: true when either check fails or the evidence is insufficient.\n"
+    "4. reason: one concise reason without adding new facts.\n"
+    "5. Output must match this JSON structure:\n"
+)
+
 STUDY_QUESTION_GENERATE_REQUIREMENTS = (
     "Task: Generate a study question.\n"
     "Requirements:\n"
@@ -115,7 +140,8 @@ STUDY_QUESTION_GENERATE_REQUIREMENTS = (
     "11. topic: a short label for the target concept.\n"
     "12. math_equivalence_engine.enabled must be false.\n"
     "13. Keep the output grounded in context.screen_classification when present.\n"
-    "14. Output must match this JSON structure:\n"
+    "14. For targeted_question context, target_topic_id must exactly copy context.selected_topic_id.\n"
+    "15. Output must match this JSON structure:\n"
 )
 
 STUDY_ANSWER_EVALUATE_SYSTEM_PROMPT = (
@@ -174,10 +200,14 @@ STUDY_SUMMARIZE_SESSION_REQUIREMENTS = (
     "7. Output must match this JSON structure:\n"
 )
 
-STUDY_STRUCTURED_USER_TEMPLATE = "{requirements}{example_json}\n\ncontext:\n{context_json}"
+STUDY_STRUCTURED_USER_TEMPLATE = (
+    "{requirements}{example_json}\n\ncontext:\n{context_json}"
+)
 STUDY_STRUCTURED_MODE_PREFIX_TEMPLATE = "Mode: {mode}\n\n{prompt}"
 
-STUDY_CONCEPT_EXPLAIN_SYSTEM_WITH_MODE_TEMPLATE = "{system_prompt}\nMode guidance: {mode_guidance}"
+STUDY_CONCEPT_EXPLAIN_SYSTEM_WITH_MODE_TEMPLATE = (
+    "{system_prompt}\nMode guidance: {mode_guidance}"
+)
 STUDY_CONCEPT_RESPONSE_MODE_GUIDANCE = {
     "problem_solving": (
         "Solve the concrete problem and output exactly four sections, each heading "
@@ -241,8 +271,8 @@ STUDY_CONCEPT_EXPLAIN_USER_TEMPLATE = (
     "final answer. Do not stop at a problem summary.\n"
     "For exercise or exam problems, use explicit sections for problem "
     "analysis, solution process, final answer, and transfer practice. If "
-    "Language starts with zh, include the headings \"题目解析\", \"解题过程\", "
-    "\"答案\", and \"举一反三\". Do not provide only \"解析\" without "
+    'Language starts with zh, include the headings "题目解析", "解题过程", '
+    '"答案", and "举一反三". Do not provide only "解析" without '
     "step-by-step work or transfer guidance.\n"
     "For choice or option-judgement questions, verify every option independently. "
     "Do not stop after finding one correct option, and do not assume it is "
@@ -301,7 +331,12 @@ STUDY_FALLBACK_TRACK_NEXT_STEPS_WITH_WEAK_POINTS = ["Review the latest feedback"
 STUDY_FALLBACK_TRACK_NEXT_STEPS_DEFAULT = ["Continue with one more practice question"]
 
 STUDY_FALLBACK_SUMMARY_EMPTY = "No study interactions have been recorded yet."
-STUDY_FALLBACK_SUMMARY_DEFAULT = "This session includes recent study interactions and tutor feedback."
-STUDY_FALLBACK_SUMMARY_NEXT_ACTIONS = ["Review the latest feedback", "Try one recall question"]
+STUDY_FALLBACK_SUMMARY_DEFAULT = (
+    "This session includes recent study interactions and tutor feedback."
+)
+STUDY_FALLBACK_SUMMARY_NEXT_ACTIONS = [
+    "Review the latest feedback",
+    "Try one recall question",
+]
 
 STUDY_MARKDOWN_SECTION_EMPTY_ITEM = "None recorded."

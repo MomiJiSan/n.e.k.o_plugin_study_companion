@@ -24,6 +24,7 @@ from .tutor_llm_agent_common import (
     LLM_OPERATION_CONCEPT_EXPLAIN,
     LLM_OPERATION_KNOWLEDGE_TRACK,
     LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_QUESTION_VALIDATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
     STUDY_EMPTY_INPUT_DEFAULT,
     STUDY_FALLBACK_EXPLANATION_DEFAULT,
@@ -61,6 +62,11 @@ from .tutor_llm_agent_question_generate import (
     _fallback_question,
     _normalize_question,
     question_generate,
+)
+from .tutor_llm_agent_question_validate import (
+    _fallback_question_validation,
+    _normalize_question_validation,
+    question_validate,
 )
 from .tutor_llm_agent_summarize_session import (
     _fallback_summary,
@@ -167,6 +173,8 @@ class TutorLLMAgent:
     ) -> dict[str, Any]:
         if operation == LLM_OPERATION_QUESTION_GENERATE:
             return self._normalize_question(raw, context)
+        if operation == LLM_OPERATION_QUESTION_VALIDATE:
+            return self._normalize_question_validation(raw, context)
         if operation == LLM_OPERATION_ANSWER_EVALUATE:
             return self._normalize_evaluation(raw, context)
         if operation == LLM_OPERATION_KNOWLEDGE_TRACK:
@@ -183,6 +191,8 @@ class TutorLLMAgent:
     ) -> TutorReply:
         if operation == LLM_OPERATION_QUESTION_GENERATE:
             payload = self._fallback_question(context)
+        elif operation == LLM_OPERATION_QUESTION_VALIDATE:
+            payload = self._fallback_question_validation(context)
         elif operation == LLM_OPERATION_ANSWER_EVALUATE:
             payload = self._fallback_evaluation(context)
         elif operation == LLM_OPERATION_KNOWLEDGE_TRACK:
@@ -272,6 +282,8 @@ class TutorLLMAgent:
     def _reply_from_payload(operation: str, payload: dict[str, Any]) -> str:
         if operation == LLM_OPERATION_QUESTION_GENERATE:
             return _as_str(payload.get("question")).strip()
+        if operation == LLM_OPERATION_QUESTION_VALIDATE:
+            return _as_str(payload.get("reason")).strip()
         if operation == LLM_OPERATION_ANSWER_EVALUATE:
             return _as_str(payload.get("feedback")).strip()
         if operation == LLM_OPERATION_KNOWLEDGE_TRACK:
@@ -417,10 +429,14 @@ class TutorLLMAgent:
             configured_timeout_seconds=self._config.llm_call_timeout_seconds,
         )
 
+
 TutorLLMAgent.concept_explain = concept_explain  # type: ignore[method-assign]
 TutorLLMAgent.question_generate = question_generate  # type: ignore[method-assign]
+TutorLLMAgent.question_validate = question_validate  # type: ignore[method-assign]
 TutorLLMAgent._normalize_question = _normalize_question  # type: ignore[method-assign]
 TutorLLMAgent._fallback_question = _fallback_question  # type: ignore[method-assign]
+TutorLLMAgent._normalize_question_validation = _normalize_question_validation  # type: ignore[method-assign]
+TutorLLMAgent._fallback_question_validation = _fallback_question_validation  # type: ignore[method-assign]
 TutorLLMAgent.answer_evaluate = answer_evaluate  # type: ignore[method-assign]
 TutorLLMAgent._normalize_evaluation = _normalize_evaluation  # type: ignore[method-assign]
 TutorLLMAgent._fallback_evaluation = _fallback_evaluation  # type: ignore[method-assign]
