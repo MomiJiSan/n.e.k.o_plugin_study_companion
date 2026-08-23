@@ -16,6 +16,7 @@ from .constants import (
     LLM_OPERATION_EXPAND_NOTE,
     LLM_OPERATION_KNOWLEDGE_TRACK,
     LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_QUESTION_VALIDATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
     LLM_OPERATION_SUMMARIZE_TO_NOTE,
 )
@@ -71,9 +72,11 @@ _VISION_TIMEOUT_SECONDS = 60.0
 _LONG_FORM_TIMEOUT_SECONDS = 75.0
 _DOCUMENT_CHUNK_TIMEOUT_SECONDS = 110.0
 _DOCUMENT_MERGE_TIMEOUT_SECONDS = 120.0
+_QUESTION_VALIDATE_TIMEOUT_SECONDS = 15.0
 _OUTPUT_TOKEN_BUDGETS = {
     LLM_OPERATION_CONCEPT_EXPLAIN: 3072,
     LLM_OPERATION_QUESTION_GENERATE: 1024,
+    LLM_OPERATION_QUESTION_VALIDATE: 256,
     LLM_OPERATION_ANSWER_EVALUATE: 1536,
     LLM_OPERATION_KNOWLEDGE_TRACK: 768,
     LLM_OPERATION_SUMMARIZE_SESSION: 3072,
@@ -162,6 +165,8 @@ def operation_timeout_seconds(
         operation_limit = _DOCUMENT_CHUNK_TIMEOUT_SECONDS
     elif operation == LLM_OPERATION_DOCUMENT_MERGE:
         operation_limit = _DOCUMENT_MERGE_TIMEOUT_SECONDS
+    elif operation == LLM_OPERATION_QUESTION_VALIDATE:
+        operation_limit = _QUESTION_VALIDATE_TIMEOUT_SECONDS
     elif operation in {
         LLM_OPERATION_SUMMARIZE_SESSION,
         LLM_OPERATION_EXPAND_NOTE,
@@ -528,9 +533,7 @@ class QwenNativeClient:
         transport = (
             "native_vision"
             if has_image
-            else "compatible"
-            if text_transport == "compatible"
-            else "native_text"
+            else "compatible" if text_transport == "compatible" else "native_text"
         )
         thinking_enabled = False
         try:
@@ -688,7 +691,9 @@ class QwenNativeClient:
             )
             raise error from exc
         except (TimeoutError, OSError) as exc:
-            diagnostic = "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
+            diagnostic = (
+                "timeout" if isinstance(exc, TimeoutError) else "provider_unavailable"
+            )
             error = QwenNativeError(
                 "DashScope native request failed",
                 diagnostic=diagnostic,

@@ -17,11 +17,16 @@ from .entry_common import (
     tr,
     ui,
 )
+from .llm_prompts import ensure_targeted_prompt_context_fits
 from .models import public_current_question_payload
 from .practice_scope import (
     filter_question_params_to_scope,
     ordered_scope_topics,
     practice_scope_matches_topic,
+)
+from .targeted_question_contract import (
+    semantic_validation_passed,
+    validate_targeted_question,
 )
 
 IMAGE_ONLY_QUESTION_PROMPT_EN = "Generate a study question from the pasted image."
@@ -29,6 +34,7 @@ IMAGE_ONLY_QUESTION_PROMPT_ZH_CN = "请根据这张图片生成一道学习题�
 IMAGE_ONLY_QUESTION_PROMPT_ZH_TW = "請根據這張圖片生成一道學習題。"
 TARGETED_SELECTION_TTL_SECONDS = 10 * 60
 TARGETED_HINT_MAX_CHARS = 240
+TARGETED_GENERATION_TIMEOUT_SECONDS = 125.0
 
 
 def _image_only_question_prompt(language: str) -> str:
@@ -122,6 +128,91 @@ def _safe_wrong_question_summary(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _without_learner_answers(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _without_learner_answers(item)
+            for key, item in value.items()
+            if str(key) not in {"user_answer", "learner_answer", "submitted_answer"}
+        }
+    if isinstance(value, list):
+        return [_without_learner_answers(item) for item in value]
+    return value
+
+
+def _targeted_model_context(context: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "operation",
+        "input_text",
+        "language",
+        "mode",
+        "source",
+        "source_text",
+        "text",
+        "targeted_question",
+        "selected_topic_id",
+        "selected_topic_name",
+        "selection_reason",
+        "selection_reason_payload",
+        "knowledge_question_params",
+        "knowledge_guidance",
+        "scope_key",
+        "scope_revision",
+        "practice_scope",
+        "scope_topic_count",
+        "generation_feedback",
+    }
+    return {
+        key: _without_learner_answers(value)
+        for key, value in context.items()
+        if key in allowed
+    }
+
+
+def _question_validation_context(
+    payload: dict[str, Any], targeted_context: dict[str, Any]
+) -> dict[str, Any]:
+    params = dict(targeted_context.get("question_params") or {})
+    target_topic = dict(params.get("target_topic") or {})
+    target_metadata = {
+        key: target_topic.get(key)
+        for key in (
+            "id",
+            "name",
+            "title",
+            "subject",
+            "stage",
+            "course_family",
+            "chapter",
+            "unit",
+            "description",
+            "definition",
+            "question_types",
+            "common_mistakes",
+        )
+        if target_topic.get(key) not in (None, "", [], {})
+    }
+    raw_guidance = targeted_context.get("knowledge_guidance") or {}
+    if isinstance(raw_guidance, dict):
+        guidance = {
+            key: raw_guidance.get(key)
+            for key in ("prerequisites", "procedure", "confusions", "applications")
+            if raw_guidance.get(key) not in (None, "", [], {})
+        }
+    else:
+        guidance = {}
+    if not guidance:
+        guidance = {"blockers": params.get("blockers") or []}
+    return {
+        "question": payload.get("question") or "",
+        "reference_answer": payload.get("reference_answer")
+        or payload.get("answer")
+        or "",
+        "target_topic": target_metadata,
+        "necessary_relations": guidance,
+    }
+
+
 class _TutorQuestionEntriesMixin:
     def _targeted_context_cache(self) -> dict[str, dict[str, Any]]:
         cache = getattr(self, "_targeted_question_contexts", None)
@@ -148,9 +239,7 @@ class _TutorQuestionEntriesMixin:
                 return self._store_targeted_context_locked(context)
         return self._store_targeted_context_locked(context)
 
-    def _store_targeted_context_locked(
-        self, context: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _store_targeted_context_locked(self, context: dict[str, Any]) -> dict[str, Any]:
         self._prune_targeted_context_cache()
         cache = self._targeted_context_cache()
         context_id = f"scq_{uuid.uuid4().hex}"
@@ -177,7 +266,9 @@ class _TutorQuestionEntriesMixin:
         with context_lock:
             return self._load_targeted_context_locked(selection_context_id)
 
-    def _load_targeted_context_locked(self, selection_context_id: str) -> dict[str, Any]:
+    def _load_targeted_context_locked(
+        self, selection_context_id: str
+    ) -> dict[str, Any]:
         self._prune_targeted_context_cache()
         context_id = str(selection_context_id or "").strip()
         cache = self._targeted_context_cache()
@@ -187,16 +278,11 @@ class _TutorQuestionEntriesMixin:
                 "selection context expired", code="SELECTION_CONTEXT_EXPIRED"
             )
         cached_revision = int(cached.get("scope_revision") or 0)
-        active_revision = int(
-            getattr(self._state, "practice_scope_revision", 0) or 0
-        )
+        active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
         cached_scope_key = str(cached.get("scope_key") or "").strip()
         active_scope = self._resolve_active_practice_scope()
         active_scope_key = active_scope.scope_key if active_scope else ""
-        if (
-            cached_revision != active_revision
-            or cached_scope_key != active_scope_key
-        ):
+        if cached_revision != active_revision or cached_scope_key != active_scope_key:
             cache.pop(context_id, None)
             raise SdkError(
                 "practice scope changed after question selection",
@@ -217,9 +303,7 @@ class _TutorQuestionEntriesMixin:
         cached["consumed"] = True
         return dict(cached)
 
-    def _selection_from_question_params(
-        self, params: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _selection_from_question_params(self, params: dict[str, Any]) -> dict[str, Any]:
         params = dict(params or {})
         target_topic = dict(params.get("target_topic") or {})
         target_topic_id = str(params.get("target_topic_id") or "").strip()
@@ -365,10 +449,12 @@ class _TutorQuestionEntriesMixin:
             candidate_limit=5000,
             candidate_topics_by_id=topics_by_id,
         )
-        params["retry_wrong_questions"] = self._knowledge_tracker.store.list_wrong_questions(
-            limit=5000,
-            topic_ids=eligible,
-            statuses=("active", "retrying"),
+        params["retry_wrong_questions"] = (
+            self._knowledge_tracker.store.list_wrong_questions(
+                limit=5000,
+                topic_ids=eligible,
+                statuses=("active", "retrying"),
+            )
         )
         params = filter_question_params_to_scope(params, eligible)
         if scope.mode == "explicit_topic":
@@ -376,58 +462,63 @@ class _TutorQuestionEntriesMixin:
             params["candidate_evidence"] = []
         if not params.get("target_topic_id"):
             params["target_topic_id"] = target_topic_id
-            params["target_topic"] = self._knowledge_tracker.store.get_topic(
-                target_topic_id
-            ) or {}
+            params["target_topic"] = (
+                self._knowledge_tracker.store.get_topic(target_topic_id) or {}
+            )
         params["mastery_overview"] = list(mastery_by_topic.values())
         return params
+
+    def _unscoped_question_params(self) -> dict[str, Any]:
+        params = self._knowledge_tracker.preview_next_question_params("")
+        retries = self._knowledge_tracker.store.list_wrong_questions(
+            limit=5000,
+            statuses=("active", "retrying"),
+        )
+        params["retry_wrong_questions"] = retries
+        params["retry_wrong_question"] = retries[0] if retries else {}
+        return params
+
+    def _focus_selected_question_params(
+        self,
+        selection: dict[str, Any],
+        initial_params: dict[str, Any],
+        scope,
+    ) -> None:
+        selected_topic_id = str(selection.get("selected_topic_id") or "").strip()
+        if not selected_topic_id:
+            return
+        eligible = set(scope.eligible_topic_ids) if scope is not None else None
+        focused = self._knowledge_tracker.preview_next_question_params(
+            selected_topic_id,
+            candidate_topic_ids=eligible,
+            candidate_limit=5000 if eligible is not None else 5,
+        )
+        if eligible is not None:
+            focused = filter_question_params_to_scope(focused, eligible)
+        focused["target_topic_id"] = selected_topic_id
+        focused["target_topic"] = (
+            self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
+        )
+        focused["scope_candidates"] = {
+            "retry_wrong_questions": initial_params.get("retry_wrong_questions") or [],
+            "due_reviews": initial_params.get("due_reviews") or [],
+            "weak_topics": initial_params.get("weak_topics") or [],
+        }
+        selection["question_params"] = focused
+        selection["difficulty"] = (
+            focused.get("suggested_difficulty") or selection["difficulty"]
+        )
 
     def _build_targeted_question_context(self) -> dict[str, Any]:
         scope = self._resolve_active_practice_scope()
         params = (
             self._scoped_question_params(scope)
             if scope is not None
-            else self._knowledge_tracker.preview_next_question_params("")
+            else self._unscoped_question_params()
         )
         selection = self._selection_from_question_params(params)
+        self._focus_selected_question_params(selection, params, scope)
         if scope is not None:
-            selected_topic_id = str(selection.get("selected_topic_id") or "").strip()
-            if selected_topic_id:
-                scoped_topics_by_id: dict[str, dict[str, Any]] = {}
-                for candidate in params.get("due_reviews") or []:
-                    candidate_topic_id = str(candidate.get("topic_id") or "").strip()
-                    if candidate_topic_id:
-                        scoped_topics_by_id[candidate_topic_id] = dict(
-                            candidate.get("topic") or {}
-                        )
-                for candidate in params.get("weak_topics") or []:
-                    candidate_topic_id = str(
-                        candidate.get("topic_id") or candidate.get("id") or ""
-                    ).strip()
-                    if candidate_topic_id:
-                        scoped_topics_by_id[candidate_topic_id] = dict(candidate)
-                focused_params = filter_question_params_to_scope(
-                    self._knowledge_tracker.preview_next_question_params(
-                        selected_topic_id,
-                        candidate_topic_ids=set(scope.eligible_topic_ids),
-                        candidate_limit=5000,
-                        candidate_topics_by_id=scoped_topics_by_id,
-                    ),
-                    set(scope.eligible_topic_ids),
-                )
-                focused_params["target_topic_id"] = selected_topic_id
-                focused_params["target_topic"] = (
-                    self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
-                )
-                focused_params["scope_candidates"] = {
-                    "retry_wrong_questions": params.get("retry_wrong_questions") or [],
-                    "due_reviews": params.get("due_reviews") or [],
-                    "weak_topics": params.get("weak_topics") or [],
-                }
-                selection["question_params"] = focused_params
-                selection["difficulty"] = (
-                    focused_params.get("suggested_difficulty") or selection["difficulty"]
-                )
             selection.update(
                 {
                     "scope_key": scope.scope_key,
@@ -483,18 +574,14 @@ class _TutorQuestionEntriesMixin:
                     or "",
                     "selected_topic_name": targeted_context.get("selected_topic_name")
                     or "",
-                    "selection_context_id": targeted_context.get(
-                        "selection_context_id"
-                    )
+                    "selection_context_id": targeted_context.get("selection_context_id")
                     or "",
                     "selection_reason": targeted_context.get("selection_reason") or "",
                     "selection_reason_payload": targeted_context.get(
                         "selection_reason_payload"
                     )
                     or {},
-                    "knowledge_question_params": targeted_context.get(
-                        "question_params"
-                    )
+                    "knowledge_question_params": targeted_context.get("question_params")
                     or {},
                     "scope_key": targeted_context.get("scope_key") or "",
                     "scope_revision": targeted_context.get("scope_revision") or 0,
@@ -511,9 +598,91 @@ class _TutorQuestionEntriesMixin:
             input_text=source_text,
             extra=extra_context,
         )
-        reply = await self._agent.question_generate(
-            source_text, mode=active_mode, context=tutor_context
-        )
+        if targeted_context:
+            tutor_context = _targeted_model_context(tutor_context)
+            try:
+                ensure_targeted_prompt_context_fits(tutor_context)
+            except ValueError as exc:
+                raise SdkError(str(exc), code="TARGETED_CONTEXT_TOO_LARGE") from exc
+        reply = None
+        validation_failure = ""
+        attempts = 2 if targeted_context else 1
+        for generation_attempt in range(attempts):
+            generation_context = dict(tutor_context)
+            if validation_failure:
+                generation_context["generation_feedback"] = validation_failure
+            candidate_reply = await self._agent.question_generate(
+                source_text, mode=active_mode, context=generation_context
+            )
+            if not targeted_context:
+                reply = candidate_reply
+                break
+            candidate_payload = dict(candidate_reply.payload or {})
+            # The binding is authoritative server state, never an LLM claim.
+            candidate_payload["target_topic_id"] = str(
+                targeted_context.get("selected_topic_id") or ""
+            )
+            candidate_reply = TutorReply(
+                operation=candidate_reply.operation,
+                input_text=candidate_reply.input_text,
+                reply=candidate_reply.reply,
+                payload=candidate_payload,
+                degraded=candidate_reply.degraded,
+                diagnostic=candidate_reply.diagnostic,
+                created_at=candidate_reply.created_at,
+            )
+            params = dict(targeted_context.get("question_params") or {})
+            structural = validate_targeted_question(
+                candidate_payload,
+                target_topic_id=str(targeted_context.get("selected_topic_id") or ""),
+                target_topic_name=str(
+                    targeted_context.get("selected_topic_name") or ""
+                ),
+                origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
+            )
+            if not structural.valid:
+                validation_failure = "Structural validation failed: " + ", ".join(
+                    structural.errors
+                )
+                continue
+            validation_reply = await self._agent.question_validate(
+                context=_question_validation_context(
+                    candidate_payload,
+                    {
+                        **targeted_context,
+                        "knowledge_guidance": generation_context.get(
+                            "knowledge_guidance"
+                        )
+                        or {},
+                    },
+                )
+            )
+            if not semantic_validation_passed(
+                dict(validation_reply.payload or {}), degraded=validation_reply.degraded
+            ):
+                validation_failure = "Semantic validation failed: " + str(
+                    (validation_reply.payload or {}).get("reason")
+                    or validation_reply.diagnostic
+                    or "retry"
+                )
+                continue
+            candidate_payload.pop("_targeted_difficulty_valid", None)
+            candidate_reply = TutorReply(
+                operation=candidate_reply.operation,
+                input_text=candidate_reply.input_text,
+                reply=candidate_reply.reply,
+                payload=candidate_payload,
+                degraded=candidate_reply.degraded,
+                diagnostic=candidate_reply.diagnostic,
+                created_at=candidate_reply.created_at,
+            )
+            reply = candidate_reply
+            break
+        if reply is None:
+            raise SdkError(
+                validation_failure or "generated question failed validation",
+                code="QUESTION_VALIDATION_FAILED",
+            )
         if targeted_context:
             async with self._lock:
                 active_revision = int(
@@ -522,8 +691,7 @@ class _TutorQuestionEntriesMixin:
                 active_scope = self._resolve_active_practice_scope()
                 active_scope_key = active_scope.scope_key if active_scope else ""
             if (
-                int(targeted_context.get("scope_revision") or 0)
-                != active_revision
+                int(targeted_context.get("scope_revision") or 0) != active_revision
                 or str(targeted_context.get("scope_key") or "").strip()
                 != active_scope_key
             ):
@@ -542,9 +710,7 @@ class _TutorQuestionEntriesMixin:
                     "topic": targeted_context.get("selected_topic_id") or "",
                     "selected_topic_name": targeted_context.get("selected_topic_name")
                     or "",
-                    "selection_context_id": targeted_context.get(
-                        "selection_context_id"
-                    )
+                    "selection_context_id": targeted_context.get("selection_context_id")
                     or "",
                     "selection_reason": targeted_context.get("selection_reason") or "",
                     "selection_reason_payload": targeted_context.get(
@@ -585,8 +751,7 @@ class _TutorQuestionEntriesMixin:
                     active_scope = self._resolve_active_practice_scope()
                     active_scope_key = active_scope.scope_key if active_scope else ""
                 if (
-                    int(targeted_context.get("scope_revision") or 0)
-                    != active_revision
+                    int(targeted_context.get("scope_revision") or 0) != active_revision
                     or str(targeted_context.get("scope_key") or "").strip()
                     != active_scope_key
                 ):
@@ -611,7 +776,9 @@ class _TutorQuestionEntriesMixin:
                 extra_context=tutor_context,
                 public_payload=public_payload,
             )
-        payload["screen_classification"] = tutor_context.get("screen_classification") or {}
+        payload["screen_classification"] = (
+            tutor_context.get("screen_classification") or {}
+        )
         return payload
 
     @ui.action()
@@ -640,9 +807,7 @@ class _TutorQuestionEntriesMixin:
                     "selected_topic_id": context.get("selected_topic_id") or "",
                     "selected_topic_name": context.get("selected_topic_name") or "",
                     "selection_reason": context.get("selection_reason") or "no_data",
-                    "selection_reason_payload": context.get(
-                        "selection_reason_payload"
-                    )
+                    "selection_reason_payload": context.get("selection_reason_payload")
                     or {},
                     "difficulty": context.get("difficulty") or 3,
                     "weak_topics": context.get("weak_topics") or [],
@@ -658,9 +823,7 @@ class _TutorQuestionEntriesMixin:
         except SdkError as exc:
             return Err(exc)
         except Exception as exc:
-            return _entry_exception_error(
-                self, exc, operation="study_question_context"
-            )
+            return _entry_exception_error(self, exc, operation="study_question_context")
 
     @ui.action()
     @plugin_entry(
@@ -679,7 +842,9 @@ class _TutorQuestionEntriesMixin:
                 "selection_context_id": {"type": "string", "default": ""},
             },
         },
-        timeout=55.0,
+        # Two bounded generation calls (45s each) and two fail-closed semantic
+        # validations (15s each), plus a small framework handoff margin.
+        timeout=TARGETED_GENERATION_TIMEOUT_SECONDS,
         llm_result_fields=[
             "question",
             "hint",
@@ -813,9 +978,11 @@ class _TutorQuestionEntriesMixin:
             payload = await self._generate_question_payload(
                 source_text=source_text,
                 topic=topic,
-                source="ocr_snapshot"
-                if used_ocr_fallback
-                else ("vision_image" if image_only_source else "manual"),
+                source=(
+                    "ocr_snapshot"
+                    if used_ocr_fallback
+                    else ("vision_image" if image_only_source else "manual")
+                ),
                 vision_image_payload=vision_image_payload,
             )
             return Ok(payload)

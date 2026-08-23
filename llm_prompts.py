@@ -10,6 +10,7 @@ from .constants import (
     LLM_OPERATION_CONCEPT_EXPLAIN,
     LLM_OPERATION_KNOWLEDGE_TRACK,
     LLM_OPERATION_QUESTION_GENERATE,
+    LLM_OPERATION_QUESTION_VALIDATE,
     LLM_OPERATION_SUMMARIZE_SESSION,
     MODE_COMPANION,
     SUPPORTED_LLM_OPERATIONS,
@@ -31,11 +32,41 @@ from .prompt_templates import (
     STUDY_QUESTION_GENERATE_EXAMPLE,
     STUDY_QUESTION_GENERATE_REQUIREMENTS,
     STUDY_QUESTION_GENERATE_SYSTEM_PROMPT,
+    STUDY_QUESTION_VALIDATE_EXAMPLE,
+    STUDY_QUESTION_VALIDATE_REQUIREMENTS,
+    STUDY_QUESTION_VALIDATE_SYSTEM_PROMPT,
     STUDY_STRUCTURED_MODE_PREFIX_TEMPLATE,
     STUDY_STRUCTURED_USER_TEMPLATE,
     STUDY_SUMMARIZE_SESSION_EXAMPLE,
     STUDY_SUMMARIZE_SESSION_REQUIREMENTS,
     STUDY_SUMMARIZE_SESSION_SYSTEM_PROMPT,
+)
+
+_TARGETED_PROMPT_ALLOWED_FIELDS = frozenset(
+    {
+        "operation",
+        "input_text",
+        "language",
+        "mode",
+        "source",
+        "source_text",
+        "text",
+        "targeted_question",
+        "selected_topic_id",
+        "selected_topic_name",
+        "selection_reason",
+        "selection_reason_payload",
+        "knowledge_question_params",
+        "knowledge_guidance",
+        "scope_key",
+        "scope_revision",
+        "practice_scope",
+        "scope_topic_count",
+        "generation_feedback",
+    }
+)
+_TARGETED_PRIVATE_ANSWER_FIELDS = frozenset(
+    {"user_answer", "learner_answer", "submitted_answer"}
 )
 
 _PROMPT_CONTEXT_ALLOWED_FIELDS = frozenset(
@@ -78,6 +109,9 @@ _PROMPT_CONTEXT_ALLOWED_FIELDS = frozenset(
         "screen_type",
         "weak_points",
         "next_steps",
+        "reference_answer",
+        "target_topic",
+        "necessary_relations",
     }
 )
 _PROMPT_PRIVATE_FIELDS = frozenset(
@@ -109,12 +143,129 @@ def _sanitize_nested_prompt_value(value: Any) -> Any:
     return value
 
 
+def _sanitize_targeted_prompt_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _sanitize_targeted_prompt_value(item)
+            for key, item in value.items()
+            if str(key) not in _PROMPT_PRIVATE_FIELDS
+            and str(key) not in _TARGETED_PRIVATE_ANSWER_FIELDS
+        }
+    if isinstance(value, list):
+        return [_sanitize_targeted_prompt_value(item) for item in value]
+    return value
+
+
 def _prompt_context(context: dict[str, Any]) -> dict[str, Any]:
+    if bool(context.get("targeted_question")):
+        return {
+            str(key): _sanitize_targeted_prompt_value(value)
+            for key, value in context.items()
+            if str(key) in _TARGETED_PROMPT_ALLOWED_FIELDS
+        }
     return {
         str(key): _sanitize_nested_prompt_value(value)
         for key, value in context.items()
         if str(key) in _PROMPT_CONTEXT_ALLOWED_FIELDS
     }
+
+
+def _targeted_context_parts(
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    safe = _prompt_context(context)
+    params = dict(safe.get("knowledge_question_params") or {})
+    target = dict(params.get("target_topic") or {})
+    target_core_keys = (
+        "id",
+        "name",
+        "title",
+        "subject",
+        "stage",
+        "course_family",
+        "chapter",
+        "unit",
+        "description",
+        "definition",
+        "question_types",
+        "common_mistakes",
+    )
+    target_core = {key: target[key] for key in target_core_keys if key in target}
+    required_params = {
+        key: params.get(key)
+        for key in (
+            "target_topic_id",
+            "suggested_difficulty",
+            "mastery",
+            "blockers",
+            "retry_wrong_question",
+            "prompt_guidance",
+        )
+        if params.get(key) not in (None, "", [], {})
+    }
+    required_params["target_topic"] = target_core
+    required = {
+        key: safe.get(key)
+        for key in (
+            "operation",
+            "language",
+            "mode",
+            "source",
+            "source_text",
+            "text",
+            "targeted_question",
+            "selected_topic_id",
+            "selected_topic_name",
+            "selection_reason",
+            "scope_key",
+            "scope_revision",
+            "practice_scope",
+            "scope_topic_count",
+            "generation_feedback",
+        )
+        if safe.get(key) not in (None, "", [], {})
+    }
+    required["knowledge_question_params"] = required_params
+    optional = {
+        "selection_reason_payload": safe.get("selection_reason_payload") or {},
+        "target_examples": target.get("examples") or [],
+        "target_related": target.get("related") or [],
+        "knowledge_guidance": safe.get("knowledge_guidance") or {},
+    }
+    return required, optional
+
+
+def _targeted_context_json_for_prompt(context: dict[str, Any], limit: int) -> str:
+    required, optional = _targeted_context_parts(context)
+    required_json = _json_dump(required)
+    if count_tokens(required_json) > limit:
+        raise ValueError(
+            "targeted question required context exceeds prompt token budget"
+        )
+    for list_limit, string_limit, dict_key_limit in (
+        (16, 1000, 64),
+        (8, 500, 32),
+        (4, 240, 16),
+        (2, 120, 8),
+        (1, 80, 4),
+    ):
+        compact_optional = _compact_prompt_value(
+            optional,
+            list_limit=list_limit,
+            string_limit=string_limit,
+            dict_key_limit=dict_key_limit,
+        )
+        rendered = _json_dump(
+            {"_prompt_truncated": True, **required, **dict(compact_optional or {})}
+        )
+        if count_tokens(rendered) <= limit:
+            return rendered
+    return _json_dump({"_prompt_truncated": True, **required})
+
+
+def ensure_targeted_prompt_context_fits(context: dict[str, Any]) -> None:
+    limit = STUDY_PROMPT_CONTEXT_MAX_TOKENS[LLM_OPERATION_QUESTION_GENERATE]
+    _targeted_context_json_for_prompt(context, limit)
 
 
 def _json_dump(value: object) -> str:
@@ -180,6 +331,10 @@ def _compact_prompt_value(
 
 def _context_json_for_prompt(operation: str, context: dict[str, Any]) -> str:
     limit = STUDY_PROMPT_CONTEXT_MAX_TOKENS.get(operation, 4000)
+    if operation == LLM_OPERATION_QUESTION_GENERATE and bool(
+        context.get("targeted_question")
+    ):
+        return _targeted_context_json_for_prompt(context, limit)
     safe_context = _prompt_context(context)
     raw = _json_dump(safe_context)
     if count_tokens(raw) <= limit:
@@ -207,15 +362,17 @@ def _context_json_for_prompt(operation: str, context: dict[str, Any]) -> str:
     }
     while count_tokens(_json_dump(fallback)) > limit and excerpt:
         excerpt = excerpt[:-1]
-        fallback["context_excerpt"] = f"{excerpt}\n...[truncated {len(raw) - len(excerpt)} chars]"
-    return _json_dump(
-        fallback
-    )
+        fallback["context_excerpt"] = (
+            f"{excerpt}\n...[truncated {len(raw) - len(excerpt)} chars]"
+        )
+    return _json_dump(fallback)
 
 
 def _mode_guidance(mode: str) -> str:
     selected_mode = normalize_mode(mode)
-    return STUDY_MODE_SYSTEM_GUIDANCE.get(selected_mode, STUDY_MODE_SYSTEM_GUIDANCE[MODE_COMPANION])
+    return STUDY_MODE_SYSTEM_GUIDANCE.get(
+        selected_mode, STUDY_MODE_SYSTEM_GUIDANCE[MODE_COMPANION]
+    )
 
 
 def _build_structured_messages(
@@ -233,7 +390,9 @@ def _build_structured_messages(
         context_json=_context_json_for_prompt(operation, context),
     )
     if mode:
-        prompt = STUDY_STRUCTURED_MODE_PREFIX_TEMPLATE.format(mode=normalize_mode(mode), prompt=prompt)
+        prompt = STUDY_STRUCTURED_MODE_PREFIX_TEMPLATE.format(
+            mode=normalize_mode(mode), prompt=prompt
+        )
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
@@ -280,7 +439,9 @@ def build_concept_explain_messages(
                 source=source,
                 mode=selected_mode,
                 response_mode=response_mode,
-                content_type=str(context.get("study_semantic_content_type") or "unknown"),
+                content_type=str(
+                    context.get("study_semantic_content_type") or "unknown"
+                ),
                 intent=str(context.get("study_semantic_intent") or "unknown"),
                 response_guidance=STUDY_CONCEPT_RESPONSE_MODE_GUIDANCE[response_mode],
                 text=f"{text.strip()}{guidance_block}",
@@ -307,6 +468,20 @@ def build_question_generate_messages(
         context=context,
         example=STUDY_QUESTION_GENERATE_EXAMPLE,
         mode=mode,
+    )
+
+
+def build_question_validate_messages(
+    *, context: dict[str, Any] | None = None
+) -> list[dict[str, str]]:
+    context = dict(context or {})
+    return _build_structured_messages(
+        operation=LLM_OPERATION_QUESTION_VALIDATE,
+        system_prompt=STUDY_QUESTION_VALIDATE_SYSTEM_PROMPT,
+        requirements=STUDY_QUESTION_VALIDATE_REQUIREMENTS,
+        context=context,
+        example=STUDY_QUESTION_VALIDATE_EXAMPLE,
+        mode="",
     )
 
 
@@ -373,7 +548,9 @@ def build_summarize_session_messages(
     )
 
 
-def build_operation_messages(operation: str, context: dict[str, Any]) -> list[dict[str, str]]:
+def build_operation_messages(
+    operation: str, context: dict[str, Any]
+) -> list[dict[str, str]]:
     if operation not in SUPPORTED_LLM_OPERATIONS:
         raise ValueError(f"unsupported study llm operation: {operation}")
     normalized_operation = operation
@@ -384,6 +561,8 @@ def build_operation_messages(operation: str, context: dict[str, Any]) -> list[di
             mode=str(context.get("mode") or MODE_COMPANION),
             context=context,
         )
+    if normalized_operation == LLM_OPERATION_QUESTION_VALIDATE:
+        return build_question_validate_messages(context=context)
     if normalized_operation == LLM_OPERATION_ANSWER_EVALUATE:
         return build_answer_evaluate_messages(
             question=str(context.get("question") or ""),
@@ -419,5 +598,7 @@ __all__ = [
     "build_knowledge_track_messages",
     "build_operation_messages",
     "build_question_generate_messages",
+    "build_question_validate_messages",
+    "ensure_targeted_prompt_context_fits",
     "build_summarize_session_messages",
 ]
