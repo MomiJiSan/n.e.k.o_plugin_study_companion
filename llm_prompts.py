@@ -112,6 +112,7 @@ _PROMPT_CONTEXT_ALLOWED_FIELDS = frozenset(
         "reference_answer",
         "target_topic",
         "necessary_relations",
+        "evaluation_correction",
     }
 )
 _PROMPT_PRIVATE_FIELDS = frozenset(
@@ -127,6 +128,7 @@ _PROMPT_PRIVATE_FIELDS = frozenset(
         "base_url",
         "internal_private_payload",
         "current_question_private",
+        "target_binding",
     }
 )
 

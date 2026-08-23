@@ -41,8 +41,11 @@ async def answer_evaluate(
 def _normalize_evaluation(
     self, raw: dict[str, Any], context: dict[str, Any]
 ) -> dict[str, Any]:
-    score = _clamp_int(raw.get("score"), 0, 100, 0)
-    verdict = _as_str(raw.get("verdict")).strip().lower()
+    raw_score = raw.get("score")
+    raw_verdict = _as_str(raw.get("verdict")).strip().lower()
+    raw_final_correct = raw.get("final_answer_correct")
+    score = _clamp_int(raw_score, 0, 100, 0)
+    verdict = raw_verdict
     if verdict not in _ANSWER_VERDICTS:
         verdict = self._verdict_from_score(
             score, answer=_as_str(context.get("answer")).strip()
@@ -76,18 +79,30 @@ def _normalize_evaluation(
         for item in _as_list(raw.get("step_feedback"))
         if _as_str(item, str(item)).strip()
     ]
-    reference_answer = _as_str(raw.get("reference_answer")).strip() or _as_str(
-        context.get("expected_answer")
-    ).strip()
+    reference_answer = (
+        _as_str(raw.get("reference_answer")).strip()
+        or _as_str(context.get("expected_answer")).strip()
+    )
     return {
         "verdict": verdict,
         "score": score,
         "error_type": error_type,
         "feedback": feedback,
         "next_action": next_action,
-        "final_answer_correct": raw.get("final_answer_correct")
-        if isinstance(raw.get("final_answer_correct"), bool)
-        else verdict == "correct",
+        "final_answer_correct": (
+            raw_final_correct
+            if isinstance(raw_final_correct, bool)
+            else verdict == "correct"
+        ),
+        "_evaluation_score_valid": bool(
+            isinstance(raw_score, int)
+            and not isinstance(raw_score, bool)
+            and 0 <= raw_score <= 100
+        ),
+        "_evaluation_verdict_valid": raw_verdict in _ANSWER_VERDICTS,
+        "_evaluation_final_answer_correct_valid": bool(
+            raw_final_correct is None or isinstance(raw_final_correct, bool)
+        ),
         "covered_points": covered_points,
         "missing_points": missing_points,
         "misconceptions": misconceptions,
