@@ -29,6 +29,15 @@ def test_notebook_static_assets_are_loaded_in_dependency_order() -> None:
     assert "note_ids: notebookNoteIds" in panels
 
 
+def test_notebook_ci_does_not_persist_checkout_credentials() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "frontend-tests.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "permissions:\n  contents: read" in workflow
+    assert "persist-credentials: false" in workflow
+
+
 def test_notebook_i18n_contract_is_complete_in_all_locales() -> None:
     bundles = {
         locale: json.loads(
