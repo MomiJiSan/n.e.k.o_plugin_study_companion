@@ -85,10 +85,10 @@ def _normalize_question(
         "hint": _as_str(raw.get("hint")).strip(),
         "difficulty": _clamp_int(raw.get("difficulty"), 1, 5, 3),
         "topic": topic,
-        "target_topic_id": _as_str(raw.get("target_topic_id")).strip(),
         "screen_type": self._screen_type_from_context(context),
     }
     if bool(context.get("targeted_question")):
+        normalized["target_topic_id"] = _as_str(raw.get("target_topic_id")).strip()
         raw_difficulty = raw.get("difficulty")
         normalized["_targeted_difficulty_valid"] = (
             isinstance(raw_difficulty, int)
