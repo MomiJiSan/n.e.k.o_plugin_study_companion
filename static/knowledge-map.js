@@ -6,8 +6,107 @@ let knowledgeMapCourseFamily = '';
 let knowledgeMapChapter = '';
 let knowledgeMapUnit = '';
 let knowledgeMapZoomIndex = 3;
+let knowledgeMapPayload = null;
+let knowledgeMapContentNode = null;
+let knowledgeMapContentHost = null;
+let knowledgeMapHostRegistrationId = 0;
+const knowledgeMapHostRegistrations = [];
 const practiceScopePath = document.getElementById('practiceScopePath');
 const clearPracticeScopeBtn = document.getElementById('clearPracticeScopeBtn');
+
+function validateKnowledgeMapHost(host) {
+  const requiredMethods = ['replaceContent', 'setScale', 'isActive', 'activatePractice'];
+  if (!host || typeof host !== 'object') {
+    throw new TypeError('Knowledge map host must be an object');
+  }
+  const missing = requiredMethods.filter((method) => typeof host[method] !== 'function');
+  if (missing.length) {
+    throw new TypeError(`Knowledge map host is missing: ${missing.join(', ')}`);
+  }
+  return host;
+}
+
+function activeKnowledgeMapHost() {
+  for (let index = knowledgeMapHostRegistrations.length - 1; index >= 0; index -= 1) {
+    const host = knowledgeMapHostRegistrations[index].host;
+    try {
+      if (host.isActive()) return host;
+    } catch (error) {
+      window.console?.error?.(error);
+    }
+  }
+  return null;
+}
+
+function setActiveKnowledgeMapScale(level = knowledgeMapZoomLevel()) {
+  const host = activeKnowledgeMapHost();
+  if (!host) return false;
+  host.setScale(level);
+  return true;
+}
+
+function replaceActiveKnowledgeMapContent(node) {
+  if (!node?.nodeType) throw new TypeError('Knowledge map content must be a DOM node');
+  knowledgeMapContentNode = node;
+  knowledgeMapContentHost = null;
+  const host = activeKnowledgeMapHost();
+  if (!host) return false;
+  host.replaceContent(node);
+  knowledgeMapContentHost = host;
+  host.setScale(knowledgeMapZoomLevel());
+  return true;
+}
+
+async function activatePracticeFromKnowledgeMap() {
+  const host = activeKnowledgeMapHost();
+  if (!host) return false;
+  return await host.activatePractice();
+}
+
+function registerKnowledgeMapHost(host) {
+  const registeredHost = validateKnowledgeMapHost(host);
+  const registration = {
+    host: registeredHost,
+    id: knowledgeMapHostRegistrationId += 1,
+  };
+  knowledgeMapHostRegistrations.push(registration);
+  registeredHost.setScale(knowledgeMapZoomLevel());
+  if (activeKnowledgeMapHost() === registeredHost && knowledgeMapContentNode) {
+    registeredHost.replaceContent(knowledgeMapContentNode);
+    knowledgeMapContentHost = registeredHost;
+  }
+  let released = false;
+  return function releaseKnowledgeMapHost() {
+    if (released) return false;
+    released = true;
+    const ownedContent = knowledgeMapContentHost === registeredHost;
+    const index = knowledgeMapHostRegistrations.findIndex((item) => item.id === registration.id);
+    if (index >= 0) knowledgeMapHostRegistrations.splice(index, 1);
+    const nextHost = activeKnowledgeMapHost();
+    if (ownedContent && knowledgeMapContentNode) {
+      if (nextHost) {
+        nextHost.replaceContent(knowledgeMapContentNode);
+        knowledgeMapContentHost = nextHost;
+      } else {
+        registeredHost.replaceContent(document.createDocumentFragment());
+        knowledgeMapContentHost = null;
+      }
+    }
+    if (nextHost) nextHost.setScale(knowledgeMapZoomLevel());
+    return true;
+  };
+}
+
+function currentKnowledgeMapPayload() {
+  if (knowledgeMapPayload && typeof knowledgeMapPayload === 'object') return knowledgeMapPayload;
+  if (typeof lastKnowledgeMapPayload !== 'undefined' && lastKnowledgeMapPayload) return lastKnowledgeMapPayload;
+  if (typeof lastStatusPayload !== 'undefined' && lastStatusPayload) return lastStatusPayload;
+  return {};
+}
+
+function rerenderKnowledgeMap(payload = null) {
+  return replaceActiveKnowledgeMapContent(renderKnowledgePanel(payload || currentKnowledgeMapPayload()));
+}
 
 function knowledgeMapActiveStage() {
   return knowledgeMapStage || normalizeLearningStage(learningProfile.stage) || 'all';
@@ -137,8 +236,7 @@ async function activateKnowledgePracticeScope(scope) {
     scope_revision: data.scope_revision || data.scope?.scope_revision || 0,
     selection_reason: 'loading',
   });
-  closeSurfaceDrawer();
-  focusAfterScroll(openPracticePanel(), generateQuestionBtn);
+  await activatePracticeFromKnowledgeMap();
   setStatus(t('ui.practice.scope_set', 'Practice scope selected. Click Generate Question to begin.'));
   return data;
 }
@@ -245,7 +343,7 @@ function renderKnowledgeZoomControls() {
   });
   function syncZoomControls() {
     const level = knowledgeMapZoomLevel();
-    surfaceDrawer.dataset.windowScale = String(level);
+    setActiveKnowledgeMapScale(level);
     const zoomOut = root.querySelector('[data-action="zoom-out"]');
     const zoomReset = root.querySelector('[data-action="zoom-reset"]');
     const zoomIn = root.querySelector('[data-action="zoom-in"]');
@@ -314,9 +412,7 @@ function renderKnowledgeSubjectSelector(nodes = [], stage = knowledgeMapActiveSt
       knowledgeMapCourseFamily = '';
       knowledgeMapChapter = '';
       knowledgeMapUnit = '';
-      if (surfaceDrawerBody) {
-        surfaceDrawerBody.replaceChildren(renderKnowledgePanel(lastKnowledgeMapPayload || lastStatusPayload));
-      }
+      rerenderKnowledgeMap();
     });
     actions.appendChild(button);
   });
@@ -379,7 +475,7 @@ function renderKnowledgeHierarchyScopePicker(nodes = []) {
         knowledgeMapCourseFamily = value;
         knowledgeMapChapter = '';
         knowledgeMapUnit = '';
-        surfaceDrawerBody?.replaceChildren(renderKnowledgePanel(lastKnowledgeMapPayload || lastStatusPayload));
+        rerenderKnowledgeMap();
       },
       subject === 'all',
     ));
@@ -391,7 +487,7 @@ function renderKnowledgeHierarchyScopePicker(nodes = []) {
     (value) => {
       knowledgeMapChapter = value;
       knowledgeMapUnit = '';
-      surfaceDrawerBody?.replaceChildren(renderKnowledgePanel(lastKnowledgeMapPayload || lastStatusPayload));
+      rerenderKnowledgeMap();
     },
     stage === 'all' || subject === 'all',
   ));
@@ -401,7 +497,7 @@ function renderKnowledgeHierarchyScopePicker(nodes = []) {
     knowledgeMapUnit,
     (value) => {
       knowledgeMapUnit = value;
-      surfaceDrawerBody?.replaceChildren(renderKnowledgePanel(lastKnowledgeMapPayload || lastStatusPayload));
+      rerenderKnowledgeMap();
     },
     !knowledgeMapChapter,
   ));
@@ -452,9 +548,7 @@ function renderKnowledgeStageSelector(nodes = []) {
       knowledgeMapCourseFamily = '';
       knowledgeMapChapter = '';
       knowledgeMapUnit = '';
-      if (surfaceDrawerBody) {
-        surfaceDrawerBody.replaceChildren(renderKnowledgePanel(lastKnowledgeMapPayload || lastStatusPayload));
-      }
+      rerenderKnowledgeMap();
     });
     actions.appendChild(button);
   });
@@ -939,7 +1033,8 @@ function renderKnowledgeEdges(nodes = [], edges = [], edgeCount = 0, topicCount 
 }
 
 function renderKnowledgePanel(payload = null) {
-  const data = payload && typeof payload === 'object' ? payload : (lastStatusPayload || {});
+  const data = payload && typeof payload === 'object' ? payload : currentKnowledgeMapPayload();
+  knowledgeMapPayload = data;
   const summary = data.summary || data.knowledge_summary || {};
   const nodes=Array.isArray(data.nodes) ? data.nodes : [];
   const edges=Array.isArray(data.edges) ? data.edges : [];
@@ -952,7 +1047,7 @@ function renderKnowledgePanel(payload = null) {
   const edgeCount = countFromSummary(summary, ['edge_count', 'edges']) || edges.length;
   const weakTopics = shownNodes.filter((node) => masteryLevelForPanel(node) === 'weak').length;
   const root = surfacePanel('knowledge-map', `${shownNodes.length}/${topicCount}`);
-  surfaceDrawer.dataset.windowScale = String(knowledgeMapZoomLevel());
+  setActiveKnowledgeMapScale(knowledgeMapZoomLevel());
   root.querySelector('.study-panel__header')?.appendChild(renderKnowledgeZoomControls());
   const detailMount = drawerElement('div', 'knowledge-node-detail-mount');
   const state = drawerElement('section', 'study-panel__state');
@@ -977,3 +1072,26 @@ function renderKnowledgePanel(payload = null) {
   root.appendChild(detailMount);
   return root;
 }
+
+window.StudyCompanionKnowledgeMap = Object.freeze({
+  activatePractice: activatePracticeFromKnowledgeMap,
+  getState() {
+    return Object.freeze({
+      subject: knowledgeMapSubject,
+      courseFamily: knowledgeMapCourseFamily,
+      chapter: knowledgeMapChapter,
+      unit: knowledgeMapUnit,
+      zoomLevel: knowledgeMapZoomLevel(),
+      payload: knowledgeMapPayload,
+    });
+  },
+  isActive() {
+    return Boolean(activeKnowledgeMapHost());
+  },
+  registerHost: registerKnowledgeMapHost,
+  render: renderKnowledgePanel,
+  renderLoading: renderKnowledgeLoadingPanel,
+  replaceContent: replaceActiveKnowledgeMapContent,
+  rerender: rerenderKnowledgeMap,
+  setScale: setActiveKnowledgeMapScale,
+});

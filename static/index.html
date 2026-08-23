@@ -361,18 +361,57 @@
 
                 <section
                   id="knowledgeWorkspacePanel"
-                  class="workspace-panel workspace-placeholder"
+                  class="workspace-panel knowledge-workspace"
                   data-workspace-panel="knowledge"
                   role="tabpanel"
                   tabindex="0"
                   aria-labelledby="workspaceTabKnowledge"
                   hidden
                 >
-                  <span class="workspace-placeholder__icon" aria-hidden="true">⌁</span>
-                  <div>
-                    <h2 data-i18n="ui.workspace.knowledge.title">Knowledge</h2>
-                    <p data-i18n="ui.workspace.knowledge.pr1_hint">The knowledge map opens in its full-screen view.</p>
+                  <header id="knowledgeWorkspaceHeader" class="knowledge-workspace__header">
+                    <div class="knowledge-workspace__heading">
+                      <span class="diagnosis-label" data-i18n="ui.workspace.knowledge.eyebrow">Knowledge Map</span>
+                      <h2 data-i18n="ui.workspace.knowledge.title">Knowledge</h2>
+                      <p data-i18n="ui.workspace.knowledge.description">Explore topic relationships and choose a practice scope.</p>
+                    </div>
+                    <button
+                      id="knowledgeMapFullscreenBtn"
+                      class="button button-secondary knowledge-workspace__fullscreen"
+                      type="button"
+                      data-knowledge-map-fullscreen
+                      aria-controls="surfaceDrawer"
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                    >
+                      <span aria-hidden="true">⛶</span>
+                      <span data-i18n="ui.workspace.knowledge.fullscreen">Full-screen view</span>
+                    </button>
+                  </header>
+
+                  <div id="knowledgeMapStatus" class="knowledge-workspace__status" aria-live="polite" aria-atomic="true">
+                    <div id="knowledgeMapLoading" class="knowledge-workspace__notice" role="status">
+                      <span class="knowledge-workspace__notice-icon" aria-hidden="true">⌁</span>
+                      <span data-i18n="ui.workspace.loading">Loading workspace...</span>
+                    </div>
+                    <div id="knowledgeMapError" class="knowledge-workspace__notice knowledge-workspace__notice--error" role="alert" hidden>
+                      <span class="knowledge-workspace__notice-icon" aria-hidden="true">!</span>
+                      <div>
+                        <strong data-i18n="ui.workspace.knowledge.error_title">Unable to load the knowledge map</strong>
+                        <p id="knowledgeMapErrorMessage"></p>
+                      </div>
+                    </div>
                   </div>
+
+                  <div
+                    id="knowledgeMapContent"
+                    class="knowledge-workspace__content"
+                    data-knowledge-map-host
+                    role="region"
+                    tabindex="0"
+                    data-i18n-aria-label="ui.workspace.knowledge.canvas_label"
+                    aria-label="Knowledge map canvas"
+                    aria-busy="true"
+                  ></div>
                 </section>
 
                 <section
