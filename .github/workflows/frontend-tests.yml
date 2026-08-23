@@ -1,0 +1,46 @@
+name: Study Companion Frontend Tests
+
+on:
+  push:
+    paths:
+      - "static/**"
+      - "i18n/**"
+      - "tests/test_notebook_frontend.py"
+      - "tests/frontend/**"
+      - ".github/workflows/frontend-tests.yml"
+  pull_request:
+    paths:
+      - "static/**"
+      - "i18n/**"
+      - "tests/test_notebook_frontend.py"
+      - "tests/frontend/**"
+      - ".github/workflows/frontend-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notebook-frontend:
+    name: Notebook frontend (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install frontend test dependencies
+        working-directory: tests/frontend
+        run: npm ci
+
+      - name: Run notebook DOM regression tests
+        run: uv run --with pytest pytest tests/test_notebook_frontend.py -q

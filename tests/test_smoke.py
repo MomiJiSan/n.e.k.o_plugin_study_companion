@@ -303,5 +303,5 @@ def test_both_knowledge_map_uis_localize_internal_edge_values() -> None:
     assert "activatePracticeScope('explicit_topic')" not in hosted_source
     assert "topicAction.disabled = false" in static_source
     assert "disabled={false}" in hosted_source
-    assert "./style.css?v=study-topic-practice-dialog-enabled-20260822" in static_index
+    assert "./style.css?v=study-notebook-migration-20260823" in static_index
     assert "./knowledge-map.js?v=study-topic-practice-dialog-enabled-20260822" in static_index
