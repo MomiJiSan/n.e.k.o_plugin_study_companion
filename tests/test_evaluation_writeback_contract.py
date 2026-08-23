@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -603,10 +604,18 @@ async def _run_successful_repair_entry_test(
     assert result.value["verdict"] == "correct"
     assert result.value["score"] == 90
     assert result.value["final_answer_correct"] is True
+    assert result.value["attempt_status"] == "correct"
+    assert result.value["mastery_status"] == "insufficient_evidence"
+    assert result.value["scope_status"] == "active"
+    assert result.value["practice_scope_status"] == "active"
+    assert result.value["can_continue_review"] is False
     assert subject._agent.calls == 2
     assert subject.finalized == 1
     assert subject.persisted == 1
     assert subject._state.current_question["attempt_evaluated"] is True
+    assert subject._state.current_question["answer_evaluation_cache"][
+        "attempt_status"
+    ] == "correct"
 
 
 def test_successful_semantic_repair_finalizes_exactly_once(
@@ -678,3 +687,204 @@ def test_persistence_failure_clears_reservation_without_consuming_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     asyncio.run(_run_persistence_failure_entry_test(monkeypatch))
+
+
+def _practice_question_payload() -> dict:
+    return {
+        "source": "targeted_question",
+        "selected_topic_id": "topic-a",
+        "practice_scope": {
+            "mode": "explicit_topic",
+            "topic_id": "topic-a",
+            "scope_key": "scope-a",
+            "scope_revision": 7,
+        },
+        "scope_key": "scope-a",
+        "scope_revision": 7,
+        "target_binding": {
+            "target_topic_id": "topic-a",
+            "validation_status": "passed",
+            "generated_at": "2026-08-24T00:00:00Z",
+        },
+    }
+
+
+async def _run_practice_outcome_enrichment_test(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fail_read: bool,
+    active_scope_key: str = "scope-a",
+    active_scope_revision: int = 7,
+    question_scope_revision: int = 7,
+    verdict: str = "correct",
+) -> dict:
+    entries, _, _, _ = _load_answer_entries(
+        monkeypatch, f"_practice_outcome_enrichment_{fail_read}"
+    )
+
+    class Store:
+        def get_latest_mastery(self, topic_id: str):
+            assert topic_id == "topic-a"
+            if fail_read:
+                raise RuntimeError("forced read failure")
+            return {"mastery": 0.8, "attempts": 3, "flags": []}
+
+        def list_wrong_questions(self, **kwargs):
+            assert kwargs == {
+                "limit": 1,
+                "topic_id": "topic-a",
+                "statuses": ("active", "retrying"),
+            }
+            return []
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        logger = _Logger()
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+        def __init__(self) -> None:
+            self._lock = asyncio.Lock()
+            self._scope_lock = asyncio.Lock()
+            self._state = SimpleNamespace(
+                active_practice_scope={"scope_key": active_scope_key},
+                practice_scope_revision=active_scope_revision,
+            )
+
+        def _practice_scope_write_lock(self):
+            return self._scope_lock
+
+    question = _practice_question_payload()
+    question["scope_revision"] = question_scope_revision
+    return await Subject()._build_practice_outcome_payload(
+        payload={"verdict": verdict},
+        question_payload=question,
+        current_question=question,
+        question_source="current_question",
+    )
+
+
+def test_practice_outcome_reads_mastery_and_active_wrong_questions_after_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = asyncio.run(
+        _run_practice_outcome_enrichment_test(monkeypatch, fail_read=False)
+    )
+    assert result["attempt_status"] == "correct"
+    assert result["mastery_status"] == "mastered"
+    assert result["scope_status"] == "reviewing"
+    assert result["practice_scope_status"] == "completed"
+
+
+def test_practice_outcome_read_failure_is_conservative_and_does_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = asyncio.run(
+        _run_practice_outcome_enrichment_test(monkeypatch, fail_read=True)
+    )
+    assert result["attempt_status"] == "correct"
+    assert result["mastery_status"] == "insufficient_evidence"
+    assert result["scope_status"] == "active"
+    assert result["practice_scope_status"] == "active"
+
+
+@pytest.mark.parametrize(
+    ("active_scope_key", "active_revision", "question_revision"),
+    [
+        ("scope-b", 7, 7),
+        ("scope-a", 8, 7),
+    ],
+)
+def test_stale_question_scope_cannot_become_reviewing_but_keeps_mastery(
+    monkeypatch: pytest.MonkeyPatch,
+    active_scope_key: str,
+    active_revision: int,
+    question_revision: int,
+) -> None:
+    result = asyncio.run(
+        _run_practice_outcome_enrichment_test(
+            monkeypatch,
+            fail_read=False,
+            active_scope_key=active_scope_key,
+            active_scope_revision=active_revision,
+            question_scope_revision=question_revision,
+        )
+    )
+    assert result["mastery_status"] == "mastered"
+    assert result["scope_status"] == "active"
+    assert result["practice_scope_status"] == "active"
+    assert result["can_continue_review"] is False
+
+
+@pytest.mark.parametrize("verdict", ["wrong", "partial", "dont_know"])
+def test_non_correct_attempt_cannot_enter_reviewing_after_mastery_read(
+    monkeypatch: pytest.MonkeyPatch, verdict: str
+) -> None:
+    result = asyncio.run(
+        _run_practice_outcome_enrichment_test(
+            monkeypatch,
+            fail_read=False,
+            verdict=verdict,
+        )
+    )
+    assert result["attempt_status"] == verdict
+    assert result["mastery_status"] == "progressing"
+    assert result["scope_status"] == "active"
+    assert result["practice_scope_status"] == "active"
+    assert result["can_continue_review"] is False
+
+
+async def _run_scope_switch_race_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict:
+    entries, _, _, _ = _load_answer_entries(
+        monkeypatch, "_practice_outcome_scope_switch_race"
+    )
+    evidence_loaded = threading.Event()
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        logger = _Logger()
+
+        def __init__(self) -> None:
+            self._lock = asyncio.Lock()
+            self._scope_lock = asyncio.Lock()
+            self._state = SimpleNamespace(
+                active_practice_scope={"scope_key": "scope-a"},
+                practice_scope_revision=7,
+            )
+
+        def _practice_scope_write_lock(self):
+            return self._scope_lock
+
+        def _load_practice_mastery_evidence(self, topic_id: str):
+            assert topic_id == "topic-a"
+            evidence_loaded.set()
+            return {"mastery": 0.95, "attempts": 8, "flags": []}, False
+
+    subject = Subject()
+    question = _practice_question_payload()
+    await subject._scope_lock.acquire()
+    outcome_task = asyncio.create_task(
+        subject._build_practice_outcome_payload(
+            payload={"verdict": "correct"},
+            question_payload=question,
+            current_question=question,
+            question_source="current_question",
+        )
+    )
+    try:
+        assert await asyncio.to_thread(evidence_loaded.wait, 2)
+        async with subject._lock:
+            subject._state.active_practice_scope = {"scope_key": "scope-b"}
+            subject._state.practice_scope_revision = 8
+    finally:
+        subject._scope_lock.release()
+    return await asyncio.wait_for(outcome_task, timeout=2)
+
+
+def test_scope_switch_is_observed_atomically_before_reviewing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = asyncio.run(_run_scope_switch_race_test(monkeypatch))
+    assert result["mastery_status"] == "mastered"
+    assert result["scope_status"] == "active"
+    assert result["practice_scope_status"] == "active"
+    assert result["can_continue_review"] is False

@@ -47,6 +47,29 @@ function knowledgeCurrentPracticeScope(nodes = []) {
   };
 }
 
+function knowledgeTopicPracticeScope(node = {}) {
+  const stage = String(node.stage || '').trim();
+  const subject = subjectValueFromNode(node);
+  const topicId = topicIdFromNode(node);
+  if (!stage || !subject || !topicId) return null;
+  const scope = {
+    schema_version: 1,
+    mode: 'explicit_topic',
+    stage,
+    subject,
+    topic_id: topicId,
+  };
+  if (stage === 'college') {
+    scope.course_family = courseFamilyValueFromNode(node);
+    if (!scope.course_family) return null;
+  }
+  const chapter = String(node.chapter || '').trim();
+  const unit = String(node.unit || '').trim();
+  if (chapter) scope.chapter = chapter;
+  if (unit) scope.unit = unit;
+  return scope;
+}
+
 async function runKnowledgePracticeScopeAction(button, scope) {
   if (!scope || button.disabled) return;
   button.disabled = true;
@@ -67,8 +90,10 @@ function practiceScopeDisplayPath(scope = currentPracticeScope) {
 }
 
 function setPracticeScopeState(payload = {}) {
+  const previousScopeKey = String(currentPracticeScope?.scope_key || '').trim();
   const active = payload?.active === true && payload.scope && typeof payload.scope === 'object';
   currentPracticeScope = active ? payload.scope : null;
+  const nextScopeKey = String(currentPracticeScope?.scope_key || '').trim();
   if (practiceScopePath) {
     practiceScopePath.textContent = practiceScopeDisplayPath()
       || t('ui.practice.scope_automatic', 'Automatic adaptive selection');
@@ -78,6 +103,9 @@ function setPracticeScopeState(payload = {}) {
     questionContextCard.dataset.scopeRevision = active
       ? String(currentPracticeScope.scope_revision || payload.scope_revision || '')
       : String(payload.scope_revision || '');
+  }
+  if (previousScopeKey !== nextScopeKey) {
+    updatePracticeCompletionAction({ scope_status: 'active', scope_key: nextScopeKey });
   }
   return currentPracticeScope;
 }
@@ -124,15 +152,32 @@ async function clearPracticeScope() {
   return data;
 }
 
-function practiceCompletionMessage(data = {}) {
-  return data.practice_scope_status === 'completed'
-    ? t('ui.practice.scope_completed', 'Scope complete. You can continue reviewing this topic.')
+function practiceAttemptMessage(data = {}) {
+  const status = String(data.attempt_status || data.verdict || '').trim().toLowerCase();
+  const messages = {
+    correct: ['ui.practice.attempt.correct', 'This answer is correct.'],
+    partial: ['ui.practice.attempt.partial', 'This answer is partially correct.'],
+    wrong: ['ui.practice.attempt.wrong', 'This answer is not correct yet.'],
+    dont_know: ['ui.practice.attempt.dont_know', 'This attempt is marked as not known yet.'],
+  };
+  const message = messages[status];
+  return message ? t(message[0], message[1]) : '';
+}
+
+function practiceMasteryMessage(data = {}) {
+  return data.mastery_status === 'mastered'
+    ? t('ui.practice.mastery.mastered', 'This knowledge point is now mastered.')
     : '';
 }
 
 function updatePracticeCompletionAction(data = {}) {
   if (!generateQuestionBtn) return;
-  generateQuestionBtn.textContent = data.practice_scope_status === 'completed'
+  const responseScopeKey = String(data.scope_key || '').trim();
+  const activeScopeKey = String(currentPracticeScope?.scope_key || '').trim();
+  const reviewingCurrentScope = data.scope_status === 'reviewing'
+    && responseScopeKey
+    && responseScopeKey === activeScopeKey;
+  generateQuestionBtn.textContent = reviewingCurrentScope
     ? t('ui.button.continue_practice_review', 'Continue review')
     : t('ui.button.generate_question', 'Generate Question');
 }
@@ -428,54 +473,6 @@ function knowledgeEdgeMeta(edge = {}) {
   return parts.join(' / ');
 }
 
-function showKnowledgeTopicPracticeComingSoon(event) {
-  if (document.querySelector('.knowledge-practice-coming-soon-dialog')) return;
-  const trigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-  const detailDialog = trigger?.closest('.knowledge-node-detail-dialog') || null;
-  const previousAriaHidden = detailDialog?.getAttribute('aria-hidden') ?? null;
-  const detailDialogWasInert = detailDialog?.hasAttribute('inert') || false;
-  detailDialog?.setAttribute('aria-hidden', 'true');
-  detailDialog?.setAttribute('inert', '');
-  const message = t('ui.knowledge.practice_coming_soon', 'This feature is under development.');
-  const dialog = drawerElement('div', 'knowledge-practice-coming-soon-dialog');
-  dialog.setAttribute('role', 'dialog');
-  dialog.setAttribute('aria-modal', 'true');
-  dialog.setAttribute('aria-label', message);
-  const panel = drawerElement('div', 'knowledge-practice-coming-soon-dialog__panel');
-  panel.appendChild(drawerElement('p', 'knowledge-practice-coming-soon-dialog__message', message));
-  const actions = drawerElement('div', 'knowledge-practice-coming-soon-dialog__actions');
-  const closeButton = drawerElement('button', 'button button-primary', t('ui.button.close', 'Close'));
-  closeButton.type = 'button';
-  const close = () => {
-    dialog.remove();
-    if (detailDialog) {
-      if (previousAriaHidden === null) detailDialog.removeAttribute('aria-hidden');
-      else detailDialog.setAttribute('aria-hidden', previousAriaHidden);
-      if (!detailDialogWasInert) detailDialog.removeAttribute('inert');
-    }
-    if (trigger?.isConnected) trigger.focus();
-  };
-  closeButton.addEventListener('click', close);
-  actions.appendChild(closeButton);
-  panel.appendChild(actions);
-  dialog.appendChild(panel);
-  dialog.addEventListener('click', (clickEvent) => {
-    if (clickEvent.target === dialog) close();
-  });
-  dialog.addEventListener('keydown', (keyEvent) => {
-    if (keyEvent.key === 'Escape') {
-      keyEvent.preventDefault();
-      keyEvent.stopPropagation();
-      close();
-    } else if (keyEvent.key === 'Tab') {
-      keyEvent.preventDefault();
-      closeButton.focus();
-    }
-  });
-  document.body.appendChild(dialog);
-  window.setTimeout(() => closeButton.focus(), 0);
-}
-
 function knowledgeEnumLabel(prefix, value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return '';
@@ -564,8 +561,9 @@ function renderKnowledgeNodeDetail(node = {}, edges = [], labelById = new Map())
   const actions = drawerElement('div', 'knowledge-node-detail__actions');
   const topicAction = drawerElement('button', 'button button-primary', t('ui.knowledge.practice_topic', 'Practice this topic'));
   topicAction.type = 'button';
-  topicAction.disabled = false;
-  topicAction.addEventListener('click', showKnowledgeTopicPracticeComingSoon);
+  const topicScope = knowledgeTopicPracticeScope(node);
+  topicAction.disabled = !topicScope;
+  topicAction.addEventListener('click', () => runKnowledgePracticeScopeAction(topicAction, topicScope));
   const allNodes = Array.isArray(lastKnowledgeMapPayload?.nodes) ? lastKnowledgeMapPayload.nodes : [];
   const currentScope = knowledgeCurrentPracticeScope(allNodes);
   const scopeAction = drawerElement('button', 'button button-secondary', t('ui.knowledge.practice_current_scope', 'Practice current scope'));

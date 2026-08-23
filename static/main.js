@@ -384,7 +384,8 @@ function clearFeedback() {
 
 function renderFeedback(data = {}) {
   if (evaluationStatus) {
-    evaluationStatus.textContent = data.verdict ? `${data.verdict}${Number.isFinite(Number(data.score)) ? ` / ${data.score}` : ''}` : '-';
+    evaluationStatus.textContent = practiceAttemptMessage(data)
+      || (data.verdict ? `${data.verdict}${Number.isFinite(Number(data.score)) ? ` / ${data.score}` : ''}` : '-');
   }
   const masteryBefore = Number(data.mastery_before);
   const masteryAfter = Number(data.mastery_after);
@@ -415,6 +416,13 @@ function renderFeedback(data = {}) {
 }
 
 function formatPluginError(error) {
+  const code = String(error?.code || error?.message || '').trim();
+  if (code === 'QUESTION_VALIDATION_FAILED') {
+    return t('ui.error.question_validation_failed', 'The generated question did not pass validation. Please generate another one.');
+  }
+  if (code === 'EVALUATION_INCONSISTENT') {
+    return t('ui.error.evaluation_inconsistent', 'The answer evaluation was inconsistent. Please try evaluating again.');
+  }
   if(error instanceof Error&&error.message==='plugin_call_timeout')return t('ui.error.plugin_call_timeout','Plugin call timed out');
   if(error instanceof Error&&error.message==='run_id_missing')return t('ui.error.run_id_missing','Run id missing');
   if(error instanceof Error&&error.message==='plugin_call_failed')return t('ui.error.plugin_call_failed','Plugin call failed');
@@ -1938,7 +1946,10 @@ async function exportRunResult(runId, deadline = Date.now() + RUN_TIMEOUT_MS, si
       const item = items.find((candidate) => candidate.type === 'json' && candidate.json);
       const pluginResponse = item ? (item.json || {}) : {};
       if (pluginResponse.success === false || pluginResponse.error) {
-        throw new Error(pluginResponse.error?.message || pluginResponse.message || t('ui.error.plugin_call_failed', 'Plugin call failed'));
+        const pluginError = pluginResponse.error || {};
+        const error = new Error(pluginError.message || pluginResponse.message || t('ui.error.plugin_call_failed', 'Plugin call failed'));
+        error.code = String(pluginError.code || pluginResponse.code || '');
+        throw error;
       }
       if (!item) {
         throw new Error(t('ui.error.plugin_call_failed', 'Plugin call failed'));
@@ -2188,7 +2199,8 @@ async function evaluateAnswer() {
   renderFeedback(data);
   updatePracticeCompletionAction(data);
   const replyLines = [
-    practiceCompletionMessage(data),
+    practiceAttemptMessage(data),
+    practiceMasteryMessage(data),
     data.feedback || data.reply || '',
     data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
   ].filter(Boolean);

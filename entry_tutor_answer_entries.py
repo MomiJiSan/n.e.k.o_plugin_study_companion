@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Mapping
 
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
@@ -16,9 +17,120 @@ from .entry_common import (
 )
 from .evaluation_contract import canonicalize_evaluation, validate_evaluation
 from .models import public_current_question_payload
+from .practice_outcome import build_practice_outcome
+from .target_binding import validated_target_topic_id
 
 
 class _TutorAnswerEntriesMixin:
+    def _load_practice_mastery_evidence(
+        self, topic_id: str
+    ) -> tuple[dict | None, bool]:
+        store = self._knowledge_tracker.store
+        snapshot = store.get_latest_mastery(topic_id)
+        active_wrong_questions = store.list_wrong_questions(
+            limit=1,
+            topic_id=topic_id,
+            statuses=("active", "retrying"),
+        )
+        return snapshot, bool(active_wrong_questions)
+
+    async def _question_matches_active_practice_scope(
+        self, question_payload: Mapping[str, object]
+    ) -> bool:
+        try:
+            question_scope_key = str(
+                question_payload.get("scope_key") or ""
+            ).strip()
+            question_scope_revision = int(
+                question_payload.get("scope_revision") or 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if not question_scope_key:
+            return False
+        try:
+            # Match the lock order used by scope writes so key and revision are
+            # observed from one coherent state transition.
+            async with self._practice_scope_write_lock():
+                async with self._lock:
+                    stored_scope = getattr(
+                        self._state, "active_practice_scope", {}
+                    )
+                    active_scope = (
+                        dict(stored_scope)
+                        if isinstance(stored_scope, Mapping)
+                        else {}
+                    )
+                    active_revision = int(
+                        getattr(self._state, "practice_scope_revision", 0) or 0
+                    )
+        except Exception as exc:
+            logger = getattr(self, "logger", None)
+            if logger is not None:
+                logger.warning(
+                    "study active practice scope read failed: {}", exc
+                )
+            return False
+        return (
+            question_scope_key
+            == str(active_scope.get("scope_key") or "").strip()
+            and question_scope_revision == active_revision
+        )
+
+    async def _build_practice_outcome_payload(
+        self,
+        *,
+        payload: dict,
+        question_payload: dict,
+        current_question: dict,
+        question_source: str,
+    ) -> dict:
+        topic_id = validated_target_topic_id(
+            question_payload,
+            current_question,
+            question_source=question_source,
+        )
+        validated_target = bool(
+            topic_id
+            and str(payload.get("knowledge_tracking_status") or "") != "qa_only"
+        )
+        mastery_snapshot = None
+        has_active_wrong_question = False
+        active_scope_matches = False
+        if validated_target:
+            try:
+                (
+                    mastery_snapshot,
+                    has_active_wrong_question,
+                ) = await asyncio.to_thread(
+                    self._load_practice_mastery_evidence, topic_id
+                )
+            except Exception as exc:
+                logger = getattr(self, "logger", None)
+                if logger is not None:
+                    logger.warning(
+                        "study practice outcome enrichment failed: {}", exc
+                    )
+                validated_target = False
+            if validated_target:
+                active_scope_matches = (
+                    await self._question_matches_active_practice_scope(
+                        question_payload
+                    )
+                )
+        return build_practice_outcome(
+            verdict=payload.get("verdict"),
+            practice_scope=(
+                question_payload.get("practice_scope")
+                if isinstance(question_payload.get("practice_scope"), dict)
+                else {}
+            ),
+            active_scope_matches=active_scope_matches,
+            validated_target=validated_target,
+            mastery_snapshot=mastery_snapshot,
+            has_active_wrong_question=has_active_wrong_question,
+        )
+
     async def _clear_attempt_evaluation_reservation(
         self, attempt_id: str, *, recover_cached: bool = False
     ) -> None:
@@ -65,6 +177,9 @@ class _TutorAnswerEntriesMixin:
             "error_type",
             "feedback",
             "next_action",
+            "attempt_status",
+            "scope_status",
+            "mastery_status",
         ],
     )
     async def study_evaluate_answer(
@@ -343,12 +458,16 @@ class _TutorAnswerEntriesMixin:
                 payload["scope_revision"] = int(
                     question_payload.get("scope_revision") or 0
                 )
-                if (
-                    str(payload.get("verdict") or "").strip().lower() == "correct"
-                    and int(question_payload.get("scope_topic_count") or 0) == 1
-                ):
-                    payload["practice_scope_status"] = "completed"
-                    payload["can_continue_review"] = True
+            payload.update(
+                await self._build_practice_outcome_payload(
+                    payload=payload,
+                    question_payload=question_payload,
+                    current_question=current_question,
+                    question_source=(
+                        "current_question" if using_current_question else "supplied"
+                    ),
+                )
+            )
             payload["screen_classification"] = (
                 tutor_context.get("screen_classification") or {}
             )

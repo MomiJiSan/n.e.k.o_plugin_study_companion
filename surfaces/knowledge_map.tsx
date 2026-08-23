@@ -309,29 +309,17 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [canonicalScope, setCanonicalScope] = useState<PracticeScope | null>(null);
   const [scopeRecoveryFailed, setScopeRecoveryFailed] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
-  const [practiceComingSoonOpen, setPracticeComingSoonOpen] = useState(false);
   const [summary, setSummary] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const practiceDialogRef = useRef<HTMLDivElement | null>(null);
-  const practiceCloseButtonRef = useRef<HTMLButtonElement | null>(null);
-  const practiceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const nodeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   function closeNodeDetail() {
-    setPracticeComingSoonOpen(false);
     setSelectedNode(null);
     window.setTimeout(() => {
       if (nodeTriggerRef.current?.isConnected) nodeTriggerRef.current?.focus();
-    }, 0);
-  }
-
-  function closePracticeComingSoon() {
-    setPracticeComingSoonOpen(false);
-    window.setTimeout(() => {
-      if (practiceTriggerRef.current?.isConnected) practiceTriggerRef.current?.focus();
     }, 0);
   }
 
@@ -378,17 +366,15 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
 
   useEffect(() => {
     if (!selectedNode) return undefined;
-    if (practiceComingSoonOpen) practiceCloseButtonRef.current?.focus();
     const closeActiveDialog = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        if (practiceComingSoonOpen) closePracticeComingSoon();
-        else closeNodeDetail();
+        closeNodeDetail();
         return;
       }
       if (event.key === 'Tab') {
-        const activeDialog = practiceComingSoonOpen ? practiceDialogRef.current : dialogRef.current;
+        const activeDialog = dialogRef.current;
         const focusableElements = Array.from(activeDialog?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') || []);
         const first = focusableElements[0];
         const last = focusableElements[focusableElements.length - 1];
@@ -405,7 +391,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     };
     document.addEventListener('keydown', closeActiveDialog);
     return () => document.removeEventListener('keydown', closeActiveDialog);
-  }, [selectedNode, practiceComingSoonOpen]);
+  }, [selectedNode]);
 
   async function activatePracticeScope(mode: 'explicit_scope' | 'explicit_topic') {
     if (scopeBusy) return;
@@ -801,8 +787,6 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           className="knowledge-node-detail-dialog"
           role="dialog"
           aria-modal="true"
-          aria-hidden={practiceComingSoonOpen ? 'true' : undefined}
-          inert={practiceComingSoonOpen ? true : undefined}
           aria-label={nodeLabel(currentNode)}
           onClick={(event: any) => {
             if (event.target === event.currentTarget) closeNodeDetail();
@@ -872,10 +856,9 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               </section>
               <div className="study-panel__actions">
                 <button
-                  ref={practiceTriggerRef}
                   type="button"
-                  disabled={false}
-                  onClick={() => setPracticeComingSoonOpen(true)}
+                  disabled={scopeBusy}
+                  onClick={() => void activatePracticeScope('explicit_topic')}
                 >
                   {text(props, 'ui.knowledge.practice_topic', 'Practice this topic')}
                 </button>
@@ -888,29 +871,6 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
                 </button>
               </div>
             </article>
-          </div>
-        </div>
-      ) : null}
-      {currentNode && practiceComingSoonOpen ? (
-        <div
-          ref={practiceDialogRef}
-          className="knowledge-practice-coming-soon-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={text(props, 'ui.knowledge.practice_coming_soon', 'This feature is under development.')}
-          onClick={(event: any) => {
-            if (event.target === event.currentTarget) closePracticeComingSoon();
-          }}
-        >
-          <div className="knowledge-practice-coming-soon-dialog__panel">
-            <p className="knowledge-practice-coming-soon-dialog__message">
-              {text(props, 'ui.knowledge.practice_coming_soon', 'This feature is under development.')}
-            </p>
-            <div className="knowledge-practice-coming-soon-dialog__actions">
-              <button ref={practiceCloseButtonRef} type="button" className="button button-primary" onClick={closePracticeComingSoon}>
-                {text(props, 'ui.button.close', 'Close')}
-              </button>
-            </div>
           </div>
         </div>
       ) : null}
