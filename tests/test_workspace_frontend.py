@@ -685,6 +685,10 @@ window.setQuestionContext = (value) => { window.lastQuestionContext = value; };
 window.setStatus = (value) => { window.lastStatus = value; };
 window.setReply = (value) => { window.lastReply = value; };
 window.formatPluginError = (error) => error?.message || String(error);
+window.setLearningProfileStage = (stage) => {
+  window.learningProfile = { ...window.learningProfile, stage };
+  window.StudyCompanionKnowledgeMap?.rerender();
+};
 const pluginCalls = [];
 window.callPlugin = async (entryId, args = {}) => {
   pluginCalls.push({ entryId, args });
@@ -738,6 +742,39 @@ api.replaceContent(initialMap);
 if (central.firstElementChild !== initialMap || fullscreen.childElementCount !== 0) {
   throw new Error('knowledge map was not embedded in the central host');
 }
+
+central.querySelector('[data-stage="primary"]')?.click();
+central.querySelector('[data-action="set-default-stage"]')?.click();
+if (window.learningProfile.stage !== 'primary' || pluginCalls.length !== 0) {
+  throw new Error('setting the graph stage default changed anything besides the local learning profile');
+}
+central.querySelector('[data-stage="senior_high"]')?.click();
+central.querySelector('[data-action="return-default-stage"]')?.click();
+if (central.querySelector('[data-stage="primary"]')?.getAttribute('aria-pressed') !== 'true') {
+  throw new Error('returning to the default stage did not reset the graph filter');
+}
+window.setLearningProfileStage('senior_high');
+
+const oversizedPayload = {
+  summary: { topic_count: 81, edge_count: 0 },
+  nodes: [
+    ...Array.from({ length: 80 }, (_value, index) => ({
+      id: `biology-${index}`,
+      name: `Biology ${index}`,
+      stage: 'senior_high',
+      subject: 'biology',
+      chapter: 'Life science',
+      unit: 'Cells',
+    })),
+    { id: 'physics-after-eighty', name: 'Motion', stage: 'senior_high', subject: 'physics', chapter: 'Mechanics', unit: 'Kinematics' },
+  ],
+  edges: [],
+};
+const oversizedMap = api.render(oversizedPayload);
+if (!oversizedMap.textContent.toLowerCase().includes('physics / 1')) {
+  throw new Error('a subject after the first 80 topics was hidden from the knowledge map');
+}
+api.render(payload);
 
 central.querySelector('[data-subject="math"]')?.click();
 if (api.getState().subject !== 'math') throw new Error('subject state was not stored by the shared knowledge map');

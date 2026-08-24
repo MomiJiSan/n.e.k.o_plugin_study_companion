@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "Ampliar janela",
     "ui.knowledge.scope_label":  "Intervalo do mapa",
     "ui.knowledge.scope_all":  "Todas as etapas",
+    "ui.knowledge.set_default_stage": "Definir como etapa padrão",
+    "ui.knowledge.return_default_stage": "Voltar à etapa padrão",
     "ui.knowledge.subject_label":  "Disciplina",
     "ui.knowledge.subject_all":  "Todas as disciplinas",
     "ui.knowledge.subject_uncategorized":  "Sem categoria",

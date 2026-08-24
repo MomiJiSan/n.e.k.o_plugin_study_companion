@@ -53,6 +53,23 @@ def test_both_knowledge_maps_activate_explicit_topic_scope() -> None:
     assert "runKnowledgePracticeScopeAction(topicAction, topicScope)" in static
 
 
+def test_both_knowledge_maps_offer_local_stage_quick_settings() -> None:
+    hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+    for source in (hosted, static):
+        assert "ui.knowledge.set_default_stage" in source
+        assert "ui.knowledge.return_default_stage" in source
+    assert "setLearningProfileStage(activeStage)" in static
+    assert "study_companion.learning_profile.v1" in hosted
+
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        import json
+
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert "ui.knowledge.set_default_stage" in locale, locale_path.name
+        assert "ui.knowledge.return_default_stage" in locale, locale_path.name
+
+
 def test_structured_practice_errors_are_preserved_and_localized() -> None:
     hosted_panel = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
     hosted_bridge = (ROOT / "surfaces" / "study_surface_utils.ts").read_text(
@@ -71,5 +88,5 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    assert "./knowledge-map.js?v=study-mastery-status-20260824" in index
+    assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in index
     assert "./main.js?v=study-settings-drawer-20260824" in index

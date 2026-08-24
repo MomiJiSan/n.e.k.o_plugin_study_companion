@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "Ampliar ventana",
     "ui.knowledge.scope_label":  "Rango del mapa",
     "ui.knowledge.scope_all":  "Todas las etapas",
+    "ui.knowledge.set_default_stage": "Establecer como etapa predeterminada",
+    "ui.knowledge.return_default_stage": "Volver a la etapa predeterminada",
     "ui.knowledge.subject_label":  "Asignatura",
     "ui.knowledge.subject_all":  "Todas las asignaturas",
     "ui.knowledge.subject_uncategorized":  "Sin categoría",

@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "放大視窗",
     "ui.knowledge.scope_label":  "圖譜範圍",
     "ui.knowledge.scope_all":  "全部階段",
+    "ui.knowledge.set_default_stage": "設為預設學習階段",
+    "ui.knowledge.return_default_stage": "返回預設學習階段",
     "ui.knowledge.subject_label":  "科目",
     "ui.knowledge.subject_all":  "全部科目",
     "ui.knowledge.subject_uncategorized":  "未分類",

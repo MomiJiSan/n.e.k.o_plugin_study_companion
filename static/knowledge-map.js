@@ -530,6 +530,7 @@ function renderKnowledgeStageSelector(nodes = []) {
   const actions = drawerElement('div', 'knowledge-stage-selector__actions');
   const stages = [...LEARNING_STAGE_OPTIONS.filter((stage) => stage !== 'custom'), 'all'];
   const activeStage = knowledgeMapActiveStage();
+  const defaultStage = normalizeLearningStage(learningProfile.stage);
   const counts = new Map();
   nodes.forEach((node) => {
     const stage = stageValueFromNode(node) || '';
@@ -553,6 +554,36 @@ function renderKnowledgeStageSelector(nodes = []) {
     actions.appendChild(button);
   });
   root.appendChild(actions);
+  const quickActions = drawerElement('div', 'knowledge-stage-selector__actions knowledge-stage-selector__quick-actions');
+  const setDefault = drawerElement('button', 'button button-secondary', t('ui.knowledge.set_default_stage', 'Set as default stage'));
+  setDefault.type = 'button';
+  setDefault.dataset.action = 'set-default-stage';
+  setDefault.disabled = activeStage === 'all' || activeStage === defaultStage;
+  setDefault.addEventListener('click', () => {
+    if (activeStage === 'all' || activeStage === defaultStage) return;
+    knowledgeMapStage = '';
+    knowledgeMapSubject = '';
+    knowledgeMapCourseFamily = '';
+    knowledgeMapChapter = '';
+    knowledgeMapUnit = '';
+    setLearningProfileStage(activeStage);
+  });
+  quickActions.appendChild(setDefault);
+  const returnDefault = drawerElement('button', 'button button-secondary', t('ui.knowledge.return_default_stage', 'Return to default stage'));
+  returnDefault.type = 'button';
+  returnDefault.dataset.action = 'return-default-stage';
+  returnDefault.disabled = !defaultStage || activeStage === defaultStage;
+  returnDefault.addEventListener('click', () => {
+    if (!defaultStage || activeStage === defaultStage) return;
+    knowledgeMapStage = '';
+    knowledgeMapSubject = '';
+    knowledgeMapCourseFamily = '';
+    knowledgeMapChapter = '';
+    knowledgeMapUnit = '';
+    rerenderKnowledgeMap();
+  });
+  quickActions.appendChild(returnDefault);
+  root.appendChild(quickActions);
   return root;
 }
 
@@ -716,8 +747,7 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
   const root = drawerElement('div', 'knowledge-stage-groups');
   const labelById = new Map(nodes.map((node) => [String(node.id || node.topic_id || ''), knowledgeNodeLabel(node)]));
   const groups = new Map();
-  const cappedNodes = nodes.slice(0, 80);
-  cappedNodes.forEach((node) => {
+  nodes.forEach((node) => {
     const stage = stageValueFromNode(node);
     groups.set(stage, [...(groups.get(stage) || []), node]);
   });
@@ -796,9 +826,6 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
     });
     root.appendChild(section);
   });
-  if (nodes.length > cappedNodes.length) {
-    root.appendChild(drawerElement('span', 'knowledge-edge-more', tf('ui.knowledge.edge_more', '+ {count} more', { count: nodes.length - cappedNodes.length })));
-  }
   return root;
 }
 function knowledgeNodeLabel(node) {

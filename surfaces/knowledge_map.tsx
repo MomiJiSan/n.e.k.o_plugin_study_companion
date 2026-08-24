@@ -49,6 +49,39 @@ type KnowledgeEdge = {
 };
 
 const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'chemistry', 'biology', 'history', 'geography', 'politics', 'computer_science', 'economics'];
+const LEARNING_PROFILE_STORAGE_KEY = 'study_companion.learning_profile.v1';
+const LEARNING_STAGE_OPTIONS = ['primary', 'junior_high', 'senior_high', 'college', 'cross_stage', 'postgraduate', 'custom'];
+
+function normalizeLearningStage(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase().replaceAll('-', '_');
+  return LEARNING_STAGE_OPTIONS.includes(normalized) ? normalized : '';
+}
+
+function readDefaultLearningStage() {
+  try {
+    const profile = JSON.parse(window.localStorage?.getItem(LEARNING_PROFILE_STORAGE_KEY) || '{}') || {};
+    return normalizeLearningStage(profile.stage);
+  } catch {
+    return '';
+  }
+}
+
+function writeDefaultLearningStage(stage: string) {
+  const normalized = normalizeLearningStage(stage);
+  if (!normalized) return '';
+  try {
+    const profile = JSON.parse(window.localStorage?.getItem(LEARNING_PROFILE_STORAGE_KEY) || '{}') || {};
+    window.localStorage?.setItem(LEARNING_PROFILE_STORAGE_KEY, JSON.stringify({
+      ...profile,
+      stage: normalized,
+      skipped: false,
+      completed: true,
+    }));
+  } catch {
+    return '';
+  }
+  return normalized;
+}
 
 function text(props: PluginSurfaceProps, key: string, fallback: string) {
   const value = props.t?.(key);
@@ -302,7 +335,8 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [edges, setEdges] = useState<KnowledgeEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<KnowledgeNode | null>(null);
-  const [selectedStage, setSelectedStage] = useState('all');
+  const [defaultStage, setDefaultStage] = useState(readDefaultLearningStage);
+  const [selectedStage, setSelectedStage] = useState(() => readDefaultLearningStage() || 'all');
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [selectedChapter, setSelectedChapter] = useState('all');
   const [selectedUnit, setSelectedUnit] = useState('all');
@@ -359,6 +393,16 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       mounted = false;
     };
   }, [props.api]);
+
+  useEffect(() => {
+    const syncDefaultStage = (event: StorageEvent) => {
+      if (event.key === LEARNING_PROFILE_STORAGE_KEY) {
+        setDefaultStage(readDefaultLearningStage());
+      }
+    };
+    window.addEventListener('storage', syncDefaultStage);
+    return () => window.removeEventListener('storage', syncDefaultStage);
+  }, []);
 
   useEffect(() => {
     if (selectedNode) closeButtonRef.current?.focus();
@@ -616,6 +660,38 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               </button>
             );
           })}
+        </div>
+        <div className="knowledge-stage-selector__actions knowledge-stage-selector__quick-actions">
+          <button
+            type="button"
+            disabled={activeStage === 'all' || activeStage === defaultStage}
+            onClick={() => {
+              const nextDefaultStage = writeDefaultLearningStage(activeStage);
+              if (!nextDefaultStage) return;
+              setDefaultStage(nextDefaultStage);
+              setSelectedStage(nextDefaultStage);
+              setSelectedSubject('all');
+              setSelectedChapter('all');
+              setSelectedUnit('all');
+              setSelectedNode(null);
+            }}
+          >
+            {text(props, 'ui.knowledge.set_default_stage', 'Set as default stage')}
+          </button>
+          <button
+            type="button"
+            disabled={!defaultStage || activeStage === defaultStage}
+            onClick={() => {
+              if (!defaultStage) return;
+              setSelectedStage(defaultStage);
+              setSelectedSubject('all');
+              setSelectedChapter('all');
+              setSelectedUnit('all');
+              setSelectedNode(null);
+            }}
+          >
+            {text(props, 'ui.knowledge.return_default_stage', 'Return to default stage')}
+          </button>
         </div>
       </section>
       {activeStage !== 'all' ? (
