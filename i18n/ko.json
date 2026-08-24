@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "이 지식점 연습",
     "ui.knowledge.practice_coming_soon": "이 기능은 현재 개발 중입니다.",
     "ui.knowledge.practice_current_scope": "현재 범위 연습",
-    "ui.knowledge.scope_requires_stage_subject": "연습 전에 학습 단계와 과목 또는 과정 모듈을 선택하세요."
+    "ui.knowledge.scope_requires_stage_subject": "연습 전에 학습 단계와 과목 또는 과정 모듈을 선택하세요.",
+    "ui.button.save_ocr_question": "문제 저장",
+    "ui.error.no_ocr_question": "문제를 저장하기 전에 OCR 텍스트를 캡처하세요.",
+    "ui.status.ocr_question_saved": "OCR 문제를 저장했습니다",
+    "ui.status.ocr_question_saved_with_id": "OCR 문제를 저장했습니다 ({id})",
+    "ui.settings.ocr_question_persistence.label": "인식한 문제 저장 방식",
+    "ui.settings.ocr_question_persistence.save_when_used": "사용할 때만 저장",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "인식한 문제 자동 저장",
+    "ui.button.undo_ocr_question": "저장 취소",
+    "ui.button.clear_ocr_questions": "저장된 OCR 문제 지우기",
+    "ui.error.ocr_question_delete_failed": "저장된 OCR 문제를 삭제할 수 없습니다.",
+    "ui.confirm.clear_ocr_questions": "저장된 OCR 문제를 모두 지울까요? 답변 기록은 삭제되지 않습니다.",
+    "ui.status.ocr_question_save_undone": "OCR 문제 저장을 취소했습니다",
+    "ui.status.ocr_questions_cleared": "OCR 문제 {count}개를 지웠습니다"
 }

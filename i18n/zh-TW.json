@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "練習此知識點",
     "ui.knowledge.practice_coming_soon": "此功能正在開發中。",
     "ui.knowledge.practice_current_scope": "按目前範圍開始練習",
-    "ui.knowledge.scope_requires_stage_subject": "開始練習前，請選擇學習階段和科目或課程模組。"
+    "ui.knowledge.scope_requires_stage_subject": "開始練習前，請選擇學習階段和科目或課程模組。",
+    "ui.button.save_ocr_question": "儲存題目",
+    "ui.error.no_ocr_question": "請先辨識 OCR 文字，再儲存題目。",
+    "ui.status.ocr_question_saved": "已儲存 OCR 題目",
+    "ui.status.ocr_question_saved_with_id": "已儲存 OCR 題目（{id}）",
+    "ui.settings.ocr_question_persistence.label": "辨識題目儲存方式",
+    "ui.settings.ocr_question_persistence.save_when_used": "僅在使用時儲存",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "自動儲存辨識出的題目",
+    "ui.button.undo_ocr_question": "復原儲存",
+    "ui.button.clear_ocr_questions": "清除已儲存的 OCR 題目",
+    "ui.error.ocr_question_delete_failed": "無法刪除已儲存的 OCR 題目。",
+    "ui.confirm.clear_ocr_questions": "要清除所有已儲存的 OCR 題目嗎？不會刪除作答歷史。",
+    "ui.status.ocr_question_save_undone": "已復原 OCR 題目儲存",
+    "ui.status.ocr_questions_cleared": "已清除 {count} 個 OCR 題目"
 }

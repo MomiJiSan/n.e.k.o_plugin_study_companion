@@ -23,6 +23,14 @@ from .models import (
     build_config,
     json_copy,
 )
+from .store_captured_questions import (
+    clear_captured_questions,
+    delete_captured_question,
+    get_captured_question,
+    list_captured_questions,
+    purge_expired_captured_questions,
+    save_captured_question,
+)
 from .store_fsrs import (
     append_mastery_snapshot,
     append_review_log,
@@ -743,11 +751,13 @@ class StudyStore:
         topic_upsert_data: dict[str, Any] | None = None,
         topic_candidate_data: dict[str, Any] | None = None,
         attempt_id: str = "",
+        source_question_id: str | None = None,
         history_limit: int = _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
     ) -> dict[str, Any]:
         session_key = str(session_id or "default")
         topic_key = str(topic_id or "").strip()
         attempt_key = str(attempt_id or "").strip()
+        source_question_key = str(source_question_id or "").strip() or None
         question_payload = dict(question or {})
         if attempt_key:
             question_payload["attempt_id"] = attempt_key
@@ -798,6 +808,7 @@ class StudyStore:
                     conn,
                     session_key=session_key,
                     topic_key=db_topic_key,
+                    source_question_id=source_question_key,
                     question=question_payload,
                     user_answer=user_answer,
                     eval_result=eval_result,
@@ -942,6 +953,7 @@ class StudyStore:
         *,
         session_key: str,
         topic_key: str | None,
+        source_question_id: str | None,
         question: dict[str, Any],
         user_answer: str,
         eval_result: dict[str, Any],
@@ -952,14 +964,15 @@ class StudyStore:
         conn.execute(
             """
             INSERT INTO qa_records (
-                session_id, topic_id, question, user_answer,
+                session_id, topic_id, source_question_id, question, user_answer,
                 eval_result, mode, response_time_ms, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             """,
             (
                 session_key,
                 topic_key,
+                source_question_id,
                 self._json_dumps(question or {}),
                 str(user_answer or ""),
                 self._json_dumps(eval_result or {}),
@@ -1497,6 +1510,7 @@ class StudyStore:
             "id": int(row["id"]),
             "session_id": str(row["session_id"]),
             "topic_id": str(row["topic_id"] or ""),
+            "source_question_id": str(row["source_question_id"] or ""),
             "question": self._json_loads(row["question"], {}),
             "user_answer": str(row["user_answer"] or ""),
             "eval_result": self._json_loads(row["eval_result"], {}),
@@ -1604,6 +1618,12 @@ StudyStore.anonymous_knowledge_stats_summary = anonymous_knowledge_stats_summary
 StudyStore.enqueue_knowledge_contribution_snapshot = enqueue_knowledge_contribution_snapshot  # type: ignore[method-assign]
 StudyStore.list_knowledge_contribution_queue = list_knowledge_contribution_queue  # type: ignore[method-assign]
 StudyStore.clear_knowledge_contribution_queue = clear_knowledge_contribution_queue  # type: ignore[method-assign]
+StudyStore.save_captured_question = save_captured_question  # type: ignore[method-assign]
+StudyStore.get_captured_question = get_captured_question  # type: ignore[method-assign]
+StudyStore.list_captured_questions = list_captured_questions  # type: ignore[method-assign]
+StudyStore.delete_captured_question = delete_captured_question  # type: ignore[method-assign]
+StudyStore.clear_captured_questions = clear_captured_questions  # type: ignore[method-assign]
+StudyStore.purge_expired_captured_questions = purge_expired_captured_questions  # type: ignore[method-assign]
 StudyStore.ensure_session = ensure_session  # type: ignore[method-assign]
 StudyStore.list_sessions = list_sessions  # type: ignore[method-assign]
 StudyStore.add_qa_record = add_qa_record  # type: ignore[method-assign]

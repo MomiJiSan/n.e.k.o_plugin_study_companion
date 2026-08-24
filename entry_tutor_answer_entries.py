@@ -290,6 +290,26 @@ class _TutorAnswerEntriesMixin:
                 "answer": resolved_expected,
             }
         )
+        source_question_id = str(
+            question_payload.get("source_question_id") or ""
+        ).strip()
+        if not source_question_id:
+            async with self._lock:
+                latest_ocr_text = str(
+                    getattr(self._state, "last_ocr_text", "") or ""
+                ).strip()
+            if latest_ocr_text and latest_ocr_text == resolved_question:
+                captured_question = await self._save_current_ocr_question(
+                    consent_origin="evaluate",
+                    text=resolved_question,
+                )
+                source_question_id = str(captured_question.get("id") or "").strip()
+                question_payload["source_question_id"] = source_question_id
+                if using_current_question:
+                    async with self._lock:
+                        self._state.current_question["source_question_id"] = (
+                            source_question_id
+                        )
         client_topic_id = str(kwargs.get("selected_topic_id") or "").strip()
         question_topic_id = str(
             question_payload.get("selected_topic_id")
@@ -365,6 +385,7 @@ class _TutorAnswerEntriesMixin:
                     "session_id": session_id,
                     "question_id": supplied_question_id or state_question_id,
                     "attempt_id": supplied_attempt_id or state_attempt_id,
+                    "source_question_id": source_question_id,
                     "selected_topic_id": selected_topic_id,
                     "mode": active_mode,
                     **(
@@ -430,6 +451,7 @@ class _TutorAnswerEntriesMixin:
                     "question": resolved_question,
                     "question_id": supplied_question_id or state_question_id,
                     "attempt_id": supplied_attempt_id or state_attempt_id,
+                    "source_question_id": source_question_id,
                     "degraded": reply.degraded,
                     "diagnostic": reply.diagnostic,
                     "payload": reply.payload,
@@ -448,6 +470,8 @@ class _TutorAnswerEntriesMixin:
                 payload["question_id"] = supplied_question_id or state_question_id
             if supplied_attempt_id or state_attempt_id:
                 payload["attempt_id"] = supplied_attempt_id or state_attempt_id
+            if source_question_id:
+                payload["source_question_id"] = source_question_id
             if selected_topic_id:
                 payload["selected_topic_id"] = selected_topic_id
                 if using_current_question:

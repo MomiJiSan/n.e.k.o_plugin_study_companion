@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .models import OcrSnapshot, StudyConfig, StudyState, TutorReply
+from .models import (
+    OcrSnapshot,
+    StudyConfig,
+    StudyState,
+    TutorReply,
+    public_screen_classification_payload,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +28,7 @@ def build_status_payload(
     is_first_run: bool = False,
 ) -> dict[str, Any]:
     knowledge_payload = knowledge or {}
+    state.clear_expired_ocr_session()
     return {
         "status": state.status,
         "is_first_run": bool(is_first_run),
@@ -35,12 +42,17 @@ def build_status_payload(
         "mode_lock_until": state.mode_lock_until,
         "last_error": state.last_error,
         "last_started_at": state.last_started_at,
-        "last_ocr_text": state.last_ocr_text,
+        "has_ocr_text": bool(state.last_ocr_text.strip()),
         "last_ocr_at": state.last_ocr_at,
-        "screen_classification": copy.deepcopy(state.last_screen_classification),
-        "recent_screen_classifications": copy.deepcopy(
-            state.recent_screen_classifications
+        "last_captured_question_id": state.last_captured_question_id,
+        "screen_classification": public_screen_classification_payload(
+            state.last_screen_classification
         ),
+        "recent_screen_classifications": [
+            public_screen_classification_payload(item)
+            for item in state.recent_screen_classifications
+            if isinstance(item, dict)
+        ],
         "last_answer_evaluation": copy.deepcopy(state.last_answer_evaluation),
         "session_summary_seed": copy.deepcopy(state.session_summary_seed),
         "recent_learning_events": copy.deepcopy(state.recent_learning_events),

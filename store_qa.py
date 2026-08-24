@@ -63,24 +63,27 @@ def add_qa_record(
     eval_result: dict[str, Any],
     mode: str,
     response_time_ms: int | None = None,
+    source_question_id: str | None = None,
     history_limit: int = _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
 ) -> None:
     session_key = str(session_id or "default")
     topic_key = str(topic_id or "").strip()
     db_topic_key = topic_key or None
+    source_question_key = str(source_question_id or "").strip() or None
     with self._lock:
         conn = self._require_conn()
         conn.execute(
             """
             INSERT INTO qa_records (
-                session_id, topic_id, question, user_answer,
+                session_id, topic_id, source_question_id, question, user_answer,
                 eval_result, mode, response_time_ms, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             """,
             (
                 session_key,
                 db_topic_key,
+                source_question_key,
                 self._json_dumps(question or {}),
                 str(user_answer or ""),
                 self._json_dumps(eval_result or {}),

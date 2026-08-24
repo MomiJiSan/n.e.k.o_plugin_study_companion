@@ -86,6 +86,8 @@
             <div class="toolbar-actions">
               <button id="refreshBtn" class="button button-secondary" type="button" data-i18n="ui.button.refresh">Refresh</button>
               <button id="ocrBtn" class="button button-primary" type="button" data-i18n="ui.button.ocr">OCR</button>
+              <button id="saveOcrQuestionBtn" class="button button-secondary" type="button" data-i18n="ui.button.save_ocr_question">Save question</button>
+              <button id="undoOcrQuestionBtn" class="button button-secondary" type="button" disabled data-i18n="ui.button.undo_ocr_question">Undo save</button>
               <button
                 id="advancedToggleBtn"
                 class="button button-secondary workspace-menu-button"
@@ -559,6 +561,14 @@
                     <span data-i18n="ui.settings.ocr_languages.label">OCR languages</span>
                     <input id="settingsOcrLanguages" type="text" autocomplete="off" />
                   </label>
+                  <label class="setting-field">
+                    <span data-i18n="ui.settings.ocr_question_persistence.label">Recognized question storage</span>
+                    <select id="settingsOcrQuestionPersistence">
+                      <option value="save_when_used" data-i18n="ui.settings.ocr_question_persistence.save_when_used">Save only when used</option>
+                      <option value="auto_save_questions" data-i18n="ui.settings.ocr_question_persistence.auto_save_questions">Automatically save recognized questions</option>
+                    </select>
+                  </label>
+                  <button id="clearOcrQuestionsBtn" class="button button-secondary" type="button" data-i18n="ui.button.clear_ocr_questions">Clear saved OCR questions</button>
                 </article>
                 <article class="settings-card">
                   <h3 data-i18n="ui.settings.llm.title">LLM</h3>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
 from .constants import (
@@ -17,6 +18,10 @@ STUDY_EXPORT_FORMATS = ("markdown", "pdf", "docx", "xmind")
 STUDY_EXPORT_STYLES = ("neko", "academic", "compact")
 _LOGGER = logging.getLogger(__name__)
 OCR_SNIPPET_MAX_CHARS = 200
+OCR_SESSION_TEXT_TTL_SECONDS = 30 * 60
+_SCREEN_CLASSIFICATION_PUBLIC_FIELDS = frozenset(
+    {"screen_type", "confidence", "reason", "signals", "at"}
+)
 PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
     {
         "answer",
@@ -49,6 +54,34 @@ def public_current_question_payload(
         payload.pop(field_name, None)
     payload.pop("answer_evaluation_cache", None)
     return payload
+
+
+def public_screen_classification_payload(value: object) -> dict[str, Any]:
+    """Return only non-identifying screen-classification fields.
+
+    OCR excerpts and window titles are useful only while a capture is being
+    classified.  They must not enter persisted state or status responses.
+    """
+
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: json_copy(item)
+        for key, item in value.items()
+        if key in _SCREEN_CLASSIFICATION_PUBLIC_FIELDS
+    }
+
+
+def _parse_utc_iso(value: object) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
+    except ValueError:
+        return None
 
 
 class ModeIntentPayload(TypedDict, total=False):
@@ -340,6 +373,7 @@ class StudyConfig:
     # Deprecated compatibility field. Plugin lifecycle never opens external UI.
     auto_open_ui: bool = False
     ocr_enabled: bool = True
+    ocr_question_persistence_mode: str = "save_when_used"
     ocr_backend_selection: str = "rapidocr"
     ocr_capture_backend: str = "auto"
     ocr_tesseract_path: str = ""
@@ -376,6 +410,15 @@ class StudyConfig:
         self.language = str(self.language or "zh-CN").strip() or "zh-CN"
         self.history_limit = max(1, self._coerce_int(self.history_limit, 50))
         self.auto_open_ui = bool(self.auto_open_ui)
+        persistence_mode = str(self.ocr_question_persistence_mode or "").strip().lower()
+        if persistence_mode not in {"save_when_used", "auto_save_questions"}:
+            _LOGGER.warning(
+                "StudyConfig: invalid ocr_question_persistence_mode=%r, "
+                "falling back to 'save_when_used'",
+                persistence_mode,
+            )
+            persistence_mode = "save_when_used"
+        self.ocr_question_persistence_mode = persistence_mode
         self.ocr_install_timeout_seconds = self._clamp_float(
             self.ocr_install_timeout_seconds, 1.0, 3600.0, 300.0
         )
@@ -507,6 +550,9 @@ class StudyState:
     last_ocr_text: str = ""
     last_vision_image_base64: str = ""
     last_ocr_at: str = ""
+    # Runtime-only link populated when an OCR capture is promoted to a
+    # persisted question asset.  Storage will be owned by captured_questions.
+    last_captured_question_id: str = ""
     last_screen_classification: dict[str, Any] = field(default_factory=dict)
     recent_screen_classifications: list[dict[str, Any]] = field(default_factory=list)
     current_question: dict[str, Any] = field(default_factory=dict)
@@ -522,9 +568,67 @@ class StudyState:
     active_practice_scope: dict[str, Any] = field(default_factory=dict)
     practice_scope_revision: int = 0
 
+    def __post_init__(self) -> None:
+        # Old state rows may still contain these fields.  Sanitizing during
+        # construction prevents a legacy row from leaking through status APIs
+        # before the next state save removes it from SQLite.
+        self.last_ocr_text = ""
+        self.last_vision_image_base64 = ""
+        self.last_screen_classification = public_screen_classification_payload(
+            self.last_screen_classification
+        )
+        self.recent_screen_classifications = [
+            public_screen_classification_payload(item)
+            for item in self.recent_screen_classifications
+            if isinstance(item, dict)
+        ][-8:]
+        self.last_captured_question_id = ""
+
+    def clear_ocr_session(self, *, captured_at: str = "") -> None:
+        """Drop the in-memory OCR buffer while retaining safe capture metadata."""
+
+        self.last_ocr_text = ""
+        if captured_at:
+            self.last_ocr_at = str(captured_at)
+
+    def set_ocr_session_text(self, text: object, *, captured_at: str = "") -> None:
+        """Replace the session-only OCR buffer for a newly completed capture."""
+
+        self.last_ocr_text = str(text or "")
+        self.last_ocr_at = str(captured_at or utc_now_iso())
+
+    def clear_expired_ocr_session(
+        self,
+        *,
+        now: datetime | None = None,
+        ttl_seconds: int = OCR_SESSION_TEXT_TTL_SECONDS,
+    ) -> bool:
+        """Clear cached OCR text once it has exceeded its session TTL."""
+
+        if not self.last_ocr_text:
+            return False
+        captured_at = _parse_utc_iso(self.last_ocr_at)
+        current = now or datetime.now(timezone.utc)
+        if captured_at is None or (current - captured_at).total_seconds() >= max(
+            0, int(ttl_seconds)
+        ):
+            self.clear_ocr_session()
+            return True
+        return False
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
+        payload.pop("last_ocr_text", None)
         payload.pop("last_vision_image_base64", None)
+        payload.pop("last_captured_question_id", None)
+        payload["last_screen_classification"] = public_screen_classification_payload(
+            self.last_screen_classification
+        )
+        payload["recent_screen_classifications"] = [
+            public_screen_classification_payload(item)
+            for item in self.recent_screen_classifications
+            if isinstance(item, dict)
+        ][-8:]
         return payload
 
 
@@ -689,6 +793,12 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
         history_limit=max(1, _int(study, "history_limit", 50, "history_limit")),
         auto_open_ui=_bool(study, "auto_open_ui", False, "auto_open_ui"),
         ocr_enabled=_bool(ocr, "enabled", True, "ocr_enabled"),
+        ocr_question_persistence_mode=_str(
+            ocr,
+            "question_persistence_mode",
+            "save_when_used",
+            "ocr_question_persistence_mode",
+        ),
         ocr_backend_selection=_str(
             ocr, "backend_selection", "rapidocr", "ocr_backend_selection"
         ),

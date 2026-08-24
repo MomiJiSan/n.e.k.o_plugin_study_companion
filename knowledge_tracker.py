@@ -590,6 +590,9 @@ class KnowledgeTracker:
     ) -> dict[str, Any]:
         question_payload = dict(question or {})
         question_payload.pop("target_binding", None)
+        source_question_id = str(
+            question_payload.get("source_question_id") or ""
+        ).strip()
         qa_result = dict(eval_result or {})
         qa_result["knowledge_tracking_status"] = "qa_only"
         self.store.ensure_session(session_id=session_id, mode=mode)
@@ -601,6 +604,7 @@ class KnowledgeTracker:
             eval_result=qa_result,
             mode=mode,
             response_time_ms=response_time_ms,
+            source_question_id=source_question_id or None,
         )
         return {
             "topic_id": "",
@@ -635,6 +639,9 @@ class KnowledgeTracker:
         question_payload = dict(question or {})
         if attempt_id:
             question_payload["attempt_id"] = str(attempt_id)
+        source_question_id = str(
+            question_payload.get("source_question_id") or ""
+        ).strip()
         question_payload.setdefault("topic", topic_id)
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
@@ -720,6 +727,7 @@ class KnowledgeTracker:
                 topic_upsert_data=topic_upsert_data,
                 topic_candidate_data=topic_candidate_data,
                 attempt_id=attempt_id,
+                source_question_id=source_question_id or None,
             )
         except Exception as exc:
             raise _BatchAnswerWriteFailed(exc) from exc
@@ -776,6 +784,9 @@ class KnowledgeTracker:
         )
         question_payload = dict(question or {})
         question_payload.setdefault("topic", topic_id)
+        source_question_id = str(
+            question_payload.get("source_question_id") or ""
+        ).strip()
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
         error_type = str(eval_result.get("error_type") or "").strip() or "unknown"
@@ -790,6 +801,7 @@ class KnowledgeTracker:
             eval_result=eval_result,
             mode=mode,
             response_time_ms=response_time_ms,
+            source_question_id=source_question_id or None,
         )
 
         recent = (

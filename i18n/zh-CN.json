@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "练习此知识点",
     "ui.knowledge.practice_coming_soon": "该功能正在开发中。",
     "ui.knowledge.practice_current_scope": "按当前范围开始练习",
-    "ui.knowledge.scope_requires_stage_subject": "开始练习前，请选择学习阶段和科目或课程模块。"
+    "ui.knowledge.scope_requires_stage_subject": "开始练习前，请选择学习阶段和科目或课程模块。",
+    "ui.button.save_ocr_question": "保存题目",
+    "ui.error.no_ocr_question": "请先识别 OCR 文本，再保存题目。",
+    "ui.status.ocr_question_saved": "已保存 OCR 题目",
+    "ui.status.ocr_question_saved_with_id": "已保存 OCR 题目（{id}）",
+    "ui.settings.ocr_question_persistence.label": "识别题目保存方式",
+    "ui.settings.ocr_question_persistence.save_when_used": "仅在使用时保存",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "自动保存识别出的题目",
+    "ui.button.undo_ocr_question": "撤销保存",
+    "ui.button.clear_ocr_questions": "清空已保存的 OCR 题目",
+    "ui.error.ocr_question_delete_failed": "无法删除已保存的 OCR 题目。",
+    "ui.confirm.clear_ocr_questions": "清空所有已保存的 OCR 题目？这不会删除作答历史。",
+    "ui.status.ocr_question_save_undone": "已撤销 OCR 题目保存",
+    "ui.status.ocr_questions_cleared": "已清空 {count} 个 OCR 题目"
 }

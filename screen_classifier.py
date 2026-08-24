@@ -175,13 +175,14 @@ class ScreenClassification:
     at: float = 0.0
 
     def to_payload(self) -> dict[str, Any]:
+        # OCR excerpts and window titles are transient classification inputs.
+        # Returning them here would place them in both persisted study state and
+        # the status payload, so expose only the derived classification.
         return {
             "screen_type": normalize_screen_type(self.screen_type),
             "confidence": max(0.0, min(1.0, float(self.confidence or 0.0))),
             "reason": str(self.reason or ""),
             "signals": dict(self.signals),
-            "text_excerpt": str(self.text_excerpt or ""),
-            "window_title": str(self.window_title or ""),
             "at": float(self.at or 0.0),
         }
 

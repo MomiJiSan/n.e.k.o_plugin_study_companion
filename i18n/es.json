@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "Practicar este tema",
     "ui.knowledge.practice_coming_soon": "Esta función está en desarrollo.",
     "ui.knowledge.practice_current_scope": "Practicar el alcance actual",
-    "ui.knowledge.scope_requires_stage_subject": "Elige una etapa y una materia o módulo antes de practicar."
+    "ui.knowledge.scope_requires_stage_subject": "Elige una etapa y una materia o módulo antes de practicar.",
+    "ui.button.save_ocr_question": "Guardar pregunta",
+    "ui.error.no_ocr_question": "Captura texto OCR antes de guardar una pregunta.",
+    "ui.status.ocr_question_saved": "Pregunta OCR guardada",
+    "ui.status.ocr_question_saved_with_id": "Pregunta OCR guardada ({id})",
+    "ui.settings.ocr_question_persistence.label": "Almacenamiento de preguntas reconocidas",
+    "ui.settings.ocr_question_persistence.save_when_used": "Guardar solo al usar",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "Guardar automáticamente las preguntas reconocidas",
+    "ui.button.undo_ocr_question": "Deshacer guardado",
+    "ui.button.clear_ocr_questions": "Borrar preguntas OCR guardadas",
+    "ui.error.ocr_question_delete_failed": "No se pudo eliminar la pregunta OCR guardada.",
+    "ui.confirm.clear_ocr_questions": "¿Borrar todas las preguntas OCR guardadas? El historial de respuestas no se eliminará.",
+    "ui.status.ocr_question_save_undone": "Se deshizo el guardado de la pregunta OCR",
+    "ui.status.ocr_questions_cleared": "Se borraron {count} preguntas OCR"
 }

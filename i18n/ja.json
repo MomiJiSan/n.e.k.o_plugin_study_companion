@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "この知識点を練習",
     "ui.knowledge.practice_coming_soon": "この機能は現在開発中です。",
     "ui.knowledge.practice_current_scope": "現在の範囲で練習",
-    "ui.knowledge.scope_requires_stage_subject": "練習前に学習段階と科目またはコースモジュールを選択してください。"
+    "ui.knowledge.scope_requires_stage_subject": "練習前に学習段階と科目またはコースモジュールを選択してください。",
+    "ui.button.save_ocr_question": "問題を保存",
+    "ui.error.no_ocr_question": "問題を保存する前に OCR テキストを取得してください。",
+    "ui.status.ocr_question_saved": "OCR 問題を保存しました",
+    "ui.status.ocr_question_saved_with_id": "OCR 問題を保存しました（{id}）",
+    "ui.settings.ocr_question_persistence.label": "認識した問題の保存方法",
+    "ui.settings.ocr_question_persistence.save_when_used": "使用時のみ保存",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "認識した問題を自動保存",
+    "ui.button.undo_ocr_question": "保存を取り消す",
+    "ui.button.clear_ocr_questions": "保存済み OCR 問題を消去",
+    "ui.error.ocr_question_delete_failed": "保存済み OCR 問題を削除できませんでした。",
+    "ui.confirm.clear_ocr_questions": "保存済み OCR 問題をすべて消去しますか？解答履歴は削除されません。",
+    "ui.status.ocr_question_save_undone": "OCR 問題の保存を取り消しました",
+    "ui.status.ocr_questions_cleared": "{count} 件の OCR 問題を消去しました"
 }
