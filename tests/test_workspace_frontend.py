@@ -112,6 +112,40 @@ def test_workspace_assets_routes_and_locales_are_complete() -> None:
     assert "activateWorkspace(" not in escape_source
 
 
+def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
+    index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+    style = re.sub(r"\s+", " ", (STATIC_ROOT / "style.css").read_text(encoding="utf-8"))
+    workspace = re.sub(r"\s+", " ", (STATIC_ROOT / "workspace.css").read_text(encoding="utf-8"))
+
+    assert re.search(
+        r'id="advancedSettings"[^>]+class="advanced-settings"[^>]+role="dialog"[^>]+aria-modal="true"',
+        index,
+    )
+    assert 'aria-labelledby="advancedSettingsTitle"' in index
+    assert 'id="advancedSettingsCloseBtn"' in index
+    assert 'class="settings-drawer__panel"' in index
+    assert 'class="settings-drawer__layout"' in index
+    assert 'class="settings-drawer__content"' in index
+    assert index.count('data-settings-tab=') == 5
+
+    assert ".advanced-settings { position: fixed; inset: 0;" in style
+    assert ".settings-drawer__panel { display: grid; grid-template-rows: auto minmax(0, 1fr);" in style
+    assert "grid-template-rows: auto minmax(0, 1fr)" in style
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in style
+    assert ".settings-drawer__content { min-width: 0; overflow: auto;" in style
+    assert ".settings-form > .settings-actions { position: sticky;" in style
+    assert ".advanced-settings { padding: 0;" in workspace
+    assert "width: 100vw; height: 100dvh;" in workspace
+
+    assert "advancedSettings.setAttribute('aria-hidden'" in main
+    assert "classList.toggle('settings-drawer-open'" in main
+    assert "advancedSettingsCloseBtn.addEventListener('click'" in main
+    assert "event.target === advancedSettings" in main
+    assert "handleAdvancedSettingsKeydown" in main
+    assert "advancedToggleBtn?.focus?.()" in main
+
+
 def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
     index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
     main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
