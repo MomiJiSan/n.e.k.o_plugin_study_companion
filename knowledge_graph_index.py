@@ -5,12 +5,6 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from ._graph_utils import (
-    dedupe_edges as _dedupe_edges,
-)
-from ._graph_utils import (
-    normalized_relation,
-)
-from ._graph_utils import (
     text as _text,
 )
 from ._graph_utils import (
@@ -19,7 +13,14 @@ from ._graph_utils import (
 from ._graph_utils import (
     topic_label as _topic_label,
 )
-from .knowledge_graph_guidance import build_topic_edges, match_topics
+from .knowledge_graph_edges import (
+    build_topic_edges,
+    normalized_relation,
+)
+from .knowledge_graph_edges import (
+    dedupe_edges as _dedupe_edges,
+)
+from .knowledge_graph_guidance import match_topics
 
 CORE_RELATION_ORDER = (
     "prerequisite",
@@ -28,6 +29,9 @@ CORE_RELATION_ORDER = (
     "application",
     "extends",
     "co_occurs",
+    "supports",
+    "next",
+    "nearby",
 )
 RELATION_SCORE = {relation: index for index, relation in enumerate(CORE_RELATION_ORDER)}
 PRIORITY_SCORE = {"core": 0, "useful": 1, "optional": 2}
@@ -119,6 +123,9 @@ class SubgraphBudget:
             "application": 4,
             "extends": 3,
             "co_occurs": 3,
+            "supports": 3,
+            "next": 3,
+            "nearby": 3,
         }
     )
 

@@ -34,13 +34,11 @@ ALLOWED_EDGE_RELATIONS = {
     "analogy",
     "co_occurs",
     "supports",
-    # Legacy seed/UI values accepted during migration.
-    "related",
-    "similar",
     "next",
     "nearby",
-    "compare",
 }
+EDGE_RELATION_ALIASES = {"related", "similar", "compare"}
+SYMMETRIC_EDGE_RELATIONS = {"analogy", "co_occurs", "confusable"}
 SEMANTIC_EDGE_RELATIONS = {
     "application",
     "procedure_step",
@@ -555,11 +553,38 @@ def _validate_typed_edge(
         return
     source_id = str(topic.data.get("id") or "").strip()
     relation = _edge_relation(field, ref)
-    if relation not in ALLOWED_EDGE_RELATIONS:
+    if relation in EDGE_RELATION_ALIASES:
+        issues.append(
+            KnowledgeSeedIssue(
+                "edge_relation_alias",
+                f"{field} contains unsupported relation alias: {relation}",
+                str(topic.path),
+                source_id,
+            )
+        )
+    elif relation not in ALLOWED_EDGE_RELATIONS:
         issues.append(
             KnowledgeSeedIssue(
                 "unknown_edge_relation",
                 f"{field} contains unknown relation: {relation}",
+                str(topic.path),
+                source_id,
+            )
+        )
+    if field == "prerequisites" and relation != "prerequisite":
+        issues.append(
+            KnowledgeSeedIssue(
+                "invalid_edge_relation_placement",
+                "prerequisites may only contain prerequisite relations",
+                str(topic.path),
+                source_id,
+            )
+        )
+    if field == "related" and relation == "prerequisite":
+        issues.append(
+            KnowledgeSeedIssue(
+                "invalid_edge_relation_placement",
+                "related must not contain prerequisite relations",
                 str(topic.path),
                 source_id,
             )
@@ -637,6 +662,20 @@ def _validate_typed_edge(
                     source_id,
                 )
             )
+    if ref.get("required_mastery") is not None:
+        try:
+            required_mastery = float(ref.get("required_mastery"))
+        except (TypeError, ValueError):
+            required_mastery = -1.0
+        if not 0.0 <= required_mastery <= 1.0:
+            issues.append(
+                KnowledgeSeedIssue(
+                    "invalid_required_mastery",
+                    f"{field} edge required_mastery must be between 0.0 and 1.0",
+                    str(topic.path),
+                    source_id,
+                )
+            )
 
 
 def _validate_references(
@@ -644,6 +683,7 @@ def _validate_references(
     topic_ids: set[str],
     issues: list[KnowledgeSeedIssue],
 ) -> None:
+    seen_edges: dict[tuple[str, str, str], str] = {}
     for topic in topics:
         source_id = str(topic.data.get("id") or "").strip()
         for field in ("prerequisites", "related"):
@@ -663,6 +703,32 @@ def _validate_references(
                         )
                     )
                     continue
+                relation = _edge_relation(field, ref)
+                if source_id == target_id:
+                    issues.append(
+                        KnowledgeSeedIssue(
+                            "self_reference",
+                            f"{field} must not reference its own topic",
+                            str(topic.path),
+                            source_id,
+                        )
+                    )
+                if relation in SYMMETRIC_EDGE_RELATIONS:
+                    edge_key = (*sorted((source_id, target_id)), relation)
+                else:
+                    edge_key = (source_id, target_id, relation)
+                previous_path = seen_edges.get(edge_key)
+                if previous_path is not None:
+                    issues.append(
+                        KnowledgeSeedIssue(
+                            "duplicate_edge",
+                            f"duplicate {relation} edge; first declared in {previous_path}",
+                            str(topic.path),
+                            source_id,
+                        )
+                    )
+                else:
+                    seen_edges[edge_key] = str(topic.path)
                 if target_id not in topic_ids:
                     issues.append(
                         KnowledgeSeedIssue(
@@ -753,6 +819,21 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
     cross_subject_edge_counts: dict[str, dict[str, int]] = {}
     cross_subject_relation_counts: dict[str, int] = {}
     legacy_edge_samples: list[dict[str, str]] = []
+    symmetric_relations_by_topic: dict[str, set[str]] = {}
+
+    for topic in topics:
+        source_id = str(topic.data.get("id") or "").strip()
+        for field in ("prerequisites", "related"):
+            refs = topic.data.get(field)
+            if not isinstance(refs, list):
+                continue
+            for ref in refs:
+                relation = _edge_relation(field, ref)
+                target_id = _ref_id(ref)
+                if relation not in SYMMETRIC_EDGE_RELATIONS or not target_id:
+                    continue
+                symmetric_relations_by_topic.setdefault(source_id, set()).add(relation)
+                symmetric_relations_by_topic.setdefault(target_id, set()).add(relation)
 
     for topic in topics:
         topic_id = str(topic.data.get("id") or "").strip()
@@ -781,6 +862,7 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         duplicate_name_keys[name_key] = duplicate_name_keys.get(name_key, 0) + 1
         local_edges = 0
         local_relations: set[str] = set()
+        local_relations.update(symmetric_relations_by_topic.get(topic_id, set()))
         for field in ("prerequisites", "related"):
             refs = topic.data.get(field)
             if not isinstance(refs, list):
@@ -810,7 +892,7 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
                     outbound[topic_id] = outbound.get(topic_id, 0) + 1
                 if target_id in inbound:
                     inbound[target_id] = inbound.get(target_id, 0) + 1
-                if relation == "prerequisite" and topic_id:
+                if field == "prerequisites" and relation == "prerequisite" and topic_id:
                     prerequisite_edges.setdefault(topic_id, set()).add(target_id)
                 target_subject = topic_subject_by_id.get(target_id)
                 if target_subject and target_subject != subject:

@@ -702,7 +702,7 @@
       "chapter": "高中政治",
       "depth": 2,
       "difficulty": 0.64,
-      "prerequisites": [],
+      "prerequisites": [{"id": "pol_junior_rule_law","priority": "core","context": "diagnosis","confidence": 0.84,"reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.","use_cases": ["diagnosis","learning_path","hint_generation"]}],
       "related": [
         {
           "id": "pol_junior_rule_morality",
@@ -728,19 +728,6 @@
             "learning_path",
             "practice_planning",
             "review"
-          ]
-        },
-        {
-          "id": "pol_junior_rule_law",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
           ]
         },
         {
@@ -1289,19 +1276,6 @@
             "practice_planning",
             "review"
           ]
-        },
-        {
-          "id": "pol_senior_rule_of_law",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.78,
-          "reason": "道德与法律关系容易被误答成全面依法治国的制度措施题，需要区分初中辨析和高中法治体系层次。",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
         }
       ],
       "typical_misconceptions": [
@@ -1811,9 +1785,32 @@
       "difficulty": 0.62,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_economy_market", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.86, "reason": "企业经营决策要放在市场供求、竞争和政府调控共同作用的环境中判断。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_high_quality_development", "relation": "application", "priority": "core", "context": "review", "confidence": 0.85, "reason": "企业创新、诚信经营和管理提升是推动高质量发展的微观主体实践。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_basic_economic_system", "relation": "confusable", "priority": "useful", "context": "diagnosis", "confidence": 0.8, "reason": "企业经营策略不能替代对基本经济制度性质和结构的说明。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_economy_market",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.86,
+          "reason": "企业经营决策要放在市场供求、竞争和政府调控共同作用的环境中判断。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_high_quality_development",
+          "relation": "application",
+          "priority": "core",
+          "context": "review",
+          "confidence": 0.85,
+          "reason": "企业创新、诚信经营和管理提升是推动高质量发展的微观主体实践。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["识别企业经营成功的内外部条件", "用创新、管理、诚信和社会责任分析材料", "区分企业行为与政府职责"],
       "question_types": ["原因分析", "措施建议"],
@@ -1859,9 +1856,32 @@
       "difficulty": 0.62,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_income_distribution", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.86, "reason": "社会保障需要以收入分配制度为基础，并在不同分配环节中发挥调节作用。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_high_quality_development", "relation": "application", "priority": "useful", "context": "review", "confidence": 0.83, "reason": "健全多层次社会保障体系体现高质量发展中保障和改善民生的要求。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_income_distribution", "relation": "confusable", "priority": "core", "context": "diagnosis", "confidence": 0.84, "reason": "社会保障着重风险分担和基本生活保障，不能与收入分配的全部制度安排混同。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_income_distribution",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.86,
+          "reason": "社会保障需要以收入分配制度为基础，并在不同分配环节中发挥调节作用。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_high_quality_development",
+          "relation": "application",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.83,
+          "reason": "健全多层次社会保障体系体现高质量发展中保障和改善民生的要求。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["识别社会保险、社会救助、社会福利和社会优抚", "从权责清晰角度评价制度", "用兜底线、织密网、建机制组织答案"],
       "question_types": ["概念辨析", "措施建议"],
@@ -1907,9 +1927,32 @@
       "difficulty": 0.64,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_high_quality_development", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.88, "reason": "作答发展类材料题时，应先用新发展理念定位问题，再说明如何推动高质量发展。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_socialism_market", "relation": "application", "priority": "useful", "context": "review", "confidence": 0.8, "reason": "完善社会主义市场经济体制为贯彻新发展理念提供制度条件。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_high_quality_development", "relation": "confusable", "priority": "core", "context": "diagnosis", "confidence": 0.81, "reason": "不能把五个发展理念直接当作高质量发展的全部指标或结果。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_high_quality_development",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.88,
+          "reason": "作答发展类材料题时，应先用新发展理念定位问题，再说明如何推动高质量发展。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_socialism_market",
+          "relation": "application",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.8,
+          "reason": "完善社会主义市场经济体制为贯彻新发展理念提供制度条件。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["准确匹配创新协调绿色开放共享", "从问题导向提出发展措施", "判断材料中不同理念的侧重点"],
       "question_types": ["选择题", "材料分析"],
@@ -2051,9 +2094,32 @@
       "difficulty": 0.65,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_material_consciousness", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.86, "reason": "认识来源于实践并受客观条件制约，需要以前述物质与意识关系为基础理解。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_social_history", "relation": "application", "priority": "useful", "context": "review", "confidence": 0.81, "reason": "社会历史分析要把人民群众改造社会的实践作为理解社会发展的基础。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_material_consciousness", "relation": "confusable", "priority": "core", "context": "diagnosis", "confidence": 0.82, "reason": "实践是认识的基础，不等于把物质与意识的本体论关系简单改写为实践决定一切。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_material_consciousness",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.86,
+          "reason": "认识来源于实践并受客观条件制约，需要以前述物质与意识关系为基础理解。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_social_history",
+          "relation": "application",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.81,
+          "reason": "社会历史分析要把人民群众改造社会的实践作为理解社会发展的基础。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["说明实践是认识的来源和检验标准", "识别认识反复性、无限性和上升性", "用实践观点分析科技探索材料"],
       "question_types": ["原理说明题", "材料分析"],
@@ -2099,9 +2165,32 @@
       "difficulty": 0.66,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_social_history", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.85, "reason": "正确价值判断要以社会历史条件和客观规律为前提。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_philosophy_dialectics", "relation": "application", "priority": "useful", "context": "review", "confidence": 0.82, "reason": "价值选择题常需运用联系、发展和矛盾的观点综合判断。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_social_history", "relation": "confusable", "priority": "core", "context": "diagnosis", "confidence": 0.8, "reason": "价值判断具有主体差异不等于价值标准完全主观任意。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_social_history",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.85,
+          "reason": "正确价值判断要以社会历史条件和客观规律为前提。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_philosophy_dialectics",
+          "relation": "application",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.82,
+          "reason": "价值选择题常需运用联系、发展和矛盾的观点综合判断。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["用客观规律和人民立场评价价值选择", "区分价值判断的主体差异与真伪", "从个人与社会统一角度组织评析"],
       "question_types": ["观点辨析", "哲学材料题"],
@@ -2339,9 +2428,32 @@
       "difficulty": 0.66,
       "prerequisites": [],
       "related": [
-        {"id": "pol_senior_material_question_review", "relation": "procedure_step", "priority": "core", "context": "practice", "confidence": 0.87, "reason": "提出措施前必须审清行为主体、问题指向和已有做法，避免越权或重复作答。", "use_cases": ["learning_path", "hint_generation", "practice_planning"]},
-        {"id": "pol_senior_law_based_government", "relation": "application", "priority": "useful", "context": "review", "confidence": 0.81, "reason": "治理类措施题可运用政府依法履职、规范执法和接受监督等法治政府要求。", "use_cases": ["learning_path", "practice_planning", "review"]},
-        {"id": "pol_senior_material_cause_meaning", "relation": "confusable", "priority": "core", "context": "diagnosis", "confidence": 0.84, "reason": "措施题应写可执行的主体行为，不能只列出原因或结果性意义。", "use_cases": ["diagnosis", "hint_generation", "review"]}
+        {
+          "id": "pol_senior_material_question_review",
+          "relation": "procedure_step",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.87,
+          "reason": "提出措施前必须审清行为主体、问题指向和已有做法，避免越权或重复作答。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ]
+        },
+        {
+          "id": "pol_senior_law_based_government",
+          "relation": "application",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.81,
+          "reason": "治理类措施题可运用政府依法履职、规范执法和接受监督等法治政府要求。",
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ]
+        }
       ],
       "skills": ["按政府、企业、社会和个人匹配措施主体", "把材料问题转换为可执行举措", "检查措施的针对性、合法性和层次"],
       "question_types": ["措施建议", "开放性材料题"],

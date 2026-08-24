@@ -179,6 +179,24 @@
             "chapter_focus": "primary_sight_words"
           },
           "required_mastery": 0.52
+        },
+        {
+          "id": "english_junior_reading_detail",
+          "reason": "Fast recognition of high-frequency words reduces decoding load before students locate details in junior reading passages.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.86,
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "validation_batch": "english_internal_bridge_2026_06_28",
+            "bridge_focus": "primary_sight_words_to_junior_reading_detail"
+          }
         }
       ],
       "related": [
@@ -218,24 +236,6 @@
           }
         },
         {
-          "id": "english_primary_phonics",
-          "relation": "confusable",
-          "reason": "Sight-word fluency is instant recognition, while phonics is decoding unfamiliar spelling patterns.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "primary_sight_words"
-          }
-        },
-        {
           "id": "english_primary_picture_writing",
           "relation": "application",
           "reason": "High-frequency words supply the sentence starters and verbs needed for simple picture-based sentences.",
@@ -251,25 +251,6 @@
             "source_subject": "english",
             "target_subject": "english",
             "chapter_focus": "primary_sight_words"
-          }
-        },
-        {
-          "id": "english_junior_reading_detail",
-          "relation": "prerequisite",
-          "reason": "Fast recognition of high-frequency words reduces decoding load before students locate details in junior reading passages.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "validation_batch": "english_internal_bridge_2026_06_28",
-            "bridge_focus": "primary_sight_words_to_junior_reading_detail"
           }
         },
         {
@@ -554,24 +535,6 @@
           "metadata": {
             "source_subject": "english",
             "target_subject": "chinese",
-            "chapter_focus": "primary_picture_writing"
-          }
-        },
-        {
-          "id": "english_primary_daily_dialogue",
-          "relation": "confusable",
-          "reason": "Picture writing requires a complete written sentence, while daily dialogue may be a short situational response.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
             "chapter_focus": "primary_picture_writing"
           }
         },
@@ -2264,24 +2227,6 @@
           }
         },
         {
-          "id": "english_senior_clause_connection",
-          "relation": "confusable",
-          "reason": "Relative clauses modify nouns, while noun and adverbial clauses fill subject, object, predicative, or logical relation slots.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_relative_clause"
-          }
-        },
-        {
           "id": "english_senior_writing_cohesion",
           "relation": "application",
           "reason": "Accurate relative clauses let students combine short ideas and upgrade sentence cohesion in writing.",
@@ -2530,16 +2475,6 @@
           }
         },
         {
-          "id": "english_senior_subject_verb_agreement",
-          "relation": "co_occurs",
-          "reason": "Review 倒装强调省略 together with 主谓一致 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_word_formation",
           "relation": "co_occurs",
           "reason": "Review 倒装强调省略 together with 词性转换与派生 when diagnosing adjacent english skills.",
@@ -2655,24 +2590,22 @@
           }
         },
         {
-          "id": "english_senior_special_sentence_patterns",
-          "relation": "co_occurs",
-          "reason": "Review 词性转换与派生 together with 倒装强调省略 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_cloze_logic",
           "relation": "co_occurs",
-          "reason": "Review 词性转换与派生 together with 完形填空逻辑线索 when diagnosing adjacent english skills.",
+          "reason": "Cloze diagnosis often checks whether an error comes from word form, collocation, or discourse logic.",
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.8,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "chapter_focus": "senior_cloze_logic"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -2769,24 +2702,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_word_formation",
-          "relation": "co_occurs",
-          "reason": "Cloze diagnosis often checks whether an error comes from word form, collocation, or discourse logic.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_cloze_logic"
-          }
-        },
         {
           "id": "english_senior_cloze_collocation",
           "relation": "procedure_step",
@@ -3154,12 +3069,15 @@
         {
           "id": "english_senior_reading_detail_location",
           "relation": "co_occurs",
-          "reason": "Review 阅读主旨大意题 together with 阅读细节定位题 when diagnosing adjacent english skills.",
+          "reason": "Review 阅读细节定位题 together with 阅读主旨大意题 when diagnosing adjacent english skills.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.82
         },
         {
           "id": "chinese_primary_paragraph_main_idea",
@@ -3270,19 +3188,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_reading_main_idea",
-          "relation": "co_occurs",
-          "reason": "Review 阅读细节定位题 together with 阅读主旨大意题 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.82
-        },
-        {
           "id": "english_senior_reading_word_guess",
           "relation": "procedure_step",
           "reason": "After locating the evidence sentence, students use local definition, contrast, cause-effect, or example clues to infer unfamiliar words.",
@@ -3294,19 +3199,6 @@
           "priority": "core",
           "context": "practice",
           "confidence": 0.9
-        },
-        {
-          "id": "english_senior_reading_main_idea",
-          "relation": "confusable",
-          "reason": "Detail questions ask for located facts, while main idea questions ask for the whole passage or paragraph point; keyword overlap can hide the scope shift.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
         },
         {
           "id": "chinese_senior_practical_filter",
@@ -3566,16 +3458,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_reading_word_guess",
-          "relation": "co_occurs",
-          "reason": "Review 作者态度与观点题 together with 词义猜测题 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_seven_choice_coherence",
           "relation": "co_occurs",
           "reason": "Review 作者态度与观点题 together with 七选五衔接题 when diagnosing adjacent english skills.",
@@ -3596,19 +3478,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ]
-        },
-        {
-          "id": "english_senior_reading_inference",
-          "relation": "confusable",
-          "reason": "Attitude questions ask for stance words such as supportive or skeptical; inference questions ask for a conclusion supported by textual evidence.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ]
         },
         {
@@ -3735,16 +3604,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_reading_author_attitude",
-          "relation": "co_occurs",
-          "reason": "Review 七选五衔接题 together with 作者态度与观点题 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_grammar_cloze_context",
           "relation": "co_occurs",
           "reason": "Review 七选五衔接题 together with 语法填空上下文约束 when diagnosing adjacent english skills.",
@@ -3868,16 +3727,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_seven_choice_coherence",
-          "relation": "co_occurs",
-          "reason": "Review 语法填空上下文约束 together with 七选五衔接题 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_error_correction",
           "relation": "co_occurs",
           "reason": "Review 语法填空上下文约束 together with 短文改错/语法纠错 when diagnosing adjacent english skills.",
@@ -3898,19 +3747,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ]
-        },
-        {
-          "id": "english_senior_cloze_logic",
-          "relation": "confusable",
-          "reason": "Grammar cloze is constrained by form and sentence function, while cloze logic chooses the best meaning from discourse relations.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ]
         }
       ],
@@ -4000,16 +3836,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_grammar_cloze_context",
-          "relation": "co_occurs",
-          "reason": "Review 短文改错/语法纠错 together with 语法填空上下文约束 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "english_senior_listening_inference",
           "relation": "co_occurs",
@@ -4120,16 +3946,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_error_correction",
-          "relation": "co_occurs",
-          "reason": "Review 听力推断与态度 together with 短文改错/语法纠错 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "english_senior_application_email",
           "relation": "co_occurs",
@@ -4254,24 +4070,22 @@
       ],
       "related": [
         {
-          "id": "english_senior_listening_inference",
-          "relation": "co_occurs",
-          "reason": "Review 应用文邮件写作 together with 听力推断与态度 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_application_notice",
           "relation": "co_occurs",
-          "reason": "Review 应用文邮件写作 together with 通知与倡议书写作 when diagnosing adjacent english skills.",
+          "reason": "Email and notice writing should be compared through audience, tone, opening, closing, and task-point coverage.",
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.82,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "chapter_focus": "senior_application_notice"
+          }
         },
         {
           "id": "english_senior_application_notice",
@@ -4381,24 +4195,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_application_email",
-          "relation": "co_occurs",
-          "reason": "Email and notice writing should be compared through audience, tone, opening, closing, and task-point coverage.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_application_notice"
-          }
-        },
         {
           "id": "english_senior_application_speech",
           "relation": "procedure_step",
@@ -4571,12 +4367,20 @@
         {
           "id": "english_senior_continuation_plot_logic",
           "relation": "co_occurs",
-          "reason": "Review 演讲稿写作 together with 读后续写情节推进 when diagnosing adjacent english skills.",
+          "reason": "Both speech and continuation writing need clear purpose, sequence, and reader-facing coherence.",
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.76,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "chapter_focus": "senior_continuation_plot"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -4673,24 +4477,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_application_speech",
-          "relation": "co_occurs",
-          "reason": "Both speech and continuation writing need clear purpose, sequence, and reader-facing coherence.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.76,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_continuation_plot"
-          }
-        },
         {
           "id": "english_senior_continuation_emotion_arc",
           "relation": "procedure_step",
@@ -4976,16 +4762,6 @@
           }
         },
         {
-          "id": "english_senior_continuation_emotion_arc",
-          "relation": "co_occurs",
-          "reason": "Review 读后续写语言协同 together with 读后续写情绪弧线 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_summary_paraphrase",
           "relation": "co_occurs",
           "reason": "Review 读后续写语言协同 together with 概要写作转述压缩 when diagnosing adjacent english skills.",
@@ -5083,24 +4859,22 @@
       ],
       "related": [
         {
-          "id": "english_senior_continuation_language_imitation",
-          "relation": "co_occurs",
-          "reason": "Review 概要写作转述压缩 together with 读后续写语言协同 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_writing_cohesion",
           "relation": "co_occurs",
-          "reason": "Review 概要写作转述压缩 together with 写作衔接与句式升级 when diagnosing adjacent english skills.",
+          "reason": "Cohesion revision should be checked with paraphrase quality because both affect clarity and flow.",
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.82,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "chapter_focus": "senior_writing_cohesion"
+          }
         },
         {
           "id": "english_senior_writing_cohesion",
@@ -5229,24 +5003,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_summary_paraphrase",
-          "relation": "co_occurs",
-          "reason": "Cohesion revision should be checked with paraphrase quality because both affect clarity and flow.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_writing_cohesion"
-          }
-        },
-        {
           "id": "english_senior_exam_time_strategy",
           "relation": "co_occurs",
           "reason": "Time strategy matters for leaving a final pass to check connectors, reference, and sentence variety.",
@@ -5255,7 +5011,9 @@
           "confidence": 0.76,
           "use_cases": [
             "learning_path",
-            "review"
+            "review",
+            "diagnosis",
+            "hint_generation"
           ],
           "metadata": {
             "source_subject": "english",
@@ -5423,16 +5181,6 @@
       ],
       "related": [
         {
-          "id": "english_senior_writing_cohesion",
-          "relation": "co_occurs",
-          "reason": "Review 英语考试时间分配 together with 写作衔接与句式升级 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_vocabulary_context_review",
           "relation": "co_occurs",
           "reason": "Review 英语考试时间分配 together with 语境词汇复习 when diagnosing adjacent english skills.",
@@ -5561,16 +5309,6 @@
           }
         },
         {
-          "id": "english_senior_exam_time_strategy",
-          "relation": "co_occurs",
-          "reason": "Review 语境词汇复习 together with 英语考试时间分配 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_translation_chinese_interference",
           "relation": "co_occurs",
           "reason": "Review 语境词汇复习 together with 中式表达纠偏 when diagnosing adjacent english skills.",
@@ -5684,16 +5422,6 @@
             "target_subject": "english",
             "chapter_focus": "senior_translation_chinese_interference"
           }
-        },
-        {
-          "id": "english_senior_vocabulary_context_review",
-          "relation": "co_occurs",
-          "reason": "Review 中式表达纠偏 together with 语境词汇复习 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
         },
         {
           "id": "english_senior_reading_new_gaokao_information",
@@ -5847,24 +5575,22 @@
           }
         },
         {
-          "id": "english_senior_translation_chinese_interference",
-          "relation": "co_occurs",
-          "reason": "Review 新高考信息类阅读 together with 中式表达纠偏 when diagnosing adjacent english skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "english_senior_writing_rubric_revision",
           "relation": "co_occurs",
-          "reason": "Review 新高考信息类阅读 together with 写作评分标准自查 when diagnosing adjacent english skills.",
+          "reason": "Rubric revision and information reading both require checking task purpose, relevant evidence, and omitted details.",
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.8,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "chapter_focus": "senior_writing_rubric"
+          }
         },
         {
           "id": "history_senior_material_analysis",
@@ -5979,24 +5705,6 @@
         }
       ],
       "related": [
-        {
-          "id": "english_senior_reading_new_gaokao_information",
-          "relation": "co_occurs",
-          "reason": "Rubric revision and information reading both require checking task purpose, relevant evidence, and omitted details.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "chapter_focus": "senior_writing_rubric"
-          }
-        },
         {
           "id": "english_senior_exam_time_strategy",
           "relation": "procedure_step",

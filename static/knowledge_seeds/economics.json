@@ -340,15 +340,21 @@
         {
           "id": "college_macro_aggregate_demand_supply",
           "relation": "confusable",
+          "reason": "Micro demand-supply explains one market, while AD-AS explains economy-wide output and the price level.",
           "priority": "core",
           "context": "diagnosis",
-          "confidence": 0.84,
-          "reason": "Micro demand-supply curves differ from macro aggregate demand and aggregate supply models in scope and interpretation.",
+          "confidence": 0.88,
           "use_cases": [
             "diagnosis",
             "hint_generation",
+            "learning_path",
+            "practice_planning",
             "review"
-          ]
+          ],
+          "metadata": {
+            "source": "economics_ready_batch_20260626",
+            "focus": "micro_supply_demand_vs_ad_as"
+          }
         },
         {
           "id": "college_micro_consumer_choice",
@@ -1516,15 +1522,21 @@
         {
           "id": "college_econ_cost_benefit",
           "relation": "confusable",
-          "priority": "useful",
+          "reason": "Short-run cost curves describe firm production costs, while cost-benefit analysis compares total gains and losses from a decision.",
+          "priority": "core",
           "context": "diagnosis",
-          "confidence": 0.79,
-          "reason": "Short-run production cost concepts are narrower than general cost-benefit analysis and depend on fixed versus variable inputs.",
+          "confidence": 0.86,
           "use_cases": [
             "diagnosis",
             "hint_generation",
+            "learning_path",
+            "practice_planning",
             "review"
-          ]
+          ],
+          "metadata": {
+            "source": "economics_ready_batch_20260626",
+            "focus": "short_run_cost_vs_cost_benefit"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -2108,19 +2120,6 @@
             "hint_generation",
             "review"
           ]
-        },
-        {
-          "id": "college_micro_perfect_competition",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.88,
-          "reason": "Students often apply competitive price-taking rules to monopoly even though monopoly faces the market demand curve.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
         }
       ],
       "typical_misconceptions": [
@@ -2248,15 +2247,21 @@
         {
           "id": "college_micro_public_goods",
           "relation": "confusable",
+          "reason": "Public goods create market failure, but the key test is non-excludability and non-rivalry rather than any external cost or benefit.",
           "priority": "core",
           "context": "diagnosis",
-          "confidence": 0.85,
-          "reason": "Externalities and public goods are both market failures, but public goods are defined by non-rivalry and non-excludability.",
+          "confidence": 0.84,
           "use_cases": [
             "diagnosis",
             "hint_generation",
+            "learning_path",
+            "practice_planning",
             "review"
-          ]
+          ],
+          "metadata": {
+            "source": "economics_ready_batch_20260626",
+            "focus": "public_goods_vs_externality"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -2372,25 +2377,6 @@
           "metadata": {
             "source": "economics_ready_batch_20260626",
             "focus": "public_goods_to_policy_tradeoff"
-          }
-        },
-        {
-          "id": "college_micro_externality",
-          "relation": "confusable",
-          "reason": "Public goods create market failure, but the key test is non-excludability and non-rivalry rather than any external cost or benefit.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source": "economics_ready_batch_20260626",
-            "focus": "public_goods_vs_externality"
           }
         },
         {
@@ -2626,19 +2612,6 @@
         }
       ],
       "related": [
-        {
-          "id": "college_macro_gdp_accounting",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.8,
-          "reason": "CPI measures consumer price changes, while GDP accounting measures output and income flows.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
-        },
         {
           "id": "college_macro_monetary_policy",
           "relation": "application",
@@ -3111,25 +3084,6 @@
             "source": "economics_ready_batch_20260626",
             "focus": "ad_as_to_multiplier"
           }
-        },
-        {
-          "id": "college_micro_demand_supply",
-          "relation": "confusable",
-          "reason": "Micro demand-supply explains one market, while AD-AS explains economy-wide output and the price level.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.88,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source": "economics_ready_batch_20260626",
-            "focus": "micro_supply_demand_vs_ad_as"
-          }
         }
       ],
       "typical_misconceptions": [
@@ -3379,15 +3333,21 @@
         {
           "id": "college_macro_monetary_policy",
           "relation": "confusable",
+          "reason": "Monetary policy uses central-bank money and interest-rate tools, while fiscal policy uses government budgets.",
           "priority": "core",
           "context": "diagnosis",
-          "confidence": 0.88,
-          "reason": "Fiscal policy changes government spending or taxes, while monetary policy changes money and interest-rate conditions.",
+          "confidence": 0.9,
           "use_cases": [
             "diagnosis",
             "hint_generation",
+            "learning_path",
+            "practice_planning",
             "review"
-          ]
+          ],
+          "metadata": {
+            "source": "economics_ready_batch_20260626",
+            "focus": "monetary_vs_fiscal_policy"
+          }
         },
         {
           "id": "college_macro_multiplier",
@@ -3695,25 +3655,6 @@
           "metadata": {
             "source": "economics_ready_batch_20260626",
             "focus": "monetary_policy_to_exchange_rate"
-          }
-        },
-        {
-          "id": "college_macro_fiscal_policy",
-          "relation": "confusable",
-          "reason": "Monetary policy uses central-bank money and interest-rate tools, while fiscal policy uses government budgets.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source": "economics_ready_batch_20260626",
-            "focus": "monetary_vs_fiscal_policy"
           }
         },
         {
@@ -4503,25 +4444,6 @@
           "metadata": {
             "source": "economics_ready_batch_20260626",
             "focus": "cost_benefit_to_data_graph"
-          }
-        },
-        {
-          "id": "college_micro_cost_short_run",
-          "relation": "confusable",
-          "reason": "Short-run cost curves describe firm production costs, while cost-benefit analysis compares total gains and losses from a decision.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source": "economics_ready_batch_20260626",
-            "focus": "short_run_cost_vs_cost_benefit"
           }
         }
       ],

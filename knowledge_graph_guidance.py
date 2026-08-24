@@ -4,12 +4,6 @@ from collections import deque
 from typing import Any
 
 from ._graph_utils import (
-    dedupe_edges as _dedupe_edges,
-)
-from ._graph_utils import (
-    normalized_relation as _normalized_relation,
-)
-from ._graph_utils import (
     text as _text,
 )
 from ._graph_utils import (
@@ -17,6 +11,15 @@ from ._graph_utils import (
 )
 from ._graph_utils import (
     topic_label as _topic_label,
+)
+from .knowledge_graph_edges import (
+    build_topic_edges as _build_topic_edges,
+)
+from .knowledge_graph_edges import (
+    dedupe_edges as _dedupe_edges,
+)
+from .knowledge_graph_edges import (
+    normalized_relation as _normalized_relation,
 )
 
 APPLICATION_RELATIONS = {"application", "procedure_step", "extends", "supports"}
@@ -167,6 +170,9 @@ RELATION_GROUP_TITLES = {
     "application": "\u5178\u578b\u7528\u9014",
     "extends": "\u540e\u7eed\u62d3\u5c55",
     "co_occurs": "\u4e00\u8d77\u590d\u4e60",
+    "supports": "\u652f\u6301\u7406\u89e3",
+    "next": "\u5efa\u8bae\u4e0b\u4e00\u6b65",
+    "nearby": "\u76f8\u90bb\u77e5\u8bc6",
 }
 RELATION_GROUP_ORDER = tuple(RELATION_GROUP_TITLES)
 
@@ -282,54 +288,8 @@ def _edge_payload(
 
 
 def build_topic_edges(topics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id = {_topic_id(topic): topic for topic in topics if _topic_id(topic)}
-    edges: list[dict[str, Any]] = []
-    for topic in topics:
-        target_id = _topic_id(topic)
-        if not target_id:
-            continue
-        for ref in topic.get("prerequisites") or []:
-            source_id = _ref_id(ref)
-            if not source_id:
-                continue
-            edges.append(
-                _edge_payload(
-                    source=by_id.get(source_id),
-                    target=topic,
-                    source_id=source_id,
-                    target_id=target_id,
-                    relation=_edge_relation("prerequisites", ref),
-                    ref=ref,
-                )
-            )
-        for ref in topic.get("related") or []:
-            related_id = _ref_id(ref)
-            if not related_id:
-                continue
-            relation = _edge_relation("related", ref)
-            if relation == "prerequisite":
-                edges.append(
-                    _edge_payload(
-                        source=by_id.get(related_id),
-                        target=topic,
-                        source_id=related_id,
-                        target_id=target_id,
-                        relation=relation,
-                        ref=ref,
-                    )
-                )
-                continue
-            edges.append(
-                _edge_payload(
-                    source=topic,
-                    target=by_id.get(related_id),
-                    source_id=target_id,
-                    target_id=related_id,
-                    relation=relation,
-                    ref=ref,
-                )
-            )
-    return edges
+    """Compatibility export for callers that previously imported this helper."""
+    return _build_topic_edges(topics)
 
 
 def _topic_search_text(topic: dict[str, Any]) -> str:

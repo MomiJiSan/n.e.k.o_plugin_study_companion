@@ -794,24 +794,6 @@
             "target_subject": "computer_science",
             "chapter_focus": "C 语言程序设计"
           }
-        },
-        {
-          "id": "college_c_branch_control",
-          "relation": "confusable",
-          "reason": "A loop invariant must hold across iterations, unlike a single branch test.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "computer_science",
-            "target_subject": "computer_science",
-            "chapter_focus": "C 语言程序设计"
-          }
         }
       ],
       "typical_misconceptions": [
@@ -4584,6 +4566,27 @@
             "target_subject": "computer_science",
             "chapter_focus": "数据结构"
           }
+        },
+        {
+          "id": "college_graph_connectivity",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.86,
+          "reason": "This prerequisite supplies the model needed before this topic can be practiced reliably.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "computer_science",
+            "target_subject": "math",
+            "bridge_direction": "computer_science_to_math",
+            "bridge_concept": "connectivity_before_minimum_spanning_tree",
+            "cross_subject": true,
+            "added_for": "cs_math_cross_seed_links",
+            "chapter_focus": "数据结构"
+          }
         }
       ],
       "related": [
@@ -4639,28 +4642,6 @@
             "target_subject": "math",
             "bridge_direction": "computer_science_to_math",
             "bridge_concept": "mst_algorithm_to_spanning_tree",
-            "cross_subject": true,
-            "added_for": "cs_math_cross_seed_links",
-            "chapter_focus": "数据结构"
-          }
-        },
-        {
-          "id": "college_graph_connectivity",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "reason": "This prerequisite supplies the model needed before this topic can be practiced reliably.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "computer_science",
-            "target_subject": "math",
-            "bridge_direction": "computer_science_to_math",
-            "bridge_concept": "connectivity_before_minimum_spanning_tree",
             "cross_subject": true,
             "added_for": "cs_math_cross_seed_links",
             "chapter_focus": "数据结构"
@@ -4893,14 +4874,16 @@
       "prerequisites": [
         {
           "id": "college_ds_sorting_basic",
-          "required_mastery": 0.58,
-          "relation": "prerequisite",
-          "reason": "Master 基础排序算法 before 快速排序与归并排序; it provides the foundation used by later steps.",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.88,
+          "reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "required_mastery": 0.58
         }
       ],
       "related": [
@@ -4928,19 +4911,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ]
-        },
-        {
-          "id": "college_ds_sorting_basic",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.88,
-          "reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
           ]
         },
         {
@@ -5094,6 +5064,23 @@
             "target_subject": "computer_science",
             "chapter_focus": "数据结构"
           }
+        },
+        {
+          "id": "college_ds_algorithm_complexity",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.86,
+          "reason": "This prerequisite supplies the model needed before this topic can be practiced reliably.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "computer_science",
+            "target_subject": "computer_science",
+            "chapter_focus": "数据结构"
+          }
         }
       ],
       "related": [
@@ -5126,24 +5113,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "computer_science",
-            "target_subject": "computer_science",
-            "chapter_focus": "数据结构"
-          }
-        },
-        {
-          "id": "college_ds_algorithm_complexity",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "reason": "This prerequisite supplies the model needed before this topic can be practiced reliably.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
           ],
           "metadata": {
             "source_subject": "computer_science",
@@ -5364,24 +5333,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "computer_science",
-            "target_subject": "computer_science",
-            "chapter_focus": "数据结构"
-          }
-        },
-        {
-          "id": "college_ds_hash_table",
-          "relation": "confusable",
-          "reason": "Binary search needs sorted order, while hash lookup depends on hashing and collisions.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "computer_science",
@@ -6051,6 +6002,18 @@
             "learning_path",
             "hint_generation"
           ]
+        },
+        {
+          "id": "college_c_recursion_basic",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.88,
+          "reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ]
         }
       ],
       "related": [
@@ -6078,19 +6041,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ]
-        },
-        {
-          "id": "college_c_recursion_basic",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.88,
-          "reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
           ]
         },
         {

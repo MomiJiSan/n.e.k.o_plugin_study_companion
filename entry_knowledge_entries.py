@@ -250,13 +250,14 @@ class _KnowledgeEntriesMixin:
             safe_limit = max(1, min(1000, int(limit or 200)))
             stage_key = str(stage or "").strip()
             subject_key = str(subject or "").strip()
-            topics, mastery, weak_topics, wrong_questions = await asyncio.gather(
+            topics, catalog_topics, mastery, weak_topics, wrong_questions = await asyncio.gather(
                 asyncio.to_thread(
                     self._store.list_topics,
                     safe_limit,
                     subject_key or None,
                     stage_key or None,
                 ),
+                asyncio.to_thread(self._store.list_topics, 1000),
                 asyncio.to_thread(self._store.list_mastery_overview, safe_limit),
                 asyncio.to_thread(
                     self._knowledge_tracker.get_weak_topics, limit=min(50, safe_limit)
@@ -267,7 +268,8 @@ class _KnowledgeEntriesMixin:
             )
             return Ok(
                 build_knowledge_map_payload(
-                    topics=topics,
+                    topics=catalog_topics,
+                    scope_topic_ids={str(topic.get("id") or "") for topic in topics},
                     mastery_overview=mastery,
                     weak_topics=weak_topics,
                     wrong_questions=wrong_questions,

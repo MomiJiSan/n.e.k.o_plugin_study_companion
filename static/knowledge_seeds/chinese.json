@@ -208,7 +208,9 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
+            "review",
+            "diagnosis",
+            "hint_generation"
           ],
           "metadata": {
             "source_subject": "chinese",
@@ -312,19 +314,6 @@
       "difficulty": 0.38,
       "prerequisites": [],
       "related": [
-        {
-          "id": "chinese_primary_sentence_expansion",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.8,
-          "reason": "Paragraph main idea tasks are often confused with sentence expansion tasks because both ask students to process wording, but one summarizes while the other elaborates.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
-        },
         {
           "id": "chinese_primary_observation_writing",
           "relation": "application",
@@ -455,26 +444,8 @@
       "chapter": "语文基础",
       "depth": 2,
       "difficulty": 0.44,
-      "prerequisites": [],
+      "prerequisites": [{"id": "chinese_primary_sentence_expansion","reason": "Observation writing needs sentence expansion so details can be written clearly instead of listed loosely.","priority": "core","context": "explanation","confidence": 0.89,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}}],
       "related": [
-        {
-          "id": "chinese_primary_sentence_expansion",
-          "relation": "prerequisite",
-          "reason": "Observation writing needs sentence expansion so details can be written clearly instead of listed loosely.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.89,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
         {
           "id": "chinese_primary_sentence_expansion",
           "relation": "procedure_step",
@@ -809,19 +780,6 @@
       "prerequisites": [],
       "related": [
         {
-          "id": "chinese_junior_expository_reading",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "reason": "Argumentative reading focuses on claims and proof, which students often confuse with expository object-feature explanation.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
-        },
-        {
           "id": "chinese_senior_composition_argument",
           "relation": "application",
           "priority": "core",
@@ -934,26 +892,8 @@
       "chapter": "现代文阅读",
       "depth": 2,
       "difficulty": 0.6,
-      "prerequisites": [],
+      "prerequisites": [{"id": "chinese_senior_classical_function_words","reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.","priority": "core","context": "explanation","confidence": 0.88,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}}],
       "related": [
-        {
-          "id": "chinese_senior_classical_function_words",
-          "relation": "prerequisite",
-          "reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.88,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
         {
           "id": "chinese_senior_classical_translation",
           "relation": "procedure_step",
@@ -1218,19 +1158,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "chinese_senior_literary_text",
-          "relation": "confusable",
-          "reason": "Practical text focuses on information filtering, which students often confuse with literary theme and emotion analysis.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         }
@@ -1724,15 +1651,22 @@
         {
           "id": "chinese_senior_classical_summary",
           "relation": "confusable",
-          "reason": "Translation asks for word and sentence accuracy, while summary asks for event meaning and viewpoint.",
+          "reason": "Translation keeps sentence-level meaning, while summary condenses the passage into main events and viewpoints.",
           "priority": "useful",
           "context": "diagnosis",
-          "confidence": 0.82,
+          "confidence": 0.89,
           "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review",
             "diagnosis",
-            "hint_generation",
-            "review"
-          ]
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "chinese",
+            "target_subject": "chinese",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
+          }
         },
         {
           "id": "history_senior_cultural_exchange",
@@ -1853,19 +1787,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "chinese_senior_composition_argument",
-          "relation": "confusable",
-          "reason": "Task-driven writing is often mistaken for ordinary argument writing when situational requirements are ignored.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         }
@@ -2147,26 +2068,6 @@
       ],
       "related": [
         {
-          "id": "chinese_senior_modern_argument_structure",
-          "relation": "co_occurs",
-          "reason": "modern info comparison and modern argument structure commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
-        },
-        {
           "id": "chinese_senior_literary_image",
           "relation": "co_occurs",
           "reason": "modern info comparison and literary image commonly appear together in senior Chinese review planning.",
@@ -2209,19 +2110,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "chinese_senior_modern_argument_structure",
-          "relation": "confusable",
-          "reason": "Information comparison is often confused with argument-structure analysis when students summarize claims instead of comparing details.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         },
@@ -2378,26 +2266,6 @@
             "hint_generation",
             "practice_planning"
           ]
-        },
-        {
-          "id": "chinese_senior_modern_info_comparison",
-          "relation": "co_occurs",
-          "reason": "literary image and modern info comparison commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
         },
         {
           "id": "chinese_senior_literary_plot_effect",
@@ -2562,26 +2430,6 @@
           ]
         },
         {
-          "id": "chinese_senior_literary_image",
-          "relation": "co_occurs",
-          "reason": "literary plot effect and literary image commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
-        },
-        {
           "id": "chinese_senior_literary_environment",
           "relation": "co_occurs",
           "reason": "literary plot effect and literary environment commonly appear together in senior Chinese review planning.",
@@ -2698,26 +2546,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_literary_plot_effect",
-          "relation": "co_occurs",
-          "reason": "literary environment and literary plot effect commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
-        },
         {
           "id": "chinese_senior_prose_language_appreciation",
           "relation": "co_occurs",
@@ -2874,26 +2702,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_literary_environment",
-          "relation": "co_occurs",
-          "reason": "prose language appreciation and literary environment commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
-        },
         {
           "id": "chinese_senior_practical_filter",
           "relation": "co_occurs",
@@ -3090,26 +2898,6 @@
           ]
         },
         {
-          "id": "chinese_senior_prose_language_appreciation",
-          "relation": "co_occurs",
-          "reason": "practical filter and prose language appreciation commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文现代文阅读"
-          }
-        },
-        {
           "id": "chinese_senior_classical_content_words",
           "relation": "co_occurs",
           "reason": "practical filter and classical content words commonly appear together in senior Chinese review planning.",
@@ -3244,26 +3032,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_practical_filter",
-          "relation": "co_occurs",
-          "reason": "classical content words and practical filter commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文 -> 高中语文现代文阅读"
-          }
-        },
         {
           "id": "chinese_senior_classical_function_words",
           "relation": "co_occurs",
@@ -3400,7 +3168,6 @@
         {
           "id": "chinese_senior_classical_content_words",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "classical content words builds the foundation needed before studying classical function words.",
           "priority": "core",
           "context": "explanation",
@@ -3408,7 +3175,9 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
+            "review",
+            "diagnosis",
+            "hint_generation"
           ],
           "metadata": {
             "source_subject": "chinese",
@@ -3458,39 +3227,6 @@
             "hint_generation",
             "practice_planning"
           ]
-        },
-        {
-          "id": "chinese_senior_classical_content_words",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Classical function-word analysis depends on reading the local context and separating content-word meaning from grammatical function.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
-          "id": "chinese_senior_classical_content_words",
-          "relation": "co_occurs",
-          "reason": "classical function words and classical content words commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文"
-          }
         },
         {
           "id": "chinese_senior_classical_sentence_patterns",
@@ -3615,26 +3351,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_classical_function_words",
-          "relation": "co_occurs",
-          "reason": "classical sentence patterns and classical function words commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文"
-          }
-        },
         {
           "id": "chinese_senior_classical_summary",
           "relation": "co_occurs",
@@ -3771,7 +3487,6 @@
         {
           "id": "chinese_senior_classical_sentence_patterns",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "classical sentence patterns builds the foundation needed before studying classical summary.",
           "priority": "core",
           "context": "explanation",
@@ -3786,31 +3501,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文"
+            "chapter_focus": "高中语文文言文",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_classical_sentence_patterns",
-          "relation": "co_occurs",
-          "reason": "classical summary and classical sentence patterns commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文"
-          }
-        },
         {
           "id": "chinese_senior_poetry_image_emotion",
           "relation": "co_occurs",
@@ -3832,48 +3528,12 @@
           }
         },
         {
-          "id": "chinese_senior_classical_sentence_patterns",
-          "relation": "prerequisite",
-          "reason": "Sentence-pattern recognition is needed before summarizing who did what and why in classical passages.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.88,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
           "id": "chinese_senior_classical_translation",
           "relation": "procedure_step",
           "reason": "Translate key clauses first, then compress events, causes, and attitudes into a summary.",
           "priority": "core",
           "context": "practice",
           "confidence": 0.87,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
-          "id": "chinese_senior_classical_translation",
-          "relation": "confusable",
-          "reason": "Translation keeps sentence-level meaning, while summary condenses the passage into main events and viewpoints.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.89,
           "use_cases": [
             "learning_path",
             "practice_planning",
@@ -4003,15 +3663,22 @@
         {
           "id": "chinese_senior_poetry_compare",
           "relation": "confusable",
+          "reason": "Image-emotion analysis studies one poem deeply, while poetry comparison must align similarities and differences across texts.",
           "priority": "useful",
           "context": "diagnosis",
-          "confidence": 0.8,
-          "reason": "Single-poem image-emotion questions differ from comparison questions that require similarities and differences across texts.",
+          "confidence": 0.86,
           "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review",
             "diagnosis",
-            "hint_generation",
-            "review"
-          ]
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "chinese",
+            "target_subject": "chinese",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
+          }
         },
         {
           "id": "chinese_senior_poetry_language_style",
@@ -4038,26 +3705,6 @@
             "hint_generation",
             "practice_planning"
           ]
-        },
-        {
-          "id": "chinese_senior_classical_summary",
-          "relation": "co_occurs",
-          "reason": "poetry image emotion and classical summary commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文古诗词 -> 高中语文文言文"
-          }
         },
         {
           "id": "chinese_senior_poetry_expression_technique",
@@ -4200,26 +3847,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_poetry_image_emotion",
-          "relation": "co_occurs",
-          "reason": "poetry expression technique and poetry image emotion commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文古诗词"
-          }
-        },
         {
           "id": "chinese_senior_poetry_language_style",
           "relation": "co_occurs",
@@ -4377,26 +4004,6 @@
       ],
       "related": [
         {
-          "id": "chinese_senior_poetry_expression_technique",
-          "relation": "co_occurs",
-          "reason": "poetry language style and poetry expression technique commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文古诗词"
-          }
-        },
-        {
           "id": "chinese_senior_poetry_compare",
           "relation": "co_occurs",
           "reason": "poetry language style and poetry compare commonly appear together in senior Chinese review planning.",
@@ -4532,7 +4139,6 @@
         {
           "id": "chinese_senior_poetry_language_style",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "poetry language style builds the foundation needed before studying poetry compare.",
           "priority": "core",
           "context": "explanation",
@@ -4547,31 +4153,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文古诗词"
+            "chapter_focus": "高中语文古诗词",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_poetry_language_style",
-          "relation": "co_occurs",
-          "reason": "poetry compare and poetry language style commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文古诗词"
-          }
-        },
         {
           "id": "chinese_senior_language_cohesion",
           "relation": "co_occurs",
@@ -4593,48 +4180,12 @@
           }
         },
         {
-          "id": "chinese_senior_poetry_language_style",
-          "relation": "prerequisite",
-          "reason": "Language-style judgment gives the vocabulary needed to compare two poems accurately.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
           "id": "chinese_senior_poetry_expression_technique",
           "relation": "procedure_step",
           "reason": "Compare images and emotion first, then compare expression techniques and language style.",
           "priority": "core",
           "context": "practice",
           "confidence": 0.87,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
-          "id": "chinese_senior_poetry_image_emotion",
-          "relation": "confusable",
-          "reason": "Image-emotion analysis studies one poem deeply, while poetry comparison must align similarities and differences across texts.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.86,
           "use_cases": [
             "learning_path",
             "practice_planning",
@@ -4761,26 +4312,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_poetry_compare",
-          "relation": "co_occurs",
-          "reason": "language cohesion and poetry compare commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文语言运用 -> 高中语文古诗词"
-          }
-        },
         {
           "id": "chinese_senior_language_compression",
           "relation": "co_occurs",
@@ -4992,26 +4523,6 @@
           ]
         },
         {
-          "id": "chinese_senior_language_cohesion",
-          "relation": "co_occurs",
-          "reason": "language compression and language cohesion commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文语言运用"
-          }
-        },
-        {
           "id": "chinese_senior_language_sentence_rewrite",
           "relation": "co_occurs",
           "reason": "language compression and language sentence rewrite commonly appear together in senior Chinese review planning.",
@@ -5146,26 +4657,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_language_compression",
-          "relation": "co_occurs",
-          "reason": "language sentence rewrite and language compression commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文语言运用"
-          }
-        },
         {
           "id": "chinese_senior_language_error_correction",
           "relation": "co_occurs",
@@ -5338,26 +4829,6 @@
       ],
       "related": [
         {
-          "id": "chinese_senior_language_sentence_rewrite",
-          "relation": "co_occurs",
-          "reason": "language error correction and language sentence rewrite commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文语言运用"
-          }
-        },
-        {
           "id": "chinese_senior_language_graphic",
           "relation": "co_occurs",
           "reason": "language error correction and language graphic commonly appear together in senior Chinese review planning.",
@@ -5528,26 +4999,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_language_error_correction",
-          "relation": "co_occurs",
-          "reason": "language graphic and language error correction commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文语言运用"
-          }
-        },
         {
           "id": "chinese_senior_composition_material_review",
           "relation": "co_occurs",
@@ -5759,26 +5210,6 @@
           ]
         },
         {
-          "id": "chinese_senior_language_graphic",
-          "relation": "co_occurs",
-          "reason": "composition material review and language graphic commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作 -> 高中语文语言运用"
-          }
-        },
-        {
           "id": "chinese_senior_composition_argument_layer",
           "relation": "co_occurs",
           "reason": "composition material review and composition argument layer commonly appear together in senior Chinese review planning.",
@@ -5922,15 +5353,22 @@
         {
           "id": "chinese_senior_composition_example_argument",
           "relation": "confusable",
+          "reason": "Examples provide evidence, while argument layers explain the logical progress of the essay.",
           "priority": "useful",
           "context": "diagnosis",
-          "confidence": 0.8,
-          "reason": "Argument layers organize reasoning, while example argument work selects evidence and explains how it proves the claim.",
+          "confidence": 0.87,
           "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review",
             "diagnosis",
-            "hint_generation",
-            "review"
-          ]
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "chinese",
+            "target_subject": "chinese",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
+          }
         },
         {
           "id": "chinese_senior_composition_opening_ending",
@@ -5957,26 +5395,6 @@
             "hint_generation",
             "practice_planning"
           ]
-        },
-        {
-          "id": "chinese_senior_composition_material_review",
-          "relation": "co_occurs",
-          "reason": "composition argument layer and composition material review commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
-          }
         },
         {
           "id": "chinese_senior_composition_example_argument",
@@ -6093,7 +5511,6 @@
         {
           "id": "chinese_senior_composition_argument_layer",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "composition argument layer builds the foundation needed before studying composition example argument.",
           "priority": "core",
           "context": "explanation",
@@ -6108,31 +5525,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
+            "chapter_focus": "高中语文写作",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_composition_argument_layer",
-          "relation": "co_occurs",
-          "reason": "composition example argument and composition argument layer commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
-          }
-        },
         {
           "id": "chinese_senior_composition_task_context",
           "relation": "co_occurs",
@@ -6154,48 +5552,12 @@
           }
         },
         {
-          "id": "chinese_senior_composition_argument_layer",
-          "relation": "prerequisite",
-          "reason": "Layered argument structure is needed before examples can be placed as evidence rather than decoration.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.88,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
           "id": "chinese_senior_composition_material_review",
           "relation": "procedure_step",
           "reason": "Review the material claim, choose a matching example, then explain how the example proves the claim.",
           "priority": "core",
           "context": "practice",
           "confidence": 0.9,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
-          "id": "chinese_senior_composition_argument_layer",
-          "relation": "confusable",
-          "reason": "Examples provide evidence, while argument layers explain the logical progress of the essay.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.87,
           "use_cases": [
             "learning_path",
             "practice_planning",
@@ -6302,7 +5664,6 @@
         {
           "id": "chinese_senior_composition_example_argument",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "composition example argument builds the foundation needed before studying composition task context.",
           "priority": "core",
           "context": "explanation",
@@ -6317,31 +5678,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
+            "chapter_focus": "高中语文写作",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_composition_example_argument",
-          "relation": "co_occurs",
-          "reason": "composition task context and composition example argument commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
-          }
-        },
         {
           "id": "chinese_senior_composition_opening_ending",
           "relation": "co_occurs",
@@ -6360,24 +5702,6 @@
             "migrated_from": "legacy_nearby_relation",
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文写作"
-          }
-        },
-        {
-          "id": "chinese_senior_composition_example_argument",
-          "relation": "prerequisite",
-          "reason": "Knowing how examples support claims helps students adapt evidence to a specific writing task context.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.85,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         },
         {
@@ -6511,7 +5835,6 @@
         {
           "id": "chinese_senior_composition_task_context",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "composition task context builds the foundation needed before studying composition opening ending.",
           "priority": "core",
           "context": "explanation",
@@ -6526,31 +5849,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
+            "chapter_focus": "高中语文写作",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_composition_task_context",
-          "relation": "co_occurs",
-          "reason": "composition opening ending and composition task context commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
-          }
-        },
         {
           "id": "chinese_senior_composition_language_polish",
           "relation": "co_occurs",
@@ -6569,24 +5873,6 @@
             "migrated_from": "legacy_nearby_relation",
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文写作"
-          }
-        },
-        {
-          "id": "chinese_senior_composition_task_context",
-          "relation": "prerequisite",
-          "reason": "Openings and endings should first match the task context, audience, and claim direction.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         },
         {
@@ -6720,7 +6006,6 @@
         {
           "id": "chinese_senior_composition_opening_ending",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "composition opening ending builds the foundation needed before studying composition language polish.",
           "priority": "core",
           "context": "explanation",
@@ -6735,31 +6020,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
+            "chapter_focus": "高中语文写作",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_composition_opening_ending",
-          "relation": "co_occurs",
-          "reason": "composition language polish and composition opening ending commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文写作"
-          }
-        },
         {
           "id": "chinese_senior_classical_culture",
           "relation": "co_occurs",
@@ -6778,24 +6044,6 @@
             "migrated_from": "legacy_nearby_relation",
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文写作 -> 高中语文文言文"
-          }
-        },
-        {
-          "id": "chinese_senior_composition_opening_ending",
-          "relation": "prerequisite",
-          "reason": "A complete essay frame is needed before language polish can improve emphasis and flow.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         },
         {
@@ -6950,26 +6198,6 @@
       ],
       "related": [
         {
-          "id": "chinese_senior_composition_language_polish",
-          "relation": "co_occurs",
-          "reason": "classical culture and composition language polish commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文文言文 -> 高中语文写作"
-          }
-        },
-        {
           "id": "chinese_senior_text_answer_template",
           "relation": "co_occurs",
           "reason": "classical culture and text answer template commonly appear together in senior Chinese review planning.",
@@ -7120,7 +6348,6 @@
         {
           "id": "chinese_senior_classical_culture",
           "required_mastery": 0.58,
-          "relation": "prerequisite",
           "reason": "classical culture builds the foundation needed before studying text answer template.",
           "priority": "core",
           "context": "explanation",
@@ -7135,31 +6362,12 @@
             "target_subject": "chinese",
             "migrated_from": "legacy_prerequisite_dict",
             "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文综合 -> 高中语文文言文"
+            "chapter_focus": "高中语文综合 -> 高中语文文言文",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_classical_culture",
-          "relation": "co_occurs",
-          "reason": "text answer template and classical culture commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文综合 -> 高中语文文言文"
-          }
-        },
         {
           "id": "chinese_senior_new_gaokao_mixed_text",
           "relation": "co_occurs",
@@ -7178,24 +6386,6 @@
             "migrated_from": "legacy_nearby_relation",
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文综合"
-          }
-        },
-        {
-          "id": "chinese_senior_classical_culture",
-          "relation": "prerequisite",
-          "reason": "Background knowledge and genre awareness help choose the right answer template for mixed Chinese text tasks.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.83,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
         },
         {
@@ -7349,26 +6539,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chinese_senior_text_answer_template",
-          "relation": "co_occurs",
-          "reason": "new gaokao mixed text and text answer template commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文综合"
-          }
-        },
         {
           "id": "chinese_senior_exam_revision_strategy",
           "relation": "co_occurs",
@@ -7537,32 +6707,9 @@
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文综合"
           }
-        }
-      ],
-      "related": [
-        {
-          "id": "chinese_senior_new_gaokao_mixed_text",
-          "relation": "co_occurs",
-          "reason": "exam revision strategy and new gaokao mixed text commonly appear together in senior Chinese review planning.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.74,
-          "use_cases": [
-            "practice_planning",
-            "review",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "migrated_from": "legacy_nearby_relation",
-            "migrated_for": "chinese_edge_migration_2026_06_26",
-            "chapter_focus": "高中语文综合"
-          }
         },
         {
           "id": "chinese_senior_text_answer_template",
-          "relation": "prerequisite",
           "reason": "Reusable answer templates give revision records a stable structure for error diagnosis.",
           "priority": "core",
           "context": "explanation",
@@ -7577,7 +6724,9 @@
             "target_subject": "chinese",
             "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
-        },
+        }
+      ],
+      "related": [
         {
           "id": "chinese_senior_text_answer_template",
           "relation": "procedure_step",
@@ -7585,24 +6734,6 @@
           "priority": "core",
           "context": "practice",
           "confidence": 0.9,
-          "use_cases": [
-            "learning_path",
-            "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "chinese",
-            "target_subject": "chinese",
-            "validation_batch": "chinese_ready_core_relations_2026_06_26"
-          }
-        },
-        {
-          "id": "chinese_senior_text_answer_template",
-          "relation": "confusable",
-          "reason": "Revision strategy studies why a mistake happened, while an answer template only organizes the final response.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.86,
           "use_cases": [
             "learning_path",
             "practice_planning",

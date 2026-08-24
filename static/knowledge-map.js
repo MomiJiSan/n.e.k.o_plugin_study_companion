@@ -124,6 +124,10 @@ function topicIdFromNode(node = {}) {
   return String(node.id || node.topic_id || '').trim();
 }
 
+function isKnowledgeBoundaryNode(node = {}) {
+  return node?.boundary === true || node?.in_scope === false;
+}
+
 function knowledgeCurrentPracticeScope(nodes = []) {
   const stage = knowledgeMapActiveStage();
   const stageNodes = visibleKnowledgeNodes(nodes, stage, 'all');
@@ -361,6 +365,7 @@ function renderKnowledgeZoomControls() {
 function visibleKnowledgeNodes(nodes = [], stage = knowledgeMapActiveStage(), subject = 'all') {
   const subjectValue = subject === UNCATEGORIZED_SUBJECT ? '' : subject;
   return nodes.filter((node) => {
+    if (isKnowledgeBoundaryNode(node)) return false;
     const nodeStage = stageValueFromNode(node);
     const stageVisible = stage === 'all' || nodeStage === stage || !nodeStage;
     const subjectVisible = subject === 'all' || subjectValueFromNode(node) === subjectValue;
@@ -587,6 +592,22 @@ function renderKnowledgeStageSelector(nodes = []) {
   return root;
 }
 
+function knowledgeNodesWithBoundaryClosure(nodes = [], edges = [], scopeNodes = []) {
+  const scopeIds = new Set(scopeNodes.map((node) => topicIdFromNode(node)));
+  // Static fallback loads the full graph and applies local filters. Create
+  // render-only copies for one-hop neighbours; do not mutate the payload.
+  const boundaryNodes = nodes.flatMap((node) => {
+    const nodeId = topicIdFromNode(node);
+    if (!nodeId || scopeIds.has(nodeId)) return [];
+    const isOneHopAway = edges.some((edge) => (
+      (String(edge.from || '') === nodeId && scopeIds.has(String(edge.to || '')))
+      || (String(edge.to || '') === nodeId && scopeIds.has(String(edge.from || '')))
+    ));
+    return isOneHopAway ? [{ ...node, boundary: true, in_scope: false }] : [];
+  });
+  return [...scopeNodes, ...boundaryNodes];
+}
+
 function knowledgeEdgeMeta(edge = {}) {
   const parts = [
     knowledgeEdgePriorityLabel(edge.priority),
@@ -653,6 +674,9 @@ function renderKnowledgeNodeDetail(node = {}, edges = [], labelById = new Map())
     String(node.unit || '').trim(),
   ].filter(Boolean).join(' / ');
   if (facts) detail.appendChild(drawerElement('p', 'knowledge-node-detail__meta', facts));
+  if (isKnowledgeBoundaryNode(node)) {
+    detail.appendChild(drawerElement('p', 'knowledge-node-detail__boundary', t('ui.knowledge.boundary_description', 'This prerequisite is shown for context and is outside the selected graph range.')));
+  }
   const nodeId = String(node.id || node.topic_id || '').trim();
   const relatedEdges = edges.filter((edge) => String(edge.from || '') === nodeId || String(edge.to || '') === nodeId);
   const addSection = (key, fallback, items) => {
@@ -765,17 +789,24 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
     return group;
   };
   const renderNodeButton = (node) => {
-    const item = drawerElement('button', 'knowledge-node');
+    const boundary = isKnowledgeBoundaryNode(node);
+    const item = drawerElement('button', `knowledge-node${boundary ? ' knowledge-node--boundary' : ''}`);
     item.type = 'button';
     item.dataset.mastery = masteryLevelForPanel(node);
+    if (boundary) item.dataset.boundary = 'true';
     const mastery = Number(node.mastery);
     const masteryText = Number.isFinite(mastery) ? ` ${Math.round(mastery * 100)}%` : '';
-    item.textContent = `${node.label || node.name || node.topic_name || node.topic_id || node.id || '-'}${masteryText}`;
-    item.title = [
+    const label = `${node.label || node.name || node.topic_name || node.topic_id || node.id || '-'}${masteryText}`;
+    item.appendChild(drawerElement('span', 'knowledge-node__label', label));
+    if (boundary) item.appendChild(drawerElement('small', 'knowledge-node__boundary-label', t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')));
+    const titleParts = [
       subjectValueFromNode(node) ? knowledgeSubjectLabel(subjectValueFromNode(node)) : '',
       valueLabel(node.chapter, ''),
       valueLabel(node.unit, ''),
-    ].filter(Boolean).join(' / ');
+    ].filter(Boolean);
+    if (boundary) titleParts.push(t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite'));
+    item.title = titleParts.join(' / ');
+    if (boundary) item.setAttribute('aria-label', `${label}: ${t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}`);
     item.addEventListener('click', () => {
       const close = () => {
         detailMount.replaceChildren();
@@ -859,7 +890,7 @@ function knowledgeEdgeColor(relation) {
   return '#6b8f7b';
 }
 
-function renderKnowledgeEdgeGraph(edgeGroups = []) {
+function renderKnowledgeEdgeGraph(edgeGroups = [], nodes = []) {
   const graphEdges = edgeGroups
     .flatMap((group) => (group.items || []).slice(0, 6).map((item) => ({
       from: String(group.fromId || '').trim(),
@@ -873,6 +904,7 @@ function renderKnowledgeEdgeGraph(edgeGroups = []) {
     .slice(0, 30);
   if (!graphEdges.length) return null;
   const labelById = new Map();
+  const nodeById = new Map(nodes.map((node) => [topicIdFromNode(node), node]));
   graphEdges.forEach((edge) => {
     labelById.set(edge.from, edge.fromLabel || edge.from);
     labelById.set(edge.to, edge.toLabel || edge.to);
@@ -947,20 +979,30 @@ function renderKnowledgeEdgeGraph(edgeGroups = []) {
     const position = positions.get(id);
     if (!position) return;
     const group = document.createElementNS(svgNs, 'g');
-    group.setAttribute('class', 'knowledge-edge-graph__node');
-    group.setAttribute('transform', `translate(${position.x - 88} ${position.y - 22})`);
+    const boundary = isKnowledgeBoundaryNode(nodeById.get(id));
+    group.setAttribute('class', `knowledge-edge-graph__node${boundary ? ' knowledge-edge-graph__node--boundary' : ''}`);
+    group.setAttribute('transform', `translate(${position.x - 88} ${position.y - 29})`);
     const rect = document.createElementNS(svgNs, 'rect');
     rect.setAttribute('width', '176');
-    rect.setAttribute('height', '44');
+    rect.setAttribute('height', '58');
     rect.setAttribute('rx', '8');
     const textNode = document.createElementNS(svgNs, 'text');
     textNode.setAttribute('x', '88');
-    textNode.setAttribute('y', '27');
+    textNode.setAttribute('y', '24');
     textNode.setAttribute('text-anchor', 'middle');
     const label = labelById.get(id) || id;
     textNode.textContent = label.length > 14 ? `${label.slice(0, 13)}...` : label;
-    group.appendChild(document.createElementNS(svgNs, 'title')).textContent = label;
+    group.appendChild(document.createElementNS(svgNs, 'title')).textContent = boundary ? `${label}: ${t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}` : label;
     group.append(rect, textNode);
+    if (boundary) {
+      const boundaryLabel = document.createElementNS(svgNs, 'text');
+      boundaryLabel.setAttribute('class', 'knowledge-edge-graph__boundary-label');
+      boundaryLabel.setAttribute('x', '88');
+      boundaryLabel.setAttribute('y', '43');
+      boundaryLabel.setAttribute('text-anchor', 'middle');
+      boundaryLabel.textContent = t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite');
+      group.appendChild(boundaryLabel);
+    }
     nodeLayer.appendChild(group);
   });
   svg.appendChild(nodeLayer);
@@ -1011,7 +1053,7 @@ function renderKnowledgeEdges(nodes = [], edges = [], edgeCount = 0, topicCount 
     return root;
   }
   const visibleGroups = Array.from(groups.values()).slice(0, 12);
-  const graph = renderKnowledgeEdgeGraph(visibleGroups);
+  const graph = renderKnowledgeEdgeGraph(visibleGroups, nodes);
   if (graph) root.appendChild(graph);
   const cardList = drawerElement('div', 'knowledge-edge-list');
 
@@ -1068,12 +1110,14 @@ function renderKnowledgePanel(payload = null) {
   const activeStage = knowledgeMapActiveStage();
   const stageNodes = visibleKnowledgeNodes(nodes, activeStage, 'all');
   const activeSubject = knowledgeMapActiveSubject(stageNodes);
-  const shownNodes = visibleKnowledgeScopeNodes(nodes, activeStage, activeSubject);
+  const scopedNodes = visibleKnowledgeScopeNodes(nodes, activeStage, activeSubject);
+  const shownNodes = knowledgeNodesWithBoundaryClosure(nodes, edges, scopedNodes);
   const shownEdges = visibleKnowledgeEdges(edges, shownNodes, activeStage);
   const topicCount = countFromSummary(summary, ['topic_count', 'topics', 'node_count', 'nodes']) || nodes.length;
   const edgeCount = countFromSummary(summary, ['edge_count', 'edges']) || edges.length;
-  const weakTopics = shownNodes.filter((node) => masteryLevelForPanel(node) === 'weak').length;
-  const root = surfacePanel('knowledge-map', `${shownNodes.length}/${topicCount}`);
+  const boundaryCount = shownNodes.length - scopedNodes.length;
+  const weakTopics = scopedNodes.filter((node) => masteryLevelForPanel(node) === 'weak').length;
+  const root = surfacePanel('knowledge-map', `${scopedNodes.length}/${topicCount}`);
   setActiveKnowledgeMapScale(knowledgeMapZoomLevel());
   root.querySelector('.study-panel__header')?.appendChild(renderKnowledgeZoomControls());
   const detailMount = drawerElement('div', 'knowledge-node-detail-mount');
@@ -1081,9 +1125,10 @@ function renderKnowledgePanel(payload = null) {
   appendPanelState(state, t('ui.profile.stage_label', 'Stage'), learningStageLabel());
   appendPanelState(state, t('ui.knowledge.scope_label', 'Graph range'), knowledgeMapRangeLabel(activeStage));
   appendPanelState(state, t('ui.knowledge.subject_label', 'Subject'), knowledgeMapSubjectLabel(activeSubject));
-  appendPanelState(state, t('ui.label.topics', 'Topics'), `${shownNodes.length}/${topicCount}`);
+  appendPanelState(state, t('ui.label.topics', 'Topics'), `${scopedNodes.length}/${topicCount}`);
   appendPanelState(state, t('ui.label.edges', 'Edges'), `${shownEdges.length}/${edgeCount}`);
   appendPanelState(state, t('ui.label.weak_topics', 'Weak Topics'), String(weakTopics));
+  if (boundaryCount) appendPanelState(state, t('ui.knowledge.boundary_prerequisites', 'Out-of-scope prerequisites'), String(boundaryCount));
   root.appendChild(state);
   root.appendChild(renderKnowledgeStageSelector(nodes));
   root.appendChild(renderKnowledgeSubjectSelector(nodes, activeStage));

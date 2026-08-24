@@ -896,19 +896,6 @@
             "practice_planning",
             "review"
           ]
-        },
-        {
-          "id": "geo_junior_population_city",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "reason": "Regional natural-human differences can be confused with population and urbanization patterns; diagnosis should ask which variable the question targets.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
         }
       ],
       "typical_misconceptions": [
@@ -1122,19 +1109,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "geo_junior_river_landform",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.83,
-          "reason": "Water-cycle processes are often mixed with river-landform formation; diagnosis should separate circulation links from erosion and deposition results.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         }
