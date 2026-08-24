@@ -100,12 +100,198 @@ def test_workspace_assets_routes_and_locales_are_complete() -> None:
 
     knowledge_start = main.index("function activateKnowledgeWorkspace")
     knowledge_end = main.index("function initializeWorkspaceController", knowledge_start)
-    assert "openSurfaceDrawer('knowledge-map')" in main[knowledge_start:knowledge_end]
+    knowledge_activation = main[knowledge_start:knowledge_end]
+    assert "mountKnowledgeWorkspaceHost()" in knowledge_activation
+    assert "syncKnowledgeMapContent()" in knowledge_activation
+    assert "loadKnowledgeMap(requestId)" in knowledge_activation
+    assert "openSurfaceDrawer('knowledge-map')" not in knowledge_activation
 
     escape_start = main.index("if (event.key === 'Escape'")
     escape_source = main[escape_start : escape_start + 180]
     assert "closeSurfaceDrawer()" in escape_source
     assert "activateWorkspace(" not in escape_source
+
+
+def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
+    index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+    knowledge = (STATIC_ROOT / "knowledge-map.js").read_text(encoding="utf-8")
+
+    for element_id in (
+        "knowledgeWorkspacePanel",
+        "knowledgeMapContent",
+        "knowledgeMapFullscreenBtn",
+        "surfaceDrawerBody",
+        "generateQuestionBtn",
+    ):
+        assert index.count(f'id="{element_id}"') == 1, element_id
+    assert 'data-knowledge-map-host' in index
+    assert 'data-knowledge-map-fullscreen' in index
+
+    # Rendering and interaction state belong to the knowledge module, never a drawer DOM.
+    assert "surfaceDrawer" not in knowledge
+    assert "surfaceDrawerBody" not in knowledge
+    for method in (
+        "replaceContent",
+        "setScale",
+        "isActive",
+        "activatePractice",
+    ):
+        assert method in knowledge
+    assert "window.StudyCompanionKnowledgeMap" in knowledge
+    assert "await activatePracticeFromKnowledgeMap()" in knowledge
+    assert "closeSurfaceDrawer" not in knowledge
+    assert "focusAfterScroll" not in knowledge
+    assert "openPracticePanel" not in knowledge
+
+    state_start = main.index("function setKnowledgeMapLoadState")
+    state_end = main.index("function createKnowledgeMapHost", state_start)
+    state_source = main[state_start:state_end]
+    assert "knowledgeMapStatus.textContent" not in state_source
+    assert "knowledgeMapStatus.dataset.state = state" in state_source
+    assert "knowledgeMapErrorMessage.textContent" in state_source
+
+    close_start = main.index("function closeSurfaceDrawer")
+    close_end = main.index("function renderGenericLocalPanel", close_start)
+    close_source = main[close_start:close_end]
+    assert "options.restoreFocus !== false" in close_source
+    assert "knowledgeMapFullscreenBtn?.focus?.()" in close_source
+
+    host_start = main.index("function createKnowledgeMapHost")
+    host_end = main.index("function syncKnowledgeMapContent", host_start)
+    host_source = main[host_start:host_end]
+    assert "activatePracticeWorkspace" not in host_source
+    assert "return activateKnowledgePracticeWorkspace()" in host_source
+
+    bootstrap_start = main.index("async function bootstrap()")
+    bootstrap_source = main[bootstrap_start:]
+    assert "bindButton(knowledgeMapFullscreenBtn, openKnowledgeMapFullscreen)" in bootstrap_source
+
+    load_start = main.index("async function loadKnowledgeMap(requestId)")
+    load_end = main.index("async function activateKnowledgePracticeWorkspace", load_start)
+    load_source = main[load_start:load_end]
+    assert load_source.count("requestId !== mapRequestId") >= 2
+    success_guard = load_source.index("requestId !== mapRequestId")
+    payload_commit = load_source.index("lastKnowledgeMapPayload = payload")
+    payload_render = load_source.index("knowledgeMap.rerender(payload)")
+    assert success_guard < payload_commit < payload_render
+    assert "!knowledgeMap.isActive()" in load_source
+    assert "setKnowledgeMapLoadState('error', formatPluginError(error))" in load_source
+
+    practice_start = main.index("async function activateKnowledgePracticeWorkspace")
+    practice_end = main.index("function openKnowledgeMapFullscreen", practice_start)
+    practice_source = main[practice_start:practice_end]
+    assert practice_source.index("activateWorkspace('practice'") < practice_source.index("generateQuestionBtn?.focus?.()")
+
+    fullscreen_start = main.index("function openKnowledgeMapFullscreen")
+    fullscreen_end = main.index("function closeSurfaceDrawer", fullscreen_start)
+    fullscreen_source = main[fullscreen_start:fullscreen_end]
+    assert "if (knowledgeMapLoadState !== 'ready') syncKnowledgeMapContent()" in fullscreen_source
+
+    leave_start = main.index("function canLeaveWorkspace")
+    leave_end = main.index("function closeWorkspaceSurface", leave_start)
+    leave_source = main[leave_start:leave_end]
+    assert "context.from === 'knowledge'" in leave_source
+    assert leave_source.index("knowledgeMapFullscreenOpen()") < leave_source.index("knowledgeWorkspaceActive = false")
+    assert leave_source.index("mapRequestId += 1") < leave_source.index("releaseKnowledgeWorkspaceHost?.()")
+
+
+def test_knowledge_map_loader_ignores_stale_success_failure_and_inactive_host() -> None:
+    main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+    load_start = main.index("async function loadKnowledgeMap(requestId)")
+    load_end = main.index("async function activateKnowledgePracticeWorkspace", load_start)
+    load_function = main[load_start:load_end]
+    script = r"""
+import { Window } from 'happy-dom';
+
+const window = new Window({ url: 'http://testserver/plugin/study_companion/ui/' });
+const requests = [];
+window.callPlugin = async (entryId, args) => await new Promise((resolve, reject) => {
+  requests.push({ entryId, args, resolve, reject });
+});
+window.formatPluginError = (error) => error?.message === 'plugin_call_timeout'
+  ? 'Localized plugin timeout'
+  : error?.message || String(error);
+const loadFunction = """ + json.dumps(load_function) + r""";
+window.eval(`
+window.__knowledgeLoadHarness = (() => {
+  let mapRequestId = 0;
+  let lastKnowledgeMapPayload = null;
+  let active = true;
+  const renders = [];
+  const states = [];
+  const knowledgeMap = {
+    isActive: () => active,
+    rerender: (payload) => renders.push(payload),
+  };
+  function studyKnowledgeMap() { return knowledgeMap; }
+  function setKnowledgeMapLoadState(state, error = '') { states.push({ state, error }); }
+  function syncKnowledgeMapContent() { states.push({ state: 'sync' }); }
+  ${loadFunction}
+  return {
+    load: loadKnowledgeMap,
+    setRequestId(value) { mapRequestId = value; },
+    setActive(value) { active = value; },
+    getPayload() { return lastKnowledgeMapPayload; },
+    renders,
+    states,
+  };
+})();`);
+const harness = window.__knowledgeLoadHarness;
+
+harness.setRequestId(1);
+const staleSuccess = harness.load(1);
+await Promise.resolve();
+harness.setRequestId(2);
+const currentSuccess = harness.load(2);
+await Promise.resolve();
+if (requests.length !== 2) throw new Error('overlapping knowledge requests were not started');
+requests[1].resolve({ nodes: [{ id: 'current' }], edges: [] });
+await currentSuccess;
+if (harness.getPayload()?.nodes?.[0]?.id !== 'current' || harness.renders.length !== 1) {
+  throw new Error('current knowledge response was not rendered');
+}
+requests[0].resolve({ nodes: [{ id: 'stale' }], edges: [] });
+await staleSuccess;
+if (harness.getPayload()?.nodes?.[0]?.id !== 'current' || harness.renders.length !== 1) {
+  throw new Error('stale knowledge success overwrote the current payload');
+}
+
+harness.setRequestId(3);
+const staleFailure = harness.load(3);
+await Promise.resolve();
+harness.setRequestId(4);
+requests[2].reject(new Error('stale failure'));
+await staleFailure;
+if (harness.states.some((state) => state.state === 'error')) {
+  throw new Error('stale knowledge failure replaced the current state');
+}
+
+harness.setRequestId(5);
+harness.setActive(false);
+const inactiveSuccess = harness.load(5);
+await Promise.resolve();
+requests[3].resolve({ nodes: [{ id: 'inactive' }], edges: [] });
+await inactiveSuccess;
+if (harness.getPayload()?.nodes?.[0]?.id !== 'current' || harness.renders.length !== 1) {
+  throw new Error('response for an inactive knowledge host was rendered');
+}
+
+harness.setRequestId(6);
+harness.setActive(true);
+const currentFailure = harness.load(6);
+await Promise.resolve();
+requests[4].reject(new Error('plugin_call_timeout'));
+await currentFailure;
+const currentError = harness.states.find((state) => state.state === 'error');
+if (currentError?.error !== 'Localized plugin timeout') {
+  throw new Error(`knowledge failure was not localized: ${JSON.stringify(currentError)}`);
+}
+if (harness.states.at(-1)?.state !== 'sync') {
+  throw new Error('current knowledge failure did not synchronize the error content');
+}
+"""
+    _run_frontend_script(script)
 
 
 def test_workspace_css_bounds_desktop_tablet_mobile_and_reduced_motion() -> None:
@@ -117,6 +303,9 @@ def test_workspace_css_bounds_desktop_tablet_mobile_and_reduced_motion() -> None
     assert "html, body { max-width: 100%; overflow-x: clip" in compact
     assert ".workspace-nav { display: flex" in compact
     assert "overflow-x: auto" in compact
+    for scale in ("60", "75", "90", "100"):
+        assert f'.knowledge-workspace[data-knowledge-scale="{scale}"]' in css
+    assert "width: max(var(--knowledge-map-window-width), min(100%, 720px))" in compact
     for breakpoint in ("1199px", "1023px", "767px", "430px"):
         assert breakpoint in css
     assert "@media (prefers-reduced-motion: reduce)" in css
@@ -389,5 +578,192 @@ if (timers.size !== 1) {
   throw new Error(`active pomodoro continued with ${timers.size} refresh chains instead of one`);
 }
 if (statusCalls < 6) throw new Error('pomodoro status was not refreshed');
+"""
+    _run_frontend_script(script)
+
+
+def test_knowledge_map_hosts_share_state_scale_handlers_and_practice_activation() -> None:
+    script = r"""
+import { Window } from 'happy-dom';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const staticDir = process.env.STUDY_COMPANION_STATIC_DIR;
+const source = fs.readFileSync(path.join(staticDir, 'knowledge-map.js'), 'utf8');
+const window = new Window({ url: 'http://testserver/plugin/study_companion/ui/' });
+const { document } = window;
+document.body.innerHTML = `
+  <div id="practiceScopePath"></div>
+  <button id="clearPracticeScopeBtn" type="button"></button>
+  <div id="questionContextCard"></div>
+  <button id="generateQuestionBtn" type="button">Generate</button>
+  <section id="centralHost"></section>
+  <section id="fullscreenHost"></section>`;
+
+window.t = (_key, fallback) => fallback;
+window.tf = (_key, fallback, values = {}) => fallback.replace(/\{([^}]+)\}/g, (_match, name) => values[name] ?? '');
+window.drawerElement = (tag, className = '', text = '') => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== '') node.textContent = String(text);
+  return node;
+};
+window.surfacePanel = (surfaceId, subtitle = '') => {
+  const root = window.drawerElement('article', 'study-panel surface-shell');
+  root.dataset.surface = surfaceId;
+  const header = window.drawerElement('header', 'study-panel__header');
+  header.append(window.drawerElement('h1', '', surfaceId), window.drawerElement('span', '', subtitle));
+  root.appendChild(header);
+  return root;
+};
+window.appendPanelState = (parent, label, value) => {
+  const item = window.drawerElement('div');
+  item.append(window.drawerElement('span', '', label), window.drawerElement('strong', '', value));
+  parent.appendChild(item);
+};
+window.countFromSummary = (summary, keys) => {
+  for (const key of keys) {
+    const value = Number(summary?.[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+};
+window.normalizeLearningStage = (value) => String(value || '').trim();
+window.learningProfile = { stage: 'senior_high' };
+window.learningStageLabel = (value = window.learningProfile.stage) => value || 'all';
+window.knowledgeStageLabel = (value) => value || 'uncategorized';
+window.stageValueFromNode = (node) => String(node.stage || '');
+window.masteryLevelForPanel = (node) => node.weak ? 'weak' : 'new';
+window.knowledgeEdgePriorityLabel = (value) => String(value || '');
+window.knowledgeEdgeContextLabel = (value) => String(value || '');
+window.knowledgeQuestionTypeLabel = (value) => String(value || '');
+window.knowledgeEdgeReason = () => '';
+window.LEARNING_STAGE_OPTIONS = ['primary', 'junior_high', 'senior_high', 'college', 'custom'];
+window.KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'physics'];
+window.lastKnowledgeMapPayload = null;
+window.lastStatusPayload = {};
+window.knowledgeMapStage = '';
+window.currentPracticeScope = null;
+window.currentSelectionContext = null;
+window.questionContextCard = document.querySelector('#questionContextCard');
+window.generateQuestionBtn = document.querySelector('#generateQuestionBtn');
+window.setQuestionContext = (value) => { window.lastQuestionContext = value; };
+window.setStatus = (value) => { window.lastStatus = value; };
+window.setReply = (value) => { window.lastReply = value; };
+window.formatPluginError = (error) => error?.message || String(error);
+const pluginCalls = [];
+window.callPlugin = async (entryId, args = {}) => {
+  pluginCalls.push({ entryId, args });
+  if (entryId !== 'study_set_practice_scope') throw new Error(`Unexpected entry: ${entryId}`);
+  return {
+    active: true,
+    scope: { ...args.scope, scope_key: 'scope-1', scope_revision: 7, display_path: ['Senior high', 'Math'] },
+    scope_revision: 7,
+  };
+};
+window.eval(source);
+
+const api = window.StudyCompanionKnowledgeMap;
+if (!api) throw new Error('knowledge map host API was not exported');
+const requiredApi = ['registerHost', 'render', 'renderLoading', 'replaceContent', 'setScale', 'isActive', 'activatePractice', 'rerender', 'getState'];
+for (const name of requiredApi) {
+  if (typeof api[name] !== 'function') throw new Error(`knowledge map API is missing ${name}`);
+}
+
+const central = document.querySelector('#centralHost');
+const fullscreen = document.querySelector('#fullscreenHost');
+let activePresentation = 'central';
+let practiceActivations = 0;
+const scales = { central: [], fullscreen: [] };
+function host(name, element) {
+  return {
+    replaceContent(node) { element.replaceChildren(node); },
+    setScale(level) {
+      scales[name].push(level);
+      element.dataset.windowScale = String(level);
+    },
+    isActive() { return activePresentation === name; },
+    async activatePractice() {
+      practiceActivations += 1;
+      window.generateQuestionBtn.focus();
+      return true;
+    },
+  };
+}
+const releaseCentral = api.registerHost(host('central', central));
+const payload = {
+  summary: { topic_count: 2, edge_count: 0 },
+  nodes: [
+    { id: 'linear', name: 'Linear equations', stage: 'senior_high', subject: 'math', chapter: 'Algebra', unit: 'Equations' },
+    { id: 'motion', name: 'Motion', stage: 'senior_high', subject: 'physics', chapter: 'Mechanics', unit: 'Kinematics' },
+  ],
+  edges: [],
+};
+const initialMap = api.render(payload);
+api.replaceContent(initialMap);
+if (central.firstElementChild !== initialMap || fullscreen.childElementCount !== 0) {
+  throw new Error('knowledge map was not embedded in the central host');
+}
+
+central.querySelector('[data-subject="math"]')?.click();
+if (api.getState().subject !== 'math') throw new Error('subject state was not stored by the shared knowledge map');
+const filteredMap = central.firstElementChild;
+filteredMap.querySelector('[data-action="zoom-out"]')?.click();
+if (api.getState().zoomLevel !== 90 || central.dataset.windowScale !== '90') {
+  throw new Error('central zoom did not update shared scale state');
+}
+
+activePresentation = 'fullscreen';
+let releaseFullscreen = api.registerHost(host('fullscreen', fullscreen));
+const sharedMap = fullscreen.firstElementChild;
+if (!sharedMap || central.childElementCount !== 0) {
+  throw new Error('full-screen mode did not move the single map node out of the central host');
+}
+if (api.getState().subject !== 'math' || api.getState().zoomLevel !== 90 || fullscreen.dataset.windowScale !== '90') {
+  throw new Error('full-screen mode lost filter or zoom state');
+}
+
+for (let index = 0; index < 5; index += 1) {
+  activePresentation = 'central';
+  releaseFullscreen();
+  if (central.firstElementChild !== sharedMap) throw new Error('full-screen close did not restore the shared node');
+  activePresentation = 'fullscreen';
+  releaseFullscreen = api.registerHost(host('fullscreen', fullscreen));
+  if (fullscreen.firstElementChild !== sharedMap) throw new Error('full-screen reopen did not reuse the shared node');
+}
+if (document.querySelectorAll('[data-surface="knowledge-map"]').length !== 1) {
+  throw new Error('repeated presentation switches duplicated knowledge map state or DOM');
+}
+fullscreen.querySelector('[data-action="zoom-out"]')?.click();
+if (api.getState().zoomLevel !== 75) {
+  throw new Error(`a single zoom click ran duplicate handlers: ${api.getState().zoomLevel}`);
+}
+
+const practiceButton = fullscreen.querySelector('.knowledge-hierarchy-picker .button-primary');
+if (!practiceButton || practiceButton.disabled) throw new Error('explicit knowledge scope did not expose practice activation');
+practiceButton.click();
+for (let index = 0; index < 12; index += 1) await Promise.resolve();
+const scopeCall = pluginCalls.find((call) => call.entryId === 'study_set_practice_scope');
+if (!scopeCall || scopeCall.args.scope.subject !== 'math' || scopeCall.args.scope.stage !== 'senior_high') {
+  throw new Error(`knowledge scope did not reach the existing backend contract: ${JSON.stringify(scopeCall)}`);
+}
+if (practiceActivations !== 1 || document.activeElement !== window.generateQuestionBtn) {
+  throw new Error('saved knowledge scope did not activate practice and focus Generate');
+}
+
+activePresentation = 'central';
+const finalRelease = releaseFullscreen;
+finalRelease();
+if (central.firstElementChild !== sharedMap && !central.querySelector('[data-surface="knowledge-map"]')) {
+  throw new Error('closing full-screen did not return the shared map to the central host');
+}
+if (api.getState().subject !== 'math' || api.getState().zoomLevel !== 75) {
+  throw new Error('closing full-screen reset shared knowledge state');
+}
+if (finalRelease() !== false) throw new Error('host release was not idempotent');
+releaseCentral();
+if (central.childElementCount !== 0 || sharedMap.isConnected) {
+  throw new Error('releasing the final inactive host left stale map content attached');
+}
 """
     _run_frontend_script(script)

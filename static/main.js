@@ -138,6 +138,13 @@ const workspaceMemoryStatus = $id('workspaceMemoryStatus');
 const workspaceKnowledgeStatus = $id('workspaceKnowledgeStatus');
 const workspaceFocusStatus = $id('workspaceFocusStatus');
 const workspaceNotebookStatus = $id('workspaceNotebookStatus');
+const knowledgeWorkspacePanel = $id('knowledgeWorkspacePanel');
+const knowledgeMapContent = $id('knowledgeMapContent');
+const knowledgeMapStatus = $id('knowledgeMapStatus');
+const knowledgeMapLoading = $id('knowledgeMapLoading');
+const knowledgeMapError = $id('knowledgeMapError');
+const knowledgeMapErrorMessage = $id('knowledgeMapErrorMessage');
+const knowledgeMapFullscreenBtn = $id('knowledgeMapFullscreenBtn');
 const surfaceDrawer = $id('surfaceDrawer');
 const surfaceDrawerTitle = $id('surfaceDrawerTitle');
 const surfaceDrawerBody = $id('surfaceDrawerBody');
@@ -191,6 +198,11 @@ let knowledgeMapStage = '';
 let lastKnowledgeMapPayload = null;
 let workspaceController = null;
 let suspendedWorkspaceId = '';
+let knowledgeWorkspaceActive = false;
+let releaseKnowledgeWorkspaceHost = null;
+let releaseKnowledgeFullscreenHost = null;
+let knowledgeMapLoadState = 'idle';
+let knowledgeMapLoadError = '';
 const pasteControllers = { study: null, answer: null };
 
 function t(key, fallback) {
@@ -256,8 +268,9 @@ function setLearningProfileStage(stage, options = {}) {
   syncLearningProfileUi();
   closeLearningProfileModal();
   renderFirstRunGuide(lastStatusPayload);
-  if (surfaceDrawer?.dataset.surfaceId === 'knowledge-map' && surfaceDrawerBody) {
-    surfaceDrawerBody.replaceChildren(renderKnowledgePanel());
+  const knowledgeMap = window.StudyCompanionKnowledgeMap;
+  if (knowledgeMap?.isActive?.()) {
+    knowledgeMap.rerender(lastKnowledgeMapPayload || lastStatusPayload);
   }
 }
 
@@ -1410,10 +1423,148 @@ function hostedSurfaceLabel(surfaceId) {
   return window.StudyCompanionSurfacePanels.label(surfaceId, t);
 }
 
+function studyKnowledgeMap() {
+  const knowledgeMap = window.StudyCompanionKnowledgeMap;
+  if (!knowledgeMap?.registerHost) {
+    throw new Error('StudyCompanionKnowledgeMap failed to load');
+  }
+  return knowledgeMap;
+}
+
+function knowledgeMapFullscreenOpen() {
+  return surfaceDrawer?.dataset.open === 'true'
+    && surfaceDrawer.dataset.surfaceId === 'knowledge-map';
+}
+
+function setKnowledgeMapLoadState(state, error = '') {
+  knowledgeMapLoadState = state;
+  knowledgeMapLoadError = String(error || '');
+  if (knowledgeMapLoading) knowledgeMapLoading.hidden = state !== 'loading';
+  if (knowledgeMapError) knowledgeMapError.hidden = state !== 'error';
+  if (knowledgeMapErrorMessage) knowledgeMapErrorMessage.textContent = knowledgeMapLoadError;
+  if (knowledgeMapContent) {
+    knowledgeMapContent.hidden = state !== 'ready';
+    knowledgeMapContent.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
+  }
+  if (knowledgeMapStatus) knowledgeMapStatus.dataset.state = state;
+}
+
+function createKnowledgeMapHost(container, kind) {
+  return {
+    replaceContent(node) {
+      if (!node || !this.isActive()) return false;
+      container.replaceChildren(node);
+      return true;
+    },
+    setScale(level) {
+      const value = String(level || '100');
+      if (kind === 'fullscreen') {
+        surfaceDrawer.dataset.windowScale = value;
+      } else if (knowledgeWorkspacePanel) {
+        knowledgeWorkspacePanel.dataset.knowledgeScale = value;
+      }
+    },
+    isActive() {
+      return kind === 'fullscreen'
+        ? knowledgeMapFullscreenOpen()
+        : knowledgeWorkspaceActive && !knowledgeMapFullscreenOpen();
+    },
+    activatePractice() {
+      return activateKnowledgePracticeWorkspace();
+    },
+  };
+}
+
+function syncKnowledgeMapContent() {
+  const knowledgeMap = studyKnowledgeMap();
+  if (knowledgeMapLoadState === 'loading') {
+    knowledgeMap.replaceContent(knowledgeMap.renderLoading());
+    return;
+  }
+  if (knowledgeMapLoadState === 'error') {
+    const root = surfacePanel('knowledge-map', t('ui.status.error', 'Error'));
+    root.appendChild(drawerElement('pre', '', knowledgeMapLoadError));
+    knowledgeMap.replaceContent(root);
+    return;
+  }
+  knowledgeMap.rerender(lastKnowledgeMapPayload || lastStatusPayload);
+}
+
+function mountKnowledgeWorkspaceHost() {
+  releaseKnowledgeWorkspaceHost?.();
+  releaseKnowledgeWorkspaceHost = studyKnowledgeMap().registerHost(
+    createKnowledgeMapHost(knowledgeMapContent, 'workspace'),
+  );
+}
+
+function mountKnowledgeFullscreenHost() {
+  releaseKnowledgeFullscreenHost?.();
+  releaseKnowledgeFullscreenHost = studyKnowledgeMap().registerHost(
+    createKnowledgeMapHost(surfaceDrawerBody, 'fullscreen'),
+  );
+}
+
+async function loadKnowledgeMap(requestId) {
+  try {
+    const payload = await callPlugin('study_knowledge_map', { limit: 1000 });
+    const knowledgeMap = studyKnowledgeMap();
+    if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
+    lastKnowledgeMapPayload = payload;
+    setKnowledgeMapLoadState('ready');
+    knowledgeMap.rerender(payload);
+  } catch (error) {
+    const knowledgeMap = studyKnowledgeMap();
+    if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
+    setKnowledgeMapLoadState('error', formatPluginError(error));
+    syncKnowledgeMapContent();
+  }
+}
+
+async function activateKnowledgePracticeWorkspace() {
+  if (knowledgeMapFullscreenOpen() && closeSurfaceDrawer({ resumeWorkspace: false, restoreFocus: false }) === false) {
+    return false;
+  }
+  const result = await activateWorkspace('practice', {
+    focus: 'none',
+    source: 'knowledge-practice-scope',
+  });
+  if (!result?.ok) return false;
+  generateQuestionBtn?.focus?.();
+  return true;
+}
+
+function openKnowledgeMapFullscreen() {
+  if (!surfaceDrawer || !surfaceDrawerBody || !knowledgeWorkspaceActive) return false;
+  if (surfaceDrawer.dataset.open === 'true' && !knowledgeMapFullscreenOpen()) {
+    if (closeSurfaceDrawer({ resumeWorkspace: false }) === false) return false;
+  }
+  if (surfaceDrawerTitle) surfaceDrawerTitle.textContent = hostedSurfaceLabel('knowledge-map');
+  surfaceDrawer.dataset.surfaceId = 'knowledge-map';
+  surfaceDrawer.dataset.presentation = 'dialog';
+  surfaceDrawer.setAttribute('role', 'dialog');
+  surfaceDrawer.setAttribute('aria-modal', 'true');
+  surfaceDrawer.dataset.open = 'true';
+  surfaceDrawer.setAttribute('aria-hidden', 'false');
+  knowledgeMapFullscreenBtn?.setAttribute('aria-expanded', 'true');
+  mountKnowledgeFullscreenHost();
+  if (knowledgeMapLoadState !== 'ready') syncKnowledgeMapContent();
+  surfaceDrawerCloseBtn?.focus?.();
+  return true;
+}
+
 function closeSurfaceDrawer(options = {}) {
   if (!surfaceDrawer) return true;
+  if (knowledgeMapFullscreenOpen()) {
+    surfaceDrawer.dataset.open = 'false';
+    surfaceDrawer.setAttribute('aria-hidden', 'true');
+    knowledgeMapFullscreenBtn?.setAttribute('aria-expanded', 'false');
+    releaseKnowledgeFullscreenHost?.();
+    releaseKnowledgeFullscreenHost = null;
+    if (knowledgeWorkspaceActive) syncKnowledgeMapContent();
+    if (options.restoreFocus !== false) knowledgeMapFullscreenBtn?.focus?.();
+    return true;
+  }
   if (window.StudyCompanionSurfacePanels?.close?.() === false) return false;
-  mapRequestId += 1;
   surfaceDrawer.dataset.open = 'false';
   surfaceDrawer.setAttribute('aria-hidden', 'true');
   const workspaceId = suspendedWorkspaceId;
@@ -1553,29 +1704,11 @@ function renderSurfaceDrawerBody(surfaceId) {
   const hostedPanel = window.StudyCompanionSurfacePanels?.render?.(surfaceId, studySurfaceContext());
   if (hostedPanel === false) return null;
   if (hostedPanel) return hostedPanel;
-  if (surfaceId === 'knowledge-map') return renderKnowledgePanel();
   return renderGenericLocalPanel(surfaceId);
 }
 
-async function loadKnowledgeMapIntoDrawer(surfaceId, requestId) {
-  try {
-    const payload = await callPlugin('study_knowledge_map', { limit: 1000 });
-    if (requestId !== mapRequestId || surfaceDrawer.dataset.open !== 'true' || (surfaceDrawer.dataset.surfaceId || surfaceId) !== 'knowledge-map') {
-      return;
-    }
-    lastKnowledgeMapPayload = payload;
-    surfaceDrawerBody.replaceChildren(renderKnowledgePanel(payload));
-  } catch (error) {
-    if (requestId !== mapRequestId || surfaceDrawer.dataset.open !== 'true' || (surfaceDrawer.dataset.surfaceId || surfaceId) !== 'knowledge-map') {
-      return;
-    }
-    const root = surfacePanel('knowledge-map', t('status.state.error', 'Error'));
-    root.appendChild(drawerElement('pre', '', error instanceof Error ? error.message : String(error)));
-    surfaceDrawerBody.replaceChildren(root);
-  }
-}
-
 function openSurfaceDrawer(surfaceId) {
+  if (surfaceId === 'knowledge-map') return openKnowledgeMapFullscreen();
   if (!surfaceDrawer || !surfaceDrawerBody) {
     return false;
   }
@@ -1602,11 +1735,6 @@ function openSurfaceDrawer(surfaceId) {
   surfaceDrawerBody.replaceChildren(drawerBody);
   surfaceDrawer.dataset.open = 'true';
   surfaceDrawer.setAttribute('aria-hidden', 'false');
-  if (surfaceId === 'knowledge-map') {
-    const requestId=mapRequestId += 1;
-    surfaceDrawerBody.replaceChildren(renderKnowledgeLoadingPanel(knowledgeMapSubject));
-    loadKnowledgeMapIntoDrawer(surfaceId, requestId);
-  }
   surfaceDrawerCloseBtn?.focus?.();
   return true;
 }
@@ -1652,6 +1780,15 @@ function canLeaveWorkspace(context) {
   if (context.from === 'notebook') {
     return window.StudyCompanionNotebook?.close?.() !== false;
   }
+  if (context.from === 'knowledge') {
+    if (knowledgeMapFullscreenOpen() && closeSurfaceDrawer({ resumeWorkspace: false, restoreFocus: false }) === false) {
+      return false;
+    }
+    mapRequestId += 1;
+    knowledgeWorkspaceActive = false;
+    releaseKnowledgeWorkspaceHost?.();
+    releaseKnowledgeWorkspaceHost = null;
+  }
   return true;
 }
 
@@ -1666,9 +1803,18 @@ function mountWorkspaceSurface(surfaceId) {
 }
 
 function activateKnowledgeWorkspace(context) {
-  if (context.options.secondarySurface) return { focusHandled: true };
-  if (openSurfaceDrawer('knowledge-map') === false) return false;
-  return { focusHandled: true };
+  void context;
+  knowledgeWorkspaceActive = true;
+  mountKnowledgeWorkspaceHost();
+  if (lastKnowledgeMapPayload) {
+    setKnowledgeMapLoadState('ready');
+  } else {
+    setKnowledgeMapLoadState('loading');
+  }
+  syncKnowledgeMapContent();
+  const requestId = mapRequestId += 1;
+  loadKnowledgeMap(requestId);
+  return { focusHandled: false };
 }
 
 function initializeWorkspaceController() {
@@ -1682,6 +1828,7 @@ function initializeWorkspaceController() {
       study: { focusTarget: '#studyInput' },
       practice: { focusTarget: '#generateQuestionBtn' },
       memory: { focusTarget: '#memoryFrontInput' },
+      knowledge: { focusTarget: '#knowledgeMapFullscreenBtn' },
     },
     canLeave: canLeaveWorkspace,
     closeSurface: closeWorkspaceSurface,
@@ -2536,6 +2683,7 @@ async function bootstrap() {
     focus: 'workspace',
     source: 'home-button',
   }));
+  bindButton(knowledgeMapFullscreenBtn, openKnowledgeMapFullscreen);
   if (surfaceDrawerCloseBtn) {
     surfaceDrawerCloseBtn.addEventListener('click', closeSurfaceDrawer);
   }
