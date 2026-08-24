@@ -7,9 +7,9 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; object-src 'none'" />
     <title>Study Companion</title>
     <link rel="stylesheet" href="./katex.min.css?v=study-hotfix-20260615v" />
-    <link rel="stylesheet" href="./style.css?v=study-notebook-migration-20260823" />
+    <link rel="stylesheet" href="./style.css?v=study-settings-dialog-20260824" />
     <link rel="stylesheet" href="./notebook.css?v=study-notebook-migration-20260823" />
-    <link rel="stylesheet" href="./workspace.css?v=study-workspace-shell-pr1" />
+    <link rel="stylesheet" href="./workspace.css?v=study-settings-dialog-20260824" />
   </head>
   <body>
     <main class="page-shell">
@@ -494,14 +494,29 @@
           </aside>
         </div>
 
-        <section id="advancedSettings" class="advanced-settings panel" data-i18n-aria-label="ui.label.advanced_settings" aria-label="Advanced settings" hidden>
-          <div class="module-tabs" role="tablist" data-i18n-aria-label="ui.label.advanced_settings" aria-label="Advanced settings">
-            <button id="tab-study" role="tab" type="button" aria-selected="true" aria-controls="panel-study" tabindex="0" data-settings-tab="study" data-i18n="ui.settings.tab.study">Study</button>
-            <button id="tab-knowledge" role="tab" type="button" aria-selected="false" aria-controls="panel-knowledge" tabindex="-1" data-settings-tab="knowledge" data-i18n="ui.settings.tab.knowledge">Knowledge</button>
-            <button id="tab-memory" role="tab" type="button" aria-selected="false" aria-controls="panel-memory" tabindex="-1" data-settings-tab="memory" data-i18n="ui.settings.tab.memory">Memory</button>
-            <button id="tab-habit" role="tab" type="button" aria-selected="false" aria-controls="panel-habit" tabindex="-1" data-settings-tab="habit" data-i18n="ui.settings.tab.habit">Habit</button>
-            <button id="tab-data" role="tab" type="button" aria-selected="false" aria-controls="panel-data" tabindex="-1" data-settings-tab="data" data-i18n="ui.settings.tab.data">Data</button>
-          </div>
+        <aside id="advancedSettings" class="advanced-settings" role="dialog" aria-modal="true" aria-labelledby="advancedSettingsTitle" aria-hidden="true" hidden>
+          <div class="settings-drawer__panel">
+            <header class="settings-drawer__header">
+              <div class="settings-drawer__heading">
+                <span class="diagnosis-label" data-i18n="ui.eyebrow">N.E.K.O Study</span>
+                <h2 id="advancedSettingsTitle" data-i18n="ui.label.advanced_settings">Advanced settings</h2>
+              </div>
+              <button id="advancedSettingsCloseBtn" class="settings-drawer__close" type="button" data-i18n-aria-label="ui.button.close" aria-label="Close">
+                <span aria-hidden="true">×</span>
+                <span class="sr-only" data-i18n="ui.button.close">Close</span>
+              </button>
+            </header>
+
+            <div class="settings-drawer__layout">
+              <div class="module-tabs settings-drawer__nav" role="tablist" data-i18n-aria-label="ui.label.advanced_settings" aria-label="Advanced settings">
+                <button id="tab-study" role="tab" type="button" aria-selected="true" aria-controls="panel-study" tabindex="0" data-settings-tab="study"><span aria-hidden="true">✦</span><span data-i18n="ui.settings.tab.study">Study</span></button>
+                <button id="tab-knowledge" role="tab" type="button" aria-selected="false" aria-controls="panel-knowledge" tabindex="-1" data-settings-tab="knowledge"><span aria-hidden="true">⌁</span><span data-i18n="ui.settings.tab.knowledge">Knowledge</span></button>
+                <button id="tab-memory" role="tab" type="button" aria-selected="false" aria-controls="panel-memory" tabindex="-1" data-settings-tab="memory"><span aria-hidden="true">◫</span><span data-i18n="ui.settings.tab.memory">Memory</span></button>
+                <button id="tab-habit" role="tab" type="button" aria-selected="false" aria-controls="panel-habit" tabindex="-1" data-settings-tab="habit"><span aria-hidden="true">◷</span><span data-i18n="ui.settings.tab.habit">Habit</span></button>
+                <button id="tab-data" role="tab" type="button" aria-selected="false" aria-controls="panel-data" tabindex="-1" data-settings-tab="data"><span aria-hidden="true">▤</span><span data-i18n="ui.settings.tab.data">Data</span></button>
+              </div>
+
+              <div class="settings-drawer__content">
 
           <div id="panel-study" class="settings-tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-study" data-settings-tab-panel="study">
             <form id="settingsConfigForm" class="settings-form">
@@ -692,7 +707,10 @@
               <button class="button button-secondary" type="button" data-open-surface="note-exporter" data-i18n="ui.button.export_notes">Export Notes</button>
             </div>
           </div>
-        </section>
+              </div>
+            </div>
+          </div>
+        </aside>
       </section>
     </main>
     <dialog id="memoryDeckDialog" class="memory-deck-dialog" aria-labelledby="memoryDeckDialogTitle" aria-describedby="memoryDeckDialogBody">
@@ -729,6 +747,6 @@
     <script src="./model-runtime.js?v=study-provider-gateway-20260813"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-mastery-status-20260824"></script>
+    <script src="./main.js?v=study-settings-drawer-20260824"></script>
   </body>
 </html>

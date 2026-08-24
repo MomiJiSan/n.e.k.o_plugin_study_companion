@@ -127,6 +127,7 @@ const firstRunSteps = $id('firstRunSteps');
 const firstRunSkipBtn = $id('firstRunSkipBtn');
 const advancedToggleBtn = $id('advancedToggleBtn');
 const advancedSettings = $id('advancedSettings');
+const advancedSettingsCloseBtn = $id('advancedSettingsCloseBtn');
 const settingsTabs = Array.from(document.querySelectorAll('[data-settings-tab]'));
 const settingsTabPanels = Array.from(document.querySelectorAll('[data-settings-tab-panel]'));
 const surfaceOpenButtons = Array.from(document.querySelectorAll('[data-open-surface]'));
@@ -738,7 +739,7 @@ function buildLearningProfileModal() {
   more.type = 'button';
   more.addEventListener('click', () => {
     closeLearningProfileModal();
-    setAdvancedSettingsOpen(true);
+    setAdvancedSettingsOpen(true, { focus: false });
     setSettingsTab('study', { focus: true });
     settingsLearningStage?.focus?.();
   });
@@ -1370,18 +1371,52 @@ function updateWorkspaceCardStatuses(data = {}) {
   );
 }
 
-function setAdvancedSettingsOpen(open) {
+function setAdvancedSettingsOpen(open, options = {}) {
   advancedSettingsOpen = Boolean(open);
   if (advancedSettings) {
     advancedSettings.hidden = !advancedSettingsOpen;
+    advancedSettings.setAttribute('aria-hidden', advancedSettingsOpen ? 'false' : 'true');
   }
   if (advancedToggleBtn) {
     advancedToggleBtn.setAttribute('aria-expanded', advancedSettingsOpen ? 'true' : 'false');
   }
+  document.documentElement.classList.toggle('settings-drawer-open', advancedSettingsOpen);
   if (advancedSettingsOpen) {
     loadSettingsConfig().catch(() => setSettingsConfigStatus('ui.status.config_load_failed', 'Could not load settings'));
+    if (options.focus !== false) {
+      window.requestAnimationFrame(() => advancedSettingsCloseBtn?.focus?.());
+    }
+  } else if (options.restoreFocus !== false) {
+    advancedToggleBtn?.focus?.();
   }
   renderFirstRunGuide(lastStatusPayload);
+}
+
+function handleAdvancedSettingsKeydown(event) {
+  if (!advancedSettingsOpen || !advancedSettings) return;
+  switch (event.key) {
+    case 'Escape':
+      event.preventDefault();
+      setAdvancedSettingsOpen(false);
+      return;
+    case 'Tab':
+      break;
+    default:
+      return;
+  }
+  const focusable = Array.from(advancedSettings.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => !element.hidden && element.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function setSettingsTab(tabId, options = {}) {
@@ -2632,6 +2667,17 @@ async function bootstrap() {
     advancedToggleBtn.addEventListener('click', () => {
       setAdvancedSettingsOpen(!advancedSettingsOpen);
     });
+  }
+  if (advancedSettingsCloseBtn) {
+    advancedSettingsCloseBtn.addEventListener('click', () => setAdvancedSettingsOpen(false));
+  }
+  if (advancedSettings) {
+    advancedSettings.addEventListener('click', (event) => {
+      if (event.target === advancedSettings) {
+        setAdvancedSettingsOpen(false);
+      }
+    });
+    advancedSettings.addEventListener('keydown', handleAdvancedSettingsKeydown);
   }
   if (settingsConfigForm) {
     settingsConfigForm.addEventListener('submit', (event) => {

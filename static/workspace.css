@@ -571,9 +571,8 @@ body[data-active-workspace="notebook"],
   font-size: 14px;
 }
 
-.advanced-settings {
+.settings-drawer__panel {
   min-width: 0;
-  max-width: calc(100% - clamp(356px, 27vw, 468px));
 }
 
 @keyframes workspace-panel-enter {
@@ -643,9 +642,6 @@ body[data-active-workspace="notebook"],
     grid-row: 5;
   }
 
-  .advanced-settings {
-    max-width: none;
-  }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
@@ -904,7 +900,7 @@ body[data-active-workspace="notebook"],
     white-space: nowrap;
   }
 
-  .advanced-settings,
+  .settings-drawer__panel,
   .settings-tab-panel,
   textarea,
   pre,
@@ -919,16 +915,58 @@ body[data-active-workspace="notebook"],
   }
 
   .module-tabs {
+    display: flex;
+    flex-direction: row;
     max-width: 100%;
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(31, 52, 40, 0.10);
     overflow-x: auto;
     overscroll-behavior-inline: contain;
   }
 
   .module-tabs [role="tab"] {
+    display: flex;
     flex: 0 0 auto;
-    min-width: 88px;
+    gap: 7px;
+    min-width: 112px;
     max-width: 152px;
     overflow-wrap: anywhere;
+  }
+
+  .module-tabs [role="tab"][aria-selected="true"] {
+    box-shadow: inset 0 -3px 0 rgba(47, 125, 87, 0.76), 0 5px 14px rgba(31, 52, 40, 0.06);
+  }
+
+  .advanced-settings {
+    padding: 0;
+  }
+
+  .settings-drawer__panel {
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .settings-drawer__header {
+    min-height: 64px;
+    padding: 12px 12px 11px 16px;
+  }
+
+  .settings-drawer__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-drawer__content {
+    padding: 14px 12px 18px;
+  }
+
+  .settings-form > .settings-actions {
+    bottom: -18px;
+    margin: 2px -12px -18px;
+    padding: 12px;
   }
 }
 
