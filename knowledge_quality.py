@@ -3,8 +3,14 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from enum import StrEnum
+from enum import Enum
 from typing import Any
+
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10 compatibility
+    class StrEnum(str, Enum):
+        pass
 
 from .models import json_copy
 

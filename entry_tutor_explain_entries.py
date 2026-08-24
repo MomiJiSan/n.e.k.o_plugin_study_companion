@@ -238,6 +238,10 @@ class _TutorExplainEntriesMixin:
                 source_text = self._state.last_ocr_text
             used_ocr_fallback = bool(source_text.strip())
         source_text = source_text.strip()
+        ocr_derived_text = used_ocr_fallback
+        current_ocr_matcher = getattr(self, "_is_current_ocr_text", None)
+        if not ocr_derived_text and source_text and callable(current_ocr_matcher):
+            ocr_derived_text = await current_ocr_matcher(source_text)
         if not source_text and not vision_image_payload:
             return Err(
                 SdkError(
@@ -247,6 +251,13 @@ class _TutorExplainEntriesMixin:
             )
         # Phase 3: explain with the active mode selected above.
         try:
+            source_question_id = ""
+            if ocr_derived_text:
+                captured_question = await self._save_current_ocr_question(
+                    consent_origin="explain",
+                    text=source_text,
+                )
+                source_question_id = str(captured_question.get("id") or "").strip()
             image_only_source = False
             if vision_image_payload:
                 validated_vision_image = _validate_optional_vision_image_payload(
@@ -267,6 +278,8 @@ class _TutorExplainEntriesMixin:
                 "source_text": source_text,
                 "deadline_monotonic": primary_deadline_monotonic,
             }
+            if source_question_id:
+                extra_context["source_question_id"] = source_question_id
             if vision_image_payload:
                 extra_context["vision_enabled"] = True
                 extra_context["vision_image_base64"] = vision_image_payload
@@ -441,6 +454,8 @@ class _TutorExplainEntriesMixin:
                     diagnostic="history_persist_failed",
                     history_persisted=finalize_progress.history_persisted.is_set(),
                 )
+            if source_question_id:
+                payload["source_question_id"] = source_question_id
             narration_scheduled = False
             narration_status = "disabled"
             narration_reason = ""

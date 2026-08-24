@@ -574,6 +574,7 @@ class _TutorQuestionEntriesMixin:
         source_text: str,
         topic: str = "",
         source: str = "manual",
+        source_question_id: str = "",
         vision_image_payload: str = "",
         targeted_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -585,6 +586,8 @@ class _TutorQuestionEntriesMixin:
             "topic_hint": str(topic or "").strip(),
             "mode": active_mode,
         }
+        if source_question_id:
+            extra_context["source_question_id"] = source_question_id
         if targeted_context:
             extra_context.update(
                 {
@@ -757,6 +760,8 @@ class _TutorQuestionEntriesMixin:
                 created_at=reply.created_at,
             )
             public_payload = _targeted_public_payload(private_payload)
+        if source_question_id:
+            reply.payload["source_question_id"] = source_question_id
         metadata_payload = (
             public_payload if public_payload is not None else dict(reply.payload or {})
         )
@@ -981,6 +986,10 @@ class _TutorQuestionEntriesMixin:
                 source_text = self._state.last_ocr_text
             used_ocr_fallback = bool(source_text.strip())
         source_text = source_text.strip()
+        ocr_derived_text = used_ocr_fallback
+        current_ocr_matcher = getattr(self, "_is_current_ocr_text", None)
+        if not ocr_derived_text and source_text and callable(current_ocr_matcher):
+            ocr_derived_text = await current_ocr_matcher(source_text)
         if not source_text and not vision_image_payload:
             return Err(
                 SdkError(
@@ -999,6 +1008,14 @@ class _TutorQuestionEntriesMixin:
             if not source_text and vision_image_payload:
                 source_text = _image_only_question_prompt(self._cfg.language)
                 image_only_source = True
+            source_question_id = ""
+            if ocr_derived_text:
+                captured_question = await self._save_current_ocr_question(
+                    consent_origin="generate",
+                    topic_id=topic,
+                    text=source_text,
+                )
+                source_question_id = str(captured_question.get("id") or "").strip()
             payload = await self._generate_question_payload(
                 source_text=source_text,
                 topic=topic,
@@ -1007,6 +1024,7 @@ class _TutorQuestionEntriesMixin:
                     if used_ocr_fallback
                     else ("vision_image" if image_only_source else "manual")
                 ),
+                source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
             )
             return Ok(payload)

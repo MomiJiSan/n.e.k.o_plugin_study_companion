@@ -58,6 +58,9 @@ const replyText = $id('replyText');
 const studyInput = $id('studyInput');
 const refreshBtn = $id('refreshBtn');
 const ocrBtn = $id('ocrBtn');
+const saveOcrQuestionBtn = $id('saveOcrQuestionBtn');
+const undoOcrQuestionBtn = $id('undoOcrQuestionBtn');
+const clearOcrQuestionsBtn = $id('clearOcrQuestionsBtn');
 const generateQuestionBtn = $id('generateQuestionBtn');
 const explainBtn = $id('explainBtn');
 const evaluateAnswerBtn = $id('evaluateAnswerBtn');
@@ -161,6 +164,7 @@ const settingsLearningProfileSummary = $id('settingsLearningProfileSummary');
 const settingsLearningStage = $id('settingsLearningStage');
 const settingsOcrEnabled = $id('settingsOcrEnabled');
 const settingsOcrLanguages = $id('settingsOcrLanguages');
+const settingsOcrQuestionPersistence = $id('settingsOcrQuestionPersistence');
 const settingsLlmTimeout = $id('settingsLlmTimeout');
 const settingsLlmVisionEnabled = $id('settingsLlmVisionEnabled');
 const settingsModelRefreshBtn = $id('settingsModelRefreshBtn');
@@ -187,6 +191,7 @@ let learningProfileModal = null;
 let lastReplyValue = '';
 let ocrN = '';
 let ocrT = '';
+let lastSavedOcrQuestionId = '';
 let studyInputImageValue = '';
 let answerInputImageValue = '';
 let pastePendingCount = 0;
@@ -2017,6 +2022,11 @@ function applySettingsConfig(config) {
   syncLearningProfileUi();
   if (settingsOcrEnabled) settingsOcrEnabled.checked = ocr.enabled !== false;
   if (settingsOcrLanguages) settingsOcrLanguages.value = String(ocr.languages || 'chi_sim+jpn+eng');
+  if (settingsOcrQuestionPersistence) {
+    settingsOcrQuestionPersistence.value = ocr.question_persistence_mode === 'auto_save_questions'
+      ? 'auto_save_questions'
+      : 'save_when_used';
+  }
   if (settingsLlmTimeout) settingsLlmTimeout.value = String(Number.isFinite(Number(llm.llm_call_timeout_seconds)) ? Number(llm.llm_call_timeout_seconds) : 30);
   if (settingsLlmVisionEnabled) settingsLlmVisionEnabled.checked = llm.llm_vision_enabled === true;
   if (settingsCommunicationEnabled) settingsCommunicationEnabled.checked = communication.enabled !== false;
@@ -2056,6 +2066,9 @@ function collectSettingsConfig() {
   study.default_mode = settingsDefaultMode ? settingsDefaultMode.value : 'companion';
   ocr.enabled = settingsOcrEnabled ? settingsOcrEnabled.checked : true;
   ocr.languages = settingsOcrLanguages ? settingsOcrLanguages.value.trim() || 'chi_sim+jpn+eng' : 'chi_sim+jpn+eng';
+  ocr.question_persistence_mode = settingsOcrQuestionPersistence
+    ? settingsOcrQuestionPersistence.value
+    : 'save_when_used';
   llm.llm_call_timeout_seconds = Math.max(1, Math.min(3600, Math.round(Number(settingsLlmTimeout?.value) || 30)));
   llm.llm_vision_enabled = settingsLlmVisionEnabled ? settingsLlmVisionEnabled.checked : false;
   llm.llm_vision_max_image_px = normalizeVisionMaxImagePx(llm.llm_vision_max_image_px);
@@ -2279,6 +2292,48 @@ async function runOcr(options = {}) {
   await refreshStatus({ updateReply: false }).catch((error) => { if (!n) throw error; });
   setStatus(n || tf('ui.status.ocr_result', 'OCR {status}', { status: s }));
   return data;
+}
+
+async function saveOcrQuestion() {
+  if (!String(ocrT || '').trim()) {
+    throw new Error(t('ui.error.no_ocr_question', 'Capture OCR text before saving a question.'));
+  }
+  const data = await callPlugin('study_save_ocr_question');
+  const questionId = String(data?.captured_question_id || '');
+  lastSavedOcrQuestionId = questionId;
+  if (undoOcrQuestionBtn) undoOcrQuestionBtn.disabled = !questionId;
+  setStatus(t('ui.status.ocr_question_saved', 'OCR question saved'));
+  setReply(questionId
+    ? tf('ui.status.ocr_question_saved_with_id', 'OCR question saved ({id})', { id: questionId })
+    : t('ui.status.ocr_question_saved', 'OCR question saved'));
+  await refreshStatus({ updateReply: false });
+}
+
+async function undoOcrQuestionSave() {
+  if (!lastSavedOcrQuestionId) {
+    return;
+  }
+  const data = await callPlugin('study_delete_captured_question', {
+    question_id: lastSavedOcrQuestionId,
+  });
+  if (data?.deleted !== true) {
+    throw new Error(t('ui.error.ocr_question_delete_failed', 'Could not delete the saved OCR question.'));
+  }
+  lastSavedOcrQuestionId = '';
+  if (undoOcrQuestionBtn) undoOcrQuestionBtn.disabled = true;
+  setStatus(t('ui.status.ocr_question_save_undone', 'OCR question save undone'));
+}
+
+async function clearSavedOcrQuestions() {
+  if (!window.confirm(t('ui.confirm.clear_ocr_questions', 'Clear all saved OCR questions? This does not delete answer history.'))) {
+    return;
+  }
+  const data = await callPlugin('study_clear_captured_questions');
+  lastSavedOcrQuestionId = '';
+  if (undoOcrQuestionBtn) undoOcrQuestionBtn.disabled = true;
+  setStatus(tf('ui.status.ocr_questions_cleared', 'Cleared {count} saved OCR questions', {
+    count: Number(data?.deleted_count || 0),
+  }));
 }
 
 async function explainText(options = {}) {
@@ -2575,6 +2630,20 @@ async function bootstrap() {
   syncLearningProfileUi();
   bindButton(refreshBtn, refreshStatus);
   bindButton(ocrBtn, runOcr);
+  bindButton(saveOcrQuestionBtn, saveOcrQuestion);
+  if (undoOcrQuestionBtn) {
+    undoOcrQuestionBtn.addEventListener('click', async () => {
+      undoOcrQuestionBtn.disabled = true;
+      try {
+        await undoOcrQuestionSave();
+      } catch (error) {
+        setStatus(t('ui.status.error', 'Error'));
+        setReply(formatPluginError(error));
+        undoOcrQuestionBtn.disabled = !lastSavedOcrQuestionId;
+      }
+    });
+  }
+  bindButton(clearOcrQuestionsBtn, clearSavedOcrQuestions);
   bindButton(generateQuestionBtn, generateQuestion);
   bindButton(clearPracticeScopeBtn, clearPracticeScope);
   bindButton(explainBtn, explainText);

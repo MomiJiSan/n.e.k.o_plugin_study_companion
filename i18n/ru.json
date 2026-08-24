@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "Практиковать эту тему",
     "ui.knowledge.practice_coming_soon": "Эта функция находится в разработке.",
     "ui.knowledge.practice_current_scope": "Практиковать текущую область",
-    "ui.knowledge.scope_requires_stage_subject": "Перед практикой выберите этап и предмет или модуль курса."
+    "ui.knowledge.scope_requires_stage_subject": "Перед практикой выберите этап и предмет или модуль курса.",
+    "ui.button.save_ocr_question": "Сохранить вопрос",
+    "ui.error.no_ocr_question": "Сначала получите текст OCR, затем сохраните вопрос.",
+    "ui.status.ocr_question_saved": "Вопрос OCR сохранён",
+    "ui.status.ocr_question_saved_with_id": "Вопрос OCR сохранён ({id})",
+    "ui.settings.ocr_question_persistence.label": "Хранение распознанных вопросов",
+    "ui.settings.ocr_question_persistence.save_when_used": "Сохранять только при использовании",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "Автоматически сохранять распознанные вопросы",
+    "ui.button.undo_ocr_question": "Отменить сохранение",
+    "ui.button.clear_ocr_questions": "Очистить сохранённые вопросы OCR",
+    "ui.error.ocr_question_delete_failed": "Не удалось удалить сохранённый вопрос OCR.",
+    "ui.confirm.clear_ocr_questions": "Очистить все сохранённые вопросы OCR? История ответов останется.",
+    "ui.status.ocr_question_save_undone": "Сохранение вопроса OCR отменено",
+    "ui.status.ocr_questions_cleared": "Очищено вопросов OCR: {count}"
 }

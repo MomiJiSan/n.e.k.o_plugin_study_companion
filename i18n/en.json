@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "Practice this topic",
     "ui.knowledge.practice_coming_soon": "This feature is under development.",
     "ui.knowledge.practice_current_scope": "Practice current scope",
-    "ui.knowledge.scope_requires_stage_subject": "Choose a stage and subject or course module before starting practice."
+    "ui.knowledge.scope_requires_stage_subject": "Choose a stage and subject or course module before starting practice.",
+    "ui.button.save_ocr_question": "Save question",
+    "ui.error.no_ocr_question": "Capture OCR text before saving a question.",
+    "ui.status.ocr_question_saved": "OCR question saved",
+    "ui.status.ocr_question_saved_with_id": "OCR question saved ({id})",
+    "ui.settings.ocr_question_persistence.label": "Recognized question storage",
+    "ui.settings.ocr_question_persistence.save_when_used": "Save only when used",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "Automatically save recognized questions",
+    "ui.button.undo_ocr_question": "Undo save",
+    "ui.button.clear_ocr_questions": "Clear saved OCR questions",
+    "ui.error.ocr_question_delete_failed": "Could not delete the saved OCR question.",
+    "ui.confirm.clear_ocr_questions": "Clear all saved OCR questions? This does not delete answer history.",
+    "ui.status.ocr_question_save_undone": "OCR question save undone",
+    "ui.status.ocr_questions_cleared": "Cleared {count} saved OCR questions"
 }

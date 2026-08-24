@@ -864,5 +864,18 @@
     "ui.knowledge.practice_topic": "Praticar este tópico",
     "ui.knowledge.practice_coming_soon": "Este recurso está em desenvolvimento.",
     "ui.knowledge.practice_current_scope": "Praticar o escopo atual",
-    "ui.knowledge.scope_requires_stage_subject": "Escolha uma etapa e uma matéria ou módulo antes de praticar."
+    "ui.knowledge.scope_requires_stage_subject": "Escolha uma etapa e uma matéria ou módulo antes de praticar.",
+    "ui.button.save_ocr_question": "Salvar questão",
+    "ui.error.no_ocr_question": "Capture o texto OCR antes de salvar uma questão.",
+    "ui.status.ocr_question_saved": "Questão OCR salva",
+    "ui.status.ocr_question_saved_with_id": "Questão OCR salva ({id})",
+    "ui.settings.ocr_question_persistence.label": "Armazenamento de questões reconhecidas",
+    "ui.settings.ocr_question_persistence.save_when_used": "Salvar somente quando usada",
+    "ui.settings.ocr_question_persistence.auto_save_questions": "Salvar automaticamente questões reconhecidas",
+    "ui.button.undo_ocr_question": "Desfazer salvamento",
+    "ui.button.clear_ocr_questions": "Limpar questões OCR salvas",
+    "ui.error.ocr_question_delete_failed": "Não foi possível excluir a questão OCR salva.",
+    "ui.confirm.clear_ocr_questions": "Limpar todas as questões OCR salvas? O histórico de respostas não será excluído.",
+    "ui.status.ocr_question_save_undone": "Salvamento da questão OCR desfeito",
+    "ui.status.ocr_questions_cleared": "{count} questões OCR foram limpas"
 }

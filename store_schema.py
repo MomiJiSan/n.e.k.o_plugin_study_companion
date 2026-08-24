@@ -247,10 +247,30 @@ def _init_db(self) -> None:
     _init_notes_fts(self, conn)
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS captured_questions (
+            id TEXT PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            question_text TEXT NOT NULL,
+            content_hash TEXT NOT NULL UNIQUE,
+            topic_id TEXT,
+            subject TEXT,
+            question_type TEXT,
+            classification_confidence REAL,
+            consent_origin TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_used_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS qa_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT NOT NULL REFERENCES sessions(id),
             topic_id TEXT REFERENCES topics(id),
+            source_question_id TEXT REFERENCES captured_questions(id) ON DELETE SET NULL,
             question TEXT,
             user_answer TEXT,
             eval_result TEXT,
@@ -360,6 +380,7 @@ def _init_db(self) -> None:
     self._ensure_column(conn, "topics", "aliases", "TEXT NOT NULL DEFAULT '[]'")
     conn.execute("UPDATE topics SET aliases = '[]' WHERE aliases IS NULL OR aliases = ''")
     self._ensure_column(conn, "candidate_knowledge_items", "dedupe_key", "TEXT")
+    self._ensure_column(conn, "qa_records", "source_question_id", "TEXT")
     expected_idx_topics_stage = ["stage", "subject", "chapter", "unit", "depth", "id"]
     current_idx_topics_stage = [
         row["name"] if isinstance(row, sqlite3.Row) else row[2]
@@ -378,6 +399,15 @@ def _init_db(self) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_qa_topic_created ON qa_records(topic_id, created_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qa_source_question ON qa_records(source_question_id, created_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_captured_questions_topic_used ON captured_questions(topic_id, last_used_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_captured_questions_status_expires ON captured_questions(status, expires_at)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_review_topic_created ON review_log(topic_id, created_at DESC, id DESC)"

@@ -22,6 +22,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
         "ocr_reader": {
             "enabled": config.ocr_enabled,
             "languages": config.ocr_languages,
+            "question_persistence_mode": config.ocr_question_persistence_mode,
         },
         "llm": {
             "llm_call_timeout_seconds": config.llm_call_timeout_seconds,
@@ -109,6 +110,10 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         )
     if "languages" in ocr:
         next_values["ocr_languages"] = str(ocr.get("languages") or "").strip()
+    if "question_persistence_mode" in ocr:
+        next_values["ocr_question_persistence_mode"] = str(
+            ocr.get("question_persistence_mode") or ""
+        ).strip()
     if "llm_call_timeout_seconds" in llm:
         next_values["llm_call_timeout_seconds"] = llm.get(
             "llm_call_timeout_seconds"

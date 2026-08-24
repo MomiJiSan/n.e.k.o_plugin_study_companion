@@ -195,6 +195,7 @@ def document_ocr_modules(monkeypatch: pytest.MonkeyPatch):
     entry_common.rapidocr_support = SimpleNamespace()
     entry_common.tesseract_support = SimpleNamespace()
     entry_common.tr = lambda _key, default="": default
+    entry_common.ui = SimpleNamespace(action=lambda: lambda function: function)
     entry_common.update_install_task_state = lambda *_args, **_kwargs: None
     monkeypatch.setitem(sys.modules, entry_common.__name__, entry_common)
 

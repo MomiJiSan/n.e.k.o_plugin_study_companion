@@ -555,6 +555,7 @@ class StudyCompanionPlugin(
                 )
         async with self._lock:
             self._state.status = STATUS_STOPPED
+            self._state.clear_ocr_session()
         await asyncio.to_thread(self._store.save_state, self._state)
         await asyncio.to_thread(self._store.close)
         return Ok({"status": STATUS_STOPPED})
@@ -1175,7 +1176,12 @@ class StudyCompanionPlugin(
         return datetime.now().astimezone().date().isoformat()
 
     def _state_snapshot(self) -> dict[str, Any]:
-        return self._state.to_dict()
+        # Keep OCR source text available to in-process tutor flows only.  The
+        # persisted representation intentionally omits it.
+        self._state.clear_expired_ocr_session()
+        payload = self._state.to_dict()
+        payload["last_ocr_text"] = self._state.last_ocr_text
+        return payload
 
     def _screen_classification_context(self) -> dict[str, Any]:
         return dict(self._state.last_screen_classification)

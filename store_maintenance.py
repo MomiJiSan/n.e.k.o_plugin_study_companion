@@ -16,6 +16,7 @@ _PURGE_TABLES = (
     "checkins",
     "daily_goals",
     "qa_records",
+    "captured_questions",
     "sessions",
     "review_log",
     "fsrs_cards",
