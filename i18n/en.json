@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "Enlarge window",
     "ui.knowledge.scope_label":  "Graph range",
     "ui.knowledge.scope_all":  "All stages",
+    "ui.knowledge.set_default_stage": "Set as default stage",
+    "ui.knowledge.return_default_stage": "Return to default stage",
     "ui.knowledge.subject_label":  "Subject",
     "ui.knowledge.subject_all":  "All subjects",
     "ui.knowledge.subject_uncategorized":  "Uncategorized",

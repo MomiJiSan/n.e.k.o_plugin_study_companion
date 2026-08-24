@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "창 확대",
     "ui.knowledge.scope_label":  "그래프 범위",
     "ui.knowledge.scope_all":  "모든 단계",
+    "ui.knowledge.set_default_stage": "기본 학습 단계로 설정",
+    "ui.knowledge.return_default_stage": "기본 학습 단계로 돌아가기",
     "ui.knowledge.subject_label":  "과목",
     "ui.knowledge.subject_all":  "모든 과목",
     "ui.knowledge.subject_uncategorized":  "미분류",

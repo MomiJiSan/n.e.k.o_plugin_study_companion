@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "Увеличить окно",
     "ui.knowledge.scope_label":  "Диапазон карты",
     "ui.knowledge.scope_all":  "Все этапы",
+    "ui.knowledge.set_default_stage": "Сделать этапом по умолчанию",
+    "ui.knowledge.return_default_stage": "Вернуться к этапу по умолчанию",
     "ui.knowledge.subject_label":  "Предмет",
     "ui.knowledge.subject_all":  "Все предметы",
     "ui.knowledge.subject_uncategorized":  "Без категории",

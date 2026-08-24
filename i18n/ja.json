@@ -227,6 +227,8 @@
     "ui.knowledge.zoom_in":  "ウィンドウを拡大",
     "ui.knowledge.scope_label":  "マップ範囲",
     "ui.knowledge.scope_all":  "すべての段階",
+    "ui.knowledge.set_default_stage": "既定の学習段階に設定",
+    "ui.knowledge.return_default_stage": "既定の学習段階に戻る",
     "ui.knowledge.subject_label":  "科目",
     "ui.knowledge.subject_all":  "すべての科目",
     "ui.knowledge.subject_uncategorized":  "未分類",
