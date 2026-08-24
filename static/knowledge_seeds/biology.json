@@ -2329,19 +2329,6 @@
             "practice_planning",
             "hint_generation"
           ]
-        },
-        {
-          "id": "bio_junior_cell_structure",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Students often mix organelle recognition with senior-level structure-function reasoning.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
         }
       ],
       "typical_misconceptions": [
@@ -2433,16 +2420,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_cell_structure_function",
-          "relation": "co_occurs",
-          "reason": "Review 物质跨膜运输 together with 细胞结构与功能对应 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_enzyme_curve",
           "relation": "co_occurs",
@@ -2569,16 +2546,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_membrane_transport",
-          "relation": "co_occurs",
-          "reason": "Review 酶活性曲线分析 together with 物质跨膜运输 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_cell_respiration",
           "relation": "co_occurs",
@@ -2766,16 +2733,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_enzyme_curve",
-          "relation": "co_occurs",
-          "reason": "Review 细胞呼吸过程与计算 together with 酶活性曲线分析 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_photosynthesis_curve",
           "relation": "co_occurs",
           "reason": "Review 细胞呼吸过程与计算 together with 光合作用曲线分析 when diagnosing adjacent biology skills.",
@@ -2902,16 +2859,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_cell_respiration",
-          "relation": "co_occurs",
-          "reason": "Review 光合作用曲线分析 together with 细胞呼吸过程与计算 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_mitosis_image",
           "relation": "co_occurs",
           "reason": "Review 光合作用曲线分析 together with 有丝分裂图像判断 when diagnosing adjacent biology skills.",
@@ -2931,19 +2878,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "bio_senior_cell_respiration",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.89,
-          "reason": "Net photosynthesis, total photosynthesis, and respiration are easy to confuse in light-intensity graphs.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         },
@@ -3095,16 +3029,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_photosynthesis_curve",
-          "relation": "co_occurs",
-          "reason": "Review 有丝分裂图像判断 together with 光合作用曲线分析 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_meiosis_abnormal",
           "relation": "co_occurs",
           "reason": "Review 有丝分裂图像判断 together with 减数分裂异常与配子 when diagnosing adjacent biology skills.",
@@ -3125,19 +3049,6 @@
             "learning_path",
             "practice_planning",
             "hint_generation"
-          ]
-        },
-        {
-          "id": "bio_senior_meiosis",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.88,
-          "reason": "Mitosis and meiosis images are often confused when homologous chromosome pairing and separation are not checked.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ]
         }
       ],
@@ -3230,16 +3141,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_mitosis_image",
-          "relation": "co_occurs",
-          "reason": "Review 减数分裂异常与配子 together with 有丝分裂图像判断 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_mendel_ratio_variant",
           "relation": "co_occurs",
@@ -3366,16 +3267,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_meiosis_abnormal",
-          "relation": "co_occurs",
-          "reason": "Review 孟德尔比例变式 together with 减数分裂异常与配子 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_linkage_exchange",
           "relation": "co_occurs",
@@ -3518,16 +3409,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_mendel_ratio_variant",
-          "relation": "co_occurs",
-          "reason": "Review 连锁互换与遗传图谱 together with 孟德尔比例变式 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_pedigree_analysis",
           "relation": "co_occurs",
@@ -3683,16 +3564,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_linkage_exchange",
-          "relation": "co_occurs",
-          "reason": "Review 遗传系谱图分析 together with 连锁互换与遗传图谱 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_dna_replication_experiment",
           "relation": "co_occurs",
           "reason": "Review 遗传系谱图分析 together with DNA 半保留复制实验 when diagnosing adjacent biology skills.",
@@ -3838,16 +3709,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_pedigree_analysis",
-          "relation": "co_occurs",
-          "reason": "Review DNA 半保留复制实验 together with 遗传系谱图分析 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_gene_expression_regulation",
           "relation": "co_occurs",
           "reason": "Review DNA 半保留复制实验 together with 基因表达与调控 when diagnosing adjacent biology skills.",
@@ -3867,19 +3728,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ]
-        },
-        {
-          "id": "bio_senior_dna_expression",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.87,
-          "reason": "Replication evidence is often mixed up with transcription and translation when templates and products are not separated.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ]
         }
@@ -3970,16 +3818,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_dna_replication_experiment",
-          "relation": "co_occurs",
-          "reason": "Review 基因表达与调控 together with DNA 半保留复制实验 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_mutation_variation",
           "relation": "co_occurs",
@@ -4132,16 +3970,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_gene_expression_regulation",
-          "relation": "co_occurs",
-          "reason": "Review 变异类型与育种应用 together with 基因表达与调控 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_evolution_selection",
           "relation": "co_occurs",
           "reason": "Review 变异类型与育种应用 together with 自然选择与进化证据 when diagnosing adjacent biology skills.",
@@ -4292,16 +4120,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_mutation_variation",
-          "relation": "co_occurs",
-          "reason": "Review 自然选择与进化证据 together with 变异类型与育种应用 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_neural_regulation",
           "relation": "co_occurs",
@@ -4454,16 +4272,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_evolution_selection",
-          "relation": "co_occurs",
-          "reason": "Review 神经调节与反射弧 together with 自然选择与进化证据 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_hormone_regulation",
           "relation": "co_occurs",
           "reason": "Review 神经调节与反射弧 together with 激素调节与反馈 when diagnosing adjacent biology skills.",
@@ -4615,16 +4423,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_neural_regulation",
-          "relation": "co_occurs",
-          "reason": "Review 激素调节与反馈 together with 神经调节与反射弧 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_immunity_process",
           "relation": "co_occurs",
           "reason": "Review 激素调节与反馈 together with 免疫调节过程 when diagnosing adjacent biology skills.",
@@ -4645,24 +4443,6 @@
             "learning_path",
             "practice_planning",
             "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "biology",
-            "target_subject": "biology",
-            "chapter_focus": "senior_hormone_regulation"
-          }
-        },
-        {
-          "id": "bio_senior_neural_regulation",
-          "relation": "confusable",
-          "reason": "Hormone feedback is easily mixed with reflex-arc signaling but uses different routes and timing.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.87,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "biology",
@@ -4775,16 +4555,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_hormone_regulation",
-          "relation": "co_occurs",
-          "reason": "Review 免疫调节过程 together with 激素调节与反馈 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_plant_hormone",
           "relation": "co_occurs",
@@ -4936,16 +4706,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_immunity_process",
-          "relation": "co_occurs",
-          "reason": "Review 植物激素调节 together with 免疫调节过程 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_population_growth",
           "relation": "co_occurs",
@@ -5105,16 +4865,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_plant_hormone",
-          "relation": "co_occurs",
-          "reason": "Review 种群数量变化曲线 together with 植物激素调节 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_community_succession",
           "relation": "co_occurs",
@@ -5295,16 +5045,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_population_growth",
-          "relation": "co_occurs",
-          "reason": "Review 群落结构与演替 together with 种群数量变化曲线 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_ecosystem_material_cycle",
           "relation": "co_occurs",
           "reason": "Review 群落结构与演替 together with 生态系统物质循环 when diagnosing adjacent biology skills.",
@@ -5464,16 +5204,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_community_succession",
-          "relation": "co_occurs",
-          "reason": "Review 生态系统物质循环 together with 群落结构与演替 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_ecology_calculation",
           "relation": "co_occurs",
           "reason": "Review 生态系统物质循环 together with 生态能量流动计算 when diagnosing adjacent biology skills.",
@@ -5494,24 +5224,6 @@
             "practice_planning",
             "hint_generation",
             "learning_path"
-          ],
-          "metadata": {
-            "source_subject": "biology",
-            "target_subject": "biology",
-            "chapter_focus": "senior_ecosystem_material_cycle"
-          }
-        },
-        {
-          "id": "bio_senior_ecology_energy_flow",
-          "relation": "confusable",
-          "reason": "Matter cycles through ecosystems, while energy flows one way and is lost as heat.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "biology",
@@ -5632,16 +5344,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_ecosystem_material_cycle",
-          "relation": "co_occurs",
-          "reason": "Review 生态能量流动计算 together with 生态系统物质循环 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_experiment_control",
           "relation": "co_occurs",
@@ -5805,16 +5507,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_ecology_calculation",
-          "relation": "co_occurs",
-          "reason": "Review 生物实验对照设计 together with 生态能量流动计算 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_experiment_curve_table",
           "relation": "co_occurs",
           "reason": "Review 生物实验对照设计 together with 实验图表信息提取 when diagnosing adjacent biology skills.",
@@ -5973,16 +5665,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_experiment_control",
-          "relation": "co_occurs",
-          "reason": "Review 实验图表信息提取 together with 生物实验对照设计 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_experiment_error_analysis",
           "relation": "co_occurs",
@@ -6165,16 +5847,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_experiment_curve_table",
-          "relation": "co_occurs",
-          "reason": "Review 实验误差与结论评价 together with 实验图表信息提取 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_pcr_electrophoresis",
           "relation": "co_occurs",
           "reason": "Review 实验误差与结论评价 together with PCR 与电泳结果分析 when diagnosing adjacent biology skills.",
@@ -6337,16 +6009,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_experiment_error_analysis",
-          "relation": "co_occurs",
-          "reason": "Review PCR 与电泳结果分析 together with 实验误差与结论评价 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_gene_engineering",
           "relation": "co_occurs",
           "reason": "Review PCR 与电泳结果分析 together with 基因工程流程 when diagnosing adjacent biology skills.",
@@ -6505,16 +6167,6 @@
         }
       ],
       "related": [
-        {
-          "id": "bio_senior_pcr_electrophoresis",
-          "relation": "co_occurs",
-          "reason": "Review 基因工程流程 together with PCR 与电泳结果分析 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "bio_senior_cell_engineering",
           "relation": "co_occurs",
@@ -6675,16 +6327,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_gene_engineering",
-          "relation": "co_occurs",
-          "reason": "Review 植物组织培养与细胞工程 together with 基因工程流程 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_exam_integrated_context",
           "relation": "co_occurs",
           "reason": "Review 植物组织培养与细胞工程 together with 生物综合情境题 when diagnosing adjacent biology skills.",
@@ -6844,24 +6486,22 @@
       ],
       "related": [
         {
-          "id": "bio_senior_cell_engineering",
-          "relation": "co_occurs",
-          "reason": "Review 生物综合情境题 together with 植物组织培养与细胞工程 when diagnosing adjacent biology skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "bio_senior_answer_standardization",
           "relation": "co_occurs",
-          "reason": "Review 生物综合情境题 together with 生物规范表述 when diagnosing adjacent biology skills.",
+          "reason": "Review bio_senior_answer_standardization with bio_senior_exam_integrated_context for adjacent biology diagnosis.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "priority": "useful",
+          "context": "diagnosis",
+          "confidence": 0.82,
+          "metadata": {
+            "source_subject": "biology",
+            "target_subject": "biology",
+            "chapter_focus": "senior_answer_standardization"
+          }
         },
         {
           "id": "bio_senior_answer_standardization",
@@ -7013,24 +6653,6 @@
       ],
       "related": [
         {
-          "id": "bio_senior_exam_integrated_context",
-          "relation": "co_occurs",
-          "reason": "Review bio_senior_answer_standardization with bio_senior_exam_integrated_context for adjacent biology diagnosis.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.82,
-          "metadata": {
-            "source_subject": "biology",
-            "target_subject": "biology",
-            "chapter_focus": "senior_answer_standardization"
-          }
-        },
-        {
           "id": "bio_senior_experiment_curve_table",
           "relation": "procedure_step",
           "reason": "Standard answers first extract variables data trend and conclusion from the prompt.",
@@ -7041,24 +6663,6 @@
             "learning_path",
             "practice_planning",
             "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "biology",
-            "target_subject": "biology",
-            "chapter_focus": "senior_answer_standardization"
-          }
-        },
-        {
-          "id": "bio_senior_exam_integrated_context",
-          "relation": "confusable",
-          "reason": "Students often confuse finding the scenario clue with writing a complete biological statement.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.85,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "biology",

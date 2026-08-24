@@ -10,7 +10,7 @@
       "chapter": "力学",
       "depth": 2,
       "difficulty": 0.42,
-      "prerequisites": [],
+      "prerequisites": [{"id": "function_graph_reading","priority": "core","context": "practice","confidence": 0.91,"reason": "读 s-t、v-t 图像前，需要先会从函数图像读取斜率、截距、增减和区间信息。","use_cases": ["learning_path","hint_generation","practice_planning"],"metadata": {"source_subject": "physics","target_subject": "math","bridge_direction": "math_to_physics","bridge_focus": "函数图像->运动图像","physics_use": "从运动图像判断速度、路程和运动状态"}}],
       "related": [
         {
           "id": "physics_junior_force_balance",
@@ -20,26 +20,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "function_graph_reading",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "practice",
-          "confidence": 0.91,
-          "reason": "读 s-t、v-t 图像前，需要先会从函数图像读取斜率、截距、增减和区间信息。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "函数图像->运动图像",
-            "physics_use": "从运动图像判断速度、路程和运动状态"
-          }
         },
         {
           "id": "linear_function_graph",
@@ -1060,24 +1040,6 @@
           "use_cases": [
             "hint_generation",
             "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "电学"
-          }
-        },
-        {
-          "id": "physics_junior_ohm_law",
-          "relation": "confusable",
-          "reason": "Power P, voltage U, current I, and resistance R are often interchanged without checking formula conditions.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ],
           "metadata": {
@@ -2241,6 +2203,25 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
+        },
+        {
+          "id": "college_derivative_definition",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.89,
+          "reason": "理解瞬时速度和瞬时加速度需要先理解导数作为瞬时变化率的定义。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "导数->速度/加速度",
+            "physics_use": "用变化率解释图像切线斜率"
+          }
         }
       ],
       "related": [
@@ -2308,26 +2289,6 @@
             "bridge_direction": "physics_to_math",
             "bridge_focus": "函数图像->运动图像",
             "physics_use": "把 x-t、v-t、a-t 图像特征映射到运动过程"
-          }
-        },
-        {
-          "id": "college_derivative_definition",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.89,
-          "reason": "理解瞬时速度和瞬时加速度需要先理解导数作为瞬时变化率的定义。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "导数->速度/加速度",
-            "physics_use": "用变化率解释图像切线斜率"
           }
         },
         {
@@ -2474,19 +2435,28 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
+        },
+        {
+          "id": "senior_vector_coordinate",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.91,
+          "reason": "力的正交分解需要先会把向量投影到坐标轴，并用分量表示大小和方向。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "practice_planning"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "向量->力分解",
+            "physics_use": "建立沿斜面和垂直斜面的受力分量"
+          }
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_motion_graph_synthesis",
-          "relation": "co_occurs",
-          "reason": "Review 力的分解与正交分析 together with 运动图像综合 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_connected_body",
           "relation": "co_occurs",
@@ -2522,26 +2492,6 @@
             "hint_generation",
             "practice_planning"
           ]
-        },
-        {
-          "id": "senior_vector_coordinate",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "practice",
-          "confidence": 0.91,
-          "reason": "力的正交分解需要先会把向量投影到坐标轴，并用分量表示大小和方向。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "向量->力分解",
-            "physics_use": "建立沿斜面和垂直斜面的受力分量"
-          }
         },
         {
           "id": "sine_cosine_tangent",
@@ -2715,16 +2665,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_force_decomposition",
-          "relation": "co_occurs",
-          "reason": "Review 连接体与整体隔离法 together with 力的分解与正交分析 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_friction_critical",
           "relation": "co_occurs",
           "reason": "Review 连接体与整体隔离法 together with 摩擦力临界问题 when diagnosing adjacent physics skills.",
@@ -2851,16 +2791,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_connected_body",
-          "relation": "co_occurs",
-          "reason": "Review 摩擦力临界问题 together with 连接体与整体隔离法 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_projectile_motion",
           "relation": "co_occurs",
           "reason": "Review 摩擦力临界问题 together with 平抛与斜抛运动 when diagnosing adjacent physics skills.",
@@ -2983,19 +2913,27 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
-        }
-      ],
-      "related": [
+        },
         {
-          "id": "physics_senior_friction_critical",
-          "relation": "co_occurs",
-          "reason": "Review 平抛与斜抛运动 together with 摩擦力临界问题 when diagnosing adjacent physics skills.",
+          "id": "senior_trig_definitions",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.86,
+          "reason": "Projectile initial velocity must be decomposed into horizontal and vertical components using trigonometric ratios.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
-        },
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "physics_to_math",
+            "bridge_focus": "projectile_velocity_decomposition"
+          }
+        }
+      ],
+      "related": [
         {
           "id": "physics_senior_circular_critical",
           "relation": "co_occurs",
@@ -3031,25 +2969,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "senior_trig_definitions",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Projectile initial velocity must be decomposed into horizontal and vertical components using trigonometric ratios.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "physics_to_math",
-            "bridge_focus": "projectile_velocity_decomposition"
-          }
         },
         {
           "id": "quadratic_function_concept",
@@ -3199,16 +3118,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_projectile_motion",
-          "relation": "co_occurs",
-          "reason": "Review 圆周运动临界条件 together with 平抛与斜抛运动 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_work_energy_path",
           "relation": "co_occurs",
           "reason": "Review 圆周运动临界条件 together with 功和动能定理路径选择 when diagnosing adjacent physics skills.",
@@ -3331,19 +3240,28 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
+        },
+        {
+          "id": "college_definite_integral",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.9,
+          "reason": "变力做功和 v-t 图像位移都需要先理解定积分表示连续累积量。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "积分->位移/功",
+            "physics_use": "用面积或累积量解释位移、功和能量变化"
+          }
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_circular_critical",
-          "relation": "co_occurs",
-          "reason": "Review 功和动能定理路径选择 together with 圆周运动临界条件 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_mechanical_energy_loss",
           "relation": "co_occurs",
@@ -3379,26 +3297,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "college_definite_integral",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "practice",
-          "confidence": 0.9,
-          "reason": "变力做功和 v-t 图像位移都需要先理解定积分表示连续累积量。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "积分->位移/功",
-            "physics_use": "用面积或累积量解释位移、功和能量变化"
-          }
         },
         {
           "id": "college_integral_physics_application",
@@ -3530,16 +3428,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_work_energy_path",
-          "relation": "co_occurs",
-          "reason": "Review 机械能守恒与能量损失 together with 功和动能定理路径选择 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_momentum_collision",
           "relation": "co_occurs",
           "reason": "Review 机械能守恒与能量损失 together with 碰撞与动量守恒 when diagnosing adjacent physics skills.",
@@ -3665,16 +3553,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_mechanical_energy_loss",
-          "relation": "co_occurs",
-          "reason": "Review 碰撞与动量守恒 together with 机械能守恒与能量损失 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_impulse_graph",
           "relation": "co_occurs",
@@ -3802,16 +3680,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_momentum_collision",
-          "relation": "co_occurs",
-          "reason": "Review 冲量与力时图像 together with 碰撞与动量守恒 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_gravitation_orbit",
           "relation": "co_occurs",
           "reason": "Review 冲量与力时图像 together with 万有引力与天体运动 when diagnosing adjacent physics skills.",
@@ -3934,16 +3802,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_impulse_graph",
-          "relation": "co_occurs",
-          "reason": "Review 万有引力与天体运动 together with 冲量与力时图像 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_simple_harmonic",
           "relation": "co_occurs",
@@ -4098,32 +3956,9 @@
             "learning_path",
             "hint_generation"
           ]
-        }
-      ],
-      "related": [
-        {
-          "id": "physics_senior_gravitation_orbit",
-          "relation": "co_occurs",
-          "reason": "Review 简谐运动图像 together with 万有引力与天体运动 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
-          "id": "physics_senior_wave_interference",
-          "relation": "co_occurs",
-          "reason": "Review 简谐运动图像 together with 机械波传播与干涉 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
         },
         {
           "id": "senior_trig_graph",
-          "relation": "prerequisite",
           "priority": "core",
           "context": "practice",
           "confidence": 0.9,
@@ -4140,6 +3975,18 @@
             "bridge_focus": "三角函数->简谐运动",
             "physics_use": "读取简谐运动的振幅、周期、相位和初始状态"
           }
+        }
+      ],
+      "related": [
+        {
+          "id": "physics_senior_wave_interference",
+          "relation": "co_occurs",
+          "reason": "Review 简谐运动图像 together with 机械波传播与干涉 when diagnosing adjacent physics skills.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ]
         },
         {
           "id": "senior_function_periodicity",
@@ -4307,24 +4154,22 @@
       ],
       "related": [
         {
-          "id": "physics_senior_simple_harmonic",
-          "relation": "co_occurs",
-          "reason": "Review 机械波传播与干涉 together with 简谐运动图像 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_electric_field_force",
           "relation": "co_occurs",
-          "reason": "Review 机械波传播与干涉 together with 电场力与电势能 when diagnosing adjacent physics skills.",
+          "reason": "physics_senior_electric_field_force uses physics_senior_wave_interference as a co occurs link for physics practice planning.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.86,
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "physics",
+            "chapter_focus": "高中物理电磁学"
+          }
         },
         {
           "id": "senior_trig_definitions",
@@ -4458,24 +4303,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_wave_interference",
-          "relation": "co_occurs",
-          "reason": "physics_senior_electric_field_force uses physics_senior_wave_interference as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
         {
           "id": "physics_senior_electric_potential_graph",
           "relation": "co_occurs",
@@ -4634,28 +4461,44 @@
             "learning_path",
             "hint_generation"
           ]
+        },
+        {
+          "id": "function_graph_reading",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.86,
+          "reason": "Students need graph-reading skill before extracting extrema, monotonic intervals, and slopes from potential graphs.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "physics_to_math",
+            "bridge_focus": "potential_graph_information_reading"
+          }
         }
       ],
       "related": [
         {
-          "id": "physics_senior_electric_field_force",
-          "relation": "co_occurs",
-          "reason": "Review 电势与场强图像 together with 电场力与电势能 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_capacitor_dynamic",
           "relation": "co_occurs",
-          "reason": "Review 电势与场强图像 together with 电容器动态分析 when diagnosing adjacent physics skills.",
+          "reason": "physics_senior_capacitor_dynamic uses physics_senior_electric_potential_graph as a co occurs link for physics practice planning.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.86,
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "physics",
+            "chapter_focus": "高中物理电磁学"
+          }
         },
         {
           "id": "senior_derivative_tangent",
@@ -4674,25 +4517,6 @@
             "target_subject": "math",
             "bridge_direction": "physics_to_math",
             "bridge_focus": "potential_graph_slope_to_field"
-          }
-        },
-        {
-          "id": "function_graph_reading",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Students need graph-reading skill before extracting extrema, monotonic intervals, and slopes from potential graphs.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "physics_to_math",
-            "bridge_focus": "potential_graph_information_reading"
           }
         },
         {
@@ -4830,24 +4654,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_electric_potential_graph",
-          "relation": "co_occurs",
-          "reason": "physics_senior_capacitor_dynamic uses physics_senior_electric_potential_graph as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
         {
           "id": "physics_senior_dc_circuit_dynamic",
           "relation": "co_occurs",
@@ -5016,24 +4822,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_capacitor_dynamic",
-          "relation": "co_occurs",
-          "reason": "physics_senior_dc_circuit_dynamic uses physics_senior_capacitor_dynamic as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
           "id": "physics_senior_power_extreme",
           "relation": "co_occurs",
           "reason": "physics_senior_dc_circuit_dynamic uses physics_senior_power_extreme as a co occurs link for physics practice planning.",
@@ -5101,24 +4889,6 @@
           "use_cases": [
             "hint_generation",
             "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
-          "id": "physics_senior_ac_circuit_intro",
-          "relation": "confusable",
-          "reason": "Transient DC changes are often confused with sinusoidal AC variation.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ],
           "metadata": {
@@ -5215,24 +4985,22 @@
       ],
       "related": [
         {
-          "id": "physics_senior_dc_circuit_dynamic",
-          "relation": "co_occurs",
-          "reason": "Review 电路功率极值 together with 闭合电路动态分析 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_magnetic_force",
           "relation": "co_occurs",
-          "reason": "Review 电路功率极值 together with 带电粒子在磁场中运动 when diagnosing adjacent physics skills.",
+          "reason": "physics_senior_magnetic_force uses physics_senior_power_extreme as a co occurs link for physics practice planning.",
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.86,
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "physics",
+            "chapter_focus": "高中物理电磁学"
+          }
         },
         {
           "id": "quadratic_max_min",
@@ -5408,24 +5176,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_power_extreme",
-          "relation": "co_occurs",
-          "reason": "physics_senior_magnetic_force uses physics_senior_power_extreme as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
           "id": "physics_senior_composite_field",
           "relation": "co_occurs",
           "reason": "physics_senior_magnetic_force uses physics_senior_composite_field as a co occurs link for physics practice planning.",
@@ -5473,24 +5223,6 @@
           "use_cases": [
             "learning_path",
             "practice_planning",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
-          "id": "physics_senior_electric_field_force",
-          "relation": "confusable",
-          "reason": "Magnetic force direction from the hand rule is often confused with electric-field force direction.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
             "review"
           ],
           "metadata": {
@@ -5594,24 +5326,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_magnetic_force",
-          "relation": "co_occurs",
-          "reason": "physics_senior_composite_field uses physics_senior_magnetic_force as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
         {
           "id": "physics_senior_electromagnetic_induction_law",
           "relation": "co_occurs",
@@ -5782,24 +5496,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_composite_field",
-          "relation": "co_occurs",
-          "reason": "physics_senior_electromagnetic_induction_law uses physics_senior_composite_field as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
           "id": "physics_senior_induction_rod",
           "relation": "co_occurs",
           "reason": "physics_senior_electromagnetic_induction_law uses physics_senior_induction_rod as a co occurs link for physics practice planning.",
@@ -5969,24 +5665,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_electromagnetic_induction_law",
-          "relation": "co_occurs",
-          "reason": "physics_senior_induction_rod uses physics_senior_electromagnetic_induction_law as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
           "id": "physics_senior_ac_transformer",
           "relation": "co_occurs",
           "reason": "physics_senior_induction_rod uses physics_senior_ac_transformer as a co occurs link for physics practice planning.",
@@ -6154,24 +5832,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_induction_rod",
-          "relation": "co_occurs",
-          "reason": "physics_senior_ac_transformer uses physics_senior_induction_rod as a co occurs link for physics practice planning.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.86,
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "chapter_focus": "高中物理电磁学"
-          }
-        },
-        {
           "id": "physics_senior_experiment_vernier",
           "relation": "co_occurs",
           "reason": "physics_senior_ac_transformer uses physics_senior_experiment_vernier as a co occurs link for physics practice planning.",
@@ -6330,16 +5990,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_ac_transformer",
-          "relation": "co_occurs",
-          "reason": "Review 游标卡尺与螺旋测微器读数 together with 变压器与远距离输电 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_experiment_acceleration",
           "relation": "co_occurs",
@@ -6507,16 +6157,6 @@
           ]
         },
         {
-          "id": "physics_senior_experiment_vernier",
-          "relation": "co_occurs",
-          "reason": "Review 探究加速度与力质量关系 together with 游标卡尺与螺旋测微器读数 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_experiment_energy",
           "relation": "co_occurs",
           "reason": "Review 探究加速度与力质量关系 together with 验证机械能守恒实验 when diagnosing adjacent physics skills.",
@@ -6633,16 +6273,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_experiment_acceleration",
-          "relation": "co_occurs",
-          "reason": "Review 验证机械能守恒实验 together with 探究加速度与力质量关系 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_experiment_resistance",
           "relation": "co_occurs",
@@ -6777,16 +6407,6 @@
       ],
       "related": [
         {
-          "id": "physics_senior_experiment_energy",
-          "relation": "co_occurs",
-          "reason": "Review 测电阻与伏安法选择 together with 验证机械能守恒实验 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "physics_senior_experiment_battery",
           "relation": "co_occurs",
           "reason": "Review 测电阻与伏安法选择 together with 测电源电动势和内阻 when diagnosing adjacent physics skills.",
@@ -6919,16 +6539,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_experiment_resistance",
-          "relation": "co_occurs",
-          "reason": "Review 测电源电动势和内阻 together with 测电阻与伏安法选择 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_model_boundary",
           "relation": "co_occurs",
@@ -7064,16 +6674,6 @@
         }
       ],
       "related": [
-        {
-          "id": "physics_senior_experiment_battery",
-          "relation": "co_occurs",
-          "reason": "Review 物理压轴边界条件 together with 测电源电动势和内阻 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "physics_senior_multistage_synthesis",
           "relation": "co_occurs",
@@ -7233,16 +6833,6 @@
       "related": [
         {
           "id": "physics_senior_model_boundary",
-          "relation": "co_occurs",
-          "reason": "Review 多过程综合建模 together with 物理压轴边界条件 when diagnosing adjacent physics skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
-          "id": "physics_senior_model_boundary",
           "relation": "procedure_step",
           "reason": "Multistage synthesis starts by marking process boundaries before choosing laws for each segment.",
           "priority": "core",
@@ -7361,6 +6951,25 @@
             "learning_path",
             "hint_generation"
           ]
+        },
+        {
+          "id": "senior_vector_linear_operation",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.88,
+          "reason": "理解位移、速度、加速度和力的矢量合成，需要先掌握向量加减和数乘的线性运算。",
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "向量运算->物理矢量",
+            "physics_use": "合成和分解位移、速度、加速度、力"
+          }
         }
       ],
       "related": [
@@ -7382,26 +6991,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "senior_vector_linear_operation",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.88,
-          "reason": "理解位移、速度、加速度和力的矢量合成，需要先掌握向量加减和数乘的线性运算。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "向量运算->物理矢量",
-            "physics_use": "合成和分解位移、速度、加速度、力"
-          }
         },
         {
           "id": "college_physics_kinematics_calculus",
@@ -9561,26 +9150,6 @@
             "bridge_focus": "entropy_ideal_gas_process_application",
             "physics_use": "uses gas-state relations to evaluate reversible and irreversible process paths"
           }
-        },
-        {
-          "id": "college_physics_thermo_first_law",
-          "relation": "confusable",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.85,
-          "reason": "Entropy increase is not the same statement as energy conservation; a process can conserve energy and still be impossible by the second law.",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "physics",
-            "bridge_direction": "physics_to_physics",
-            "bridge_focus": "entropy_vs_energy_conservation_confusion",
-            "physics_use": "keeps feasibility reasoning separate from heat-work energy balance"
-          }
         }
       ],
       "typical_misconceptions": [
@@ -9657,6 +9226,24 @@
             "learning_path",
             "hint_generation"
           ]
+        },
+        {
+          "id": "college_vector_space",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.86,
+          "reason": "Field superposition relies on vector-space operations before integrating or summing electric fields.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "physics_to_math",
+            "bridge_focus": "field_superposition_vector_space"
+          }
         }
       ],
       "related": [
@@ -9678,25 +9265,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "college_vector_space",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Field superposition relies on vector-space operations before integrating or summing electric fields.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "physics_to_math",
-            "bridge_focus": "field_superposition_vector_space"
-          }
         },
         {
           "id": "senior_vector_linear_operation",
@@ -10924,6 +10492,24 @@
             "learning_path",
             "hint_generation"
           ]
+        },
+        {
+          "id": "college_partial_derivative",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.86,
+          "reason": "Maxwell equations require partial derivatives to describe spatial and temporal changes of fields.",
+          "use_cases": [
+            "diagnosis",
+            "learning_path",
+            "hint_generation"
+          ],
+          "metadata": {
+            "source_subject": "physics",
+            "target_subject": "math",
+            "bridge_direction": "physics_to_math",
+            "bridge_focus": "maxwell_partial_derivatives"
+          }
         }
       ],
       "related": [
@@ -10945,25 +10531,6 @@
             "learning_path",
             "practice_planning"
           ]
-        },
-        {
-          "id": "college_partial_derivative",
-          "relation": "prerequisite",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.86,
-          "reason": "Maxwell equations require partial derivatives to describe spatial and temporal changes of fields.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "physics_to_math",
-            "bridge_focus": "maxwell_partial_derivatives"
-          }
         },
         {
           "id": "college_gradient_directional_derivative",

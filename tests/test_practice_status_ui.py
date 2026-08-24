@@ -70,6 +70,71 @@ def test_both_knowledge_maps_offer_local_stage_quick_settings() -> None:
         assert "ui.knowledge.return_default_stage" in locale, locale_path.name
 
 
+def test_both_knowledge_maps_render_boundary_prerequisites() -> None:
+    hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+
+    for source in (hosted, static):
+        assert "boundary" in source
+        assert "in_scope" in source
+        assert "ui.knowledge.boundary_prerequisite" in source
+        assert "ui.knowledge.boundary_description" in source
+        assert "knowledge-edge-graph__node--boundary" in source
+        assert "boundary: true, in_scope: false" in source
+
+    assert ".knowledge-node--boundary" in css
+    assert "stroke-dasharray" in css
+
+    import json
+
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        for key in (
+            "ui.knowledge.boundary_prerequisite",
+            "ui.knowledge.boundary_prerequisites",
+            "ui.knowledge.boundary_description",
+        ):
+            assert locale.get(key, "").strip(), f"{locale_path.name}: {key}"
+
+
+def test_static_knowledge_map_marks_local_one_hop_nodes_as_render_only_boundaries() -> None:
+    import json
+    import subprocess
+
+    source_path = json.dumps(str(ROOT / "static" / "knowledge-map.js"))
+    script = f"""
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+globalThis.document = {{ getElementById: () => null }};
+globalThis.window = {{}};
+const source = fs.readFileSync({source_path}, 'utf8');
+vm.runInThisContext(`${{source}}\nglobalThis.__boundaryClosure = knowledgeNodesWithBoundaryClosure;`);
+const payloadNodes = [
+  {{ id: 'junior_linear', stage: 'junior_high', subject: 'math' }},
+  {{ id: 'primary_number_sense', stage: 'primary', subject: 'math' }},
+];
+const closure = globalThis.__boundaryClosure(
+  payloadNodes,
+  [{{ from: 'primary_number_sense', to: 'junior_linear', relation: 'prerequisite' }}],
+  [payloadNodes[0]],
+);
+if (closure.length !== 2) throw new Error(`expected 2 nodes, received ${{closure.length}}`);
+if (closure[1] === payloadNodes[1]) throw new Error('boundary node must be a render-only copy');
+if (closure[1].boundary !== true || closure[1].in_scope !== false) throw new Error('missing boundary flags');
+if ('boundary' in payloadNodes[1] || 'in_scope' in payloadNodes[1]) throw new Error('payload was mutated');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_structured_practice_errors_are_preserved_and_localized() -> None:
     hosted_panel = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
     hosted_bridge = (ROOT / "surfaces" / "study_surface_utils.ts").read_text(

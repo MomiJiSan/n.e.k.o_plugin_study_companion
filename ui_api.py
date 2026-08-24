@@ -4,6 +4,8 @@ import re
 from typing import Any
 from urllib.parse import quote
 
+from .knowledge_graph_edges import build_topic_edges
+
 STUDY_PANEL_SURFACE_ID = "study-panel"
 
 CORE_EDGE_RELATIONS = {"prerequisite", "procedure_step", "confusable"}
@@ -141,9 +143,11 @@ def build_open_ui_payload(*, plugin_id: str, available: bool) -> dict[str, Any]:
 def build_knowledge_map_payload(
     *,
     topics: list[dict[str, Any]] | None = None,
+    scope_topic_ids: set[str] | list[str] | tuple[str, ...] | None = None,
     mastery_overview: list[dict[str, Any]] | None = None,
     weak_topics: list[dict[str, Any]] | None = None,
     wrong_questions: list[dict[str, Any]] | None = None,
+    max_boundary_nodes: int = 200,
 ) -> dict[str, Any]:
     topic_items = list(topics or [])
     mastery_items = list(mastery_overview or [])
@@ -151,6 +155,48 @@ def build_knowledge_map_payload(
     wrong_items = list(wrong_questions or [])
     mastery_by_topic = {str(item.get("topic_id") or ""): item for item in mastery_items}
     weak_topic_ids = {str(item.get("topic_id") or "") for item in weak_items}
+    topics_by_id = {
+        str(topic.get("id") or "").strip(): topic
+        for topic in topic_items
+        if str(topic.get("id") or "").strip()
+    }
+    if scope_topic_ids is None:
+        requested_scope = set(topics_by_id)
+    else:
+        requested_scope = {
+            str(topic_id or "").strip()
+            for topic_id in scope_topic_ids
+            if str(topic_id or "").strip() in topics_by_id
+        }
+    scope_topics = [
+        topic
+        for topic in topic_items
+        if str(topic.get("id") or "").strip() in requested_scope
+    ]
+    canonical_edges = build_topic_edges(topic_items)
+    incident_edges = [
+        edge
+        for edge in canonical_edges
+        if str(edge.get("from") or "") in requested_scope
+        or str(edge.get("to") or "") in requested_scope
+    ]
+    boundary_candidates = sorted(
+        {
+            endpoint
+            for edge in incident_edges
+            for endpoint in (str(edge.get("from") or ""), str(edge.get("to") or ""))
+            if endpoint and endpoint not in requested_scope and endpoint in topics_by_id
+        }
+    )
+    boundary_limit = max(0, int(max_boundary_nodes))
+    boundary_ids = set(boundary_candidates[:boundary_limit])
+    included_ids = requested_scope | boundary_ids
+    selected_edges = [
+        edge
+        for edge in incident_edges
+        if str(edge.get("from") or "") in included_ids
+        and str(edge.get("to") or "") in included_ids
+    ]
     nodes = []
     edges = []
     weak_node_count = 0
@@ -158,7 +204,15 @@ def build_knowledge_map_payload(
     subject_counts: dict[str, int] = {}
     chapter_counts: dict[str, int] = {}
     unit_counts: dict[str, int] = {}
-    for topic in topic_items:
+    selected_topics = [
+        *scope_topics,
+        *(
+            topics_by_id[topic_id]
+            for topic_id in sorted(boundary_ids)
+            if topic_id in topics_by_id
+        ),
+    ]
+    for topic in selected_topics:
         topic_id = str(topic.get("id") or "").strip()
         if not topic_id:
             continue
@@ -173,14 +227,16 @@ def build_knowledge_map_payload(
         course_family = str(topic.get("course_family") or "")
         chapter = str(topic.get("chapter") or "")
         unit = str(topic.get("unit") or chapter)
-        stage_counts[stage] = stage_counts.get(stage, 0) + 1
-        subject_counts[subject] = subject_counts.get(subject, 0) + 1
-        chapter_counts[chapter] = chapter_counts.get(chapter, 0) + 1
-        unit_key = f"{subject}:{unit}" if subject else unit
-        unit_counts[unit_key] = unit_counts.get(unit_key, 0) + 1
+        in_scope = topic_id in requested_scope
+        if in_scope:
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+            subject_counts[subject] = subject_counts.get(subject, 0) + 1
+            chapter_counts[chapter] = chapter_counts.get(chapter, 0) + 1
+            unit_key = f"{subject}:{unit}" if subject else unit
+            unit_counts[unit_key] = unit_counts.get(unit_key, 0) + 1
         mastery = mastery_by_topic.get(topic_id) or {}
         weak = topic_id in weak_topic_ids
-        if weak:
+        if weak and in_scope:
             weak_node_count += 1
         nodes.append(
             {
@@ -203,30 +259,23 @@ def build_knowledge_map_payload(
                 "mastery": float(mastery.get("mastery") or 0.0),
                 "level": str(mastery.get("level") or ""),
                 "weak": weak,
+                "in_scope": in_scope,
+                "boundary": not in_scope,
             }
         )
-        for prereq in topic.get("prerequisites") or []:
-            prereq_id = _topic_ref_id(prereq)
-            if prereq_id:
-                edges.append(
-                    _knowledge_edge_payload(
-                        source_id=prereq_id,
-                        target_id=topic_id,
-                        relation="prerequisite",
-                        ref=prereq,
-                    )
+    for edge in selected_edges:
+        source_id = str(edge.get("from") or "").strip()
+        target_id = str(edge.get("to") or "").strip()
+        relation = str(edge.get("relation") or "").strip()
+        if source_id and target_id and relation:
+            edges.append(
+                _knowledge_edge_payload(
+                    source_id=source_id,
+                    target_id=target_id,
+                    relation=relation,
+                    ref=edge,
                 )
-        for related in topic.get("related") or []:
-            related_id = _topic_ref_id(related)
-            if related_id:
-                edges.append(
-                    _knowledge_edge_payload(
-                        source_id=topic_id,
-                        target_id=related_id,
-                        relation="co_occurs",
-                        ref=related,
-                    )
-                )
+            )
     return {
         "nodes": nodes,
         "edges": edges,
@@ -234,7 +283,11 @@ def build_knowledge_map_payload(
         "weak_topics": weak_items,
         "wrong_questions": wrong_items,
         "summary": {
-            "topic_count": len(nodes),
+            "topic_count": len(scope_topics),
+            "scope_topic_count": len(scope_topics),
+            "boundary_node_count": len(boundary_ids),
+            "closure_truncated": len(boundary_candidates) > len(boundary_ids),
+            "omitted_boundary_node_count": max(0, len(boundary_candidates) - len(boundary_ids)),
             "edge_count": len(edges),
             "weak_topic_count": weak_node_count,
             "wrong_question_count": len(wrong_items),

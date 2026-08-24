@@ -19,6 +19,9 @@ type KnowledgeNode = {
   mastery?: number;
   level?: string;
   weak?: boolean;
+  /** Included only to explain a selected graph range; not part of that range. */
+  boundary?: boolean;
+  in_scope?: boolean;
   question_types?: string[];
   typical_misconceptions?: string[];
 };
@@ -121,6 +124,10 @@ function nodeMasteryLevel(node: KnowledgeNode) {
 
 function nodeLabel(node?: Partial<KnowledgeNode>) {
   return String(node?.label || node?.id || '-');
+}
+
+function isBoundaryNode(node?: Partial<KnowledgeNode>) {
+  return node?.boundary === true || node?.in_scope === false;
 }
 
 function nodeSubject(node?: Partial<KnowledgeNode>) {
@@ -247,6 +254,7 @@ function edgeGroups(props: PluginSurfaceProps, nodes: KnowledgeNode[], edges: Kn
 
 function edgeGraph(props: PluginSurfaceProps, nodes: KnowledgeNode[], edges: KnowledgeEdge[]) {
   const labels = new Map(nodes.map((node) => [String(node.id || ''), nodeLabel(node)]));
+  const nodesById = new Map(nodes.map((node) => [String(node.id || ''), node]));
   const graphEdges = edgeGroups(props, nodes, edges)
     .slice(0, 12)
     .flatMap((group) => group.items.slice(0, 6).map((item) => ({
@@ -317,11 +325,13 @@ function edgeGraph(props: PluginSurfaceProps, nodes: KnowledgeNode[], edges: Kno
             const position = positions.get(id);
             if (!position) return null;
             const label = labels.get(id) || id;
+            const boundary = isBoundaryNode(nodesById.get(id));
             return (
-              <g key={id} className="knowledge-edge-graph__node" transform={`translate(${position.x - 88} ${position.y - 22})`}>
-                <title>{label}</title>
-                <rect width="176" height="44" rx="8" />
-                <text x="88" y="27" textAnchor="middle">{label.length > 14 ? `${label.slice(0, 13)}...` : label}</text>
+              <g key={id} className={`knowledge-edge-graph__node${boundary ? ' knowledge-edge-graph__node--boundary' : ''}`} transform={`translate(${position.x - 88} ${position.y - 29})`}>
+                <title>{boundary ? `${label}: ${text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}` : label}</title>
+                <rect width="176" height="58" rx="8" />
+                <text x="88" y="24" textAnchor="middle">{label.length > 14 ? `${label.slice(0, 13)}...` : label}</text>
+                {boundary ? <text className="knowledge-edge-graph__boundary-label" x="88" y="43" textAnchor="middle">{text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}</text> : null}
               </g>
             );
           })}
@@ -519,8 +529,9 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     }
   }
 
+  const inScopeNodes = nodes.filter((node) => !isBoundaryNode(node));
   const subjectCounts = new Map<string, number>();
-  nodes.forEach((node) => {
+  inScopeNodes.forEach((node) => {
     const subject = nodeSubject(node);
     subjectCounts.set(subject, (subjectCounts.get(subject) || 0) + 1);
   });
@@ -532,13 +543,13 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   if (subjectCounts.has('')) {
     subjects.push('');
   }
-  const stages = uniqueValues(nodes, 'stage');
+  const stages = uniqueValues(inScopeNodes, 'stage');
   const activeStage = selectedStage !== 'all' && stages.includes(selectedStage)
     ? selectedStage
     : 'all';
   const stageNodes = activeStage === 'all'
-    ? nodes
-    : nodes.filter((node) => String(node.stage || '').trim() === activeStage);
+    ? inScopeNodes
+    : inScopeNodes.filter((node) => String(node.stage || '').trim() === activeStage);
   const moduleField: keyof KnowledgeNode = activeStage === 'college' ? 'course_family' : 'subject';
   const modules = uniqueValues(stageNodes, moduleField);
   const moduleCounts = new Map<string, number>();
@@ -574,9 +585,23 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const activeUnit = selectedUnit !== 'all' && units.includes(selectedUnit)
     ? selectedUnit
     : 'all';
-  const visibleNodes = activeUnit === 'all'
+  const scopedNodes = activeUnit === 'all'
     ? chapterNodes
     : chapterNodes.filter((node) => String(node.unit || '').trim() === activeUnit);
+  const scopedIds = new Set(scopedNodes.map((node) => String(node.id || '')));
+  // The hosted surface loads the complete map, then filters locally. Promote
+  // one-hop neighbours to render-only boundary nodes so the selected scope
+  // retains its prerequisite context without changing the API payload.
+  const boundaryNodes = nodes.flatMap((node) => {
+    const nodeId = String(node.id || '');
+    if (!nodeId || scopedIds.has(nodeId)) return [];
+    const isOneHopAway = edges.some((edge) => (
+      (String(edge.from || '') === nodeId && scopedIds.has(String(edge.to || '')))
+      || (String(edge.to || '') === nodeId && scopedIds.has(String(edge.from || '')))
+    ));
+    return isOneHopAway ? [{ ...node, boundary: true, in_scope: false }] : [];
+  });
+  const visibleNodes = [...scopedNodes, ...boundaryNodes];
   const visibleIds = new Set(visibleNodes.map((node) => String(node.id || '')));
   const visibleEdges = edges.filter((edge) => (
     visibleIds.has(String(edge.from || '')) && visibleIds.has(String(edge.to || ''))
@@ -598,14 +623,14 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       <header className="study-panel__header">
         <div>
           <h1>{text(props, 'ui.surface.knowledge_map', 'Knowledge Map')}</h1>
-          <span>{summary.topic_count || nodes.length} / {summary.weak_topic_count || 0}</span>
+          <span>{summary.topic_count || inScopeNodes.length} / {summary.weak_topic_count || 0}</span>
         </div>
       </header>
       {error ? <pre>{error}</pre> : null}
       <section className="study-panel__state">
         <div>
           <span>{text(props, 'ui.label.topics', 'Topics')}</span>
-          <strong>{visibleNodes.length} / {summary.topic_count || nodes.length}</strong>
+          <strong>{scopedNodes.length} / {summary.topic_count || inScopeNodes.length}</strong>
         </div>
         <div>
           <span>{text(props, 'ui.label.edges', 'Edges')}</span>
@@ -613,12 +638,16 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         </div>
         <div>
           <span>{text(props, 'ui.label.weak_topics', 'Weak Topics')}</span>
-          <strong>{visibleNodes.filter((node) => nodeMasteryLevel(node) === 'weak').length} / {summary.weak_topic_count || 0}</strong>
+          <strong>{scopedNodes.filter((node) => nodeMasteryLevel(node) === 'weak').length} / {summary.weak_topic_count || 0}</strong>
         </div>
         <div>
           <span>{text(props, 'ui.knowledge.module_label', 'Course module')}</span>
           <strong>{activeSubjectLabel}</strong>
         </div>
+        {boundaryNodes.length ? <div>
+          <span>{text(props, 'ui.knowledge.boundary_prerequisites', 'Out-of-scope prerequisites')}</span>
+          <strong>{boundaryNodes.length}</strong>
+        </div> : null}
       </section>
       {canonicalScope?.display_path?.length || scopeRecoveryFailed ? (
         <section className="study-panel__state" aria-live="polite">
@@ -639,8 +668,8 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               ? text(props, 'ui.knowledge.scope_all', 'All stages')
               : stageLabel(props, stage);
             const count = stage === 'all'
-              ? nodes.length
-              : nodes.filter((node) => String(node.stage || '').trim() === stage).length;
+              ? inScopeNodes.length
+              : inScopeNodes.filter((node) => String(node.stage || '').trim() === stage).length;
             return (
               <button
                 key={stage || 'uncategorized'}
@@ -797,20 +826,23 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         {visibleNodes.slice(0, 60).map((node) => {
           const mastery = Number(node.mastery);
           const masteryText = Number.isFinite(mastery) ? ` ${Math.round(mastery * 100)}%` : '';
+          const boundary = isBoundaryNode(node);
           return (
             <button
               key={node.id}
               type="button"
-              className="knowledge-node"
+              className={`knowledge-node${boundary ? ' knowledge-node--boundary' : ''}`}
               data-mastery={nodeMasteryLevel(node)}
+              data-boundary={boundary ? 'true' : undefined}
+              aria-label={boundary ? `${nodeLabel(node)}${masteryText}: ${text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}` : undefined}
               aria-pressed={currentNode?.id === node.id ? 'true' : 'false'}
               onClick={(event: any) => {
                 nodeTriggerRef.current = event.currentTarget;
                 setSelectedNode(node);
               }}
             >
-              {node.label}
-              {masteryText}
+              <span className="knowledge-node__label">{node.label}{masteryText}</span>
+              {boundary ? <small className="knowledge-node__boundary-label">{text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}</small> : null}
             </button>
           );
         })}
@@ -880,6 +912,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               <p className="knowledge-node-detail__meta">
                 {[currentNode.subject ? subjectLabel(props, currentNode.subject) : '', currentNode.chapter, currentNode.unit].filter(Boolean).join(' / ')}
               </p>
+              {isBoundaryNode(currentNode) ? <p className="knowledge-node-detail__boundary">{text(props, 'ui.knowledge.boundary_description', 'This prerequisite is shown for context and is outside the selected graph range.')}</p> : null}
               <section className="knowledge-node-detail__section">
                 <h4>{text(props, 'ui.knowledge.node_detail.why', 'Why connected')}</h4>
                 <ul className="knowledge-node-detail__list">

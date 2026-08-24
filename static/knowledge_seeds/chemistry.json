@@ -956,15 +956,22 @@
         {
           "id": "chem_senior_organic_isomer",
           "relation": "confusable",
+          "reason": "Functional-group recognition identifies reactive sites, while isomer counting also tracks carbon skeleton and position.",
           "priority": "useful",
           "context": "diagnosis",
           "confidence": 0.85,
-          "reason": "Functional-group identification is often confused with isomer enumeration when structures have the same formula.",
           "use_cases": [
             "diagnosis",
             "hint_generation",
+            "practice_planning",
             "review"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "chemistry",
+            "target_subject": "chemistry",
+            "chapter_focus": "organic",
+            "batch": "chemistry_ready_gap_2026_06"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -1719,16 +1726,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_atomic_structure_periodic",
-          "relation": "co_occurs",
-          "reason": "Review 化学键与晶体类型 together with 原子结构与元素周期律 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_material_structure_inference",
           "relation": "co_occurs",
           "reason": "Review 化学键与晶体类型 together with 结构性质信息推断 when diagnosing adjacent chemistry skills.",
@@ -1745,25 +1742,6 @@
           "priority": "core",
           "context": "practice",
           "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "structure",
-            "batch": "chemistry_ready_gap_2026_06"
-          }
-        },
-        {
-          "id": "chem_senior_atomic_structure_periodic",
-          "relation": "confusable",
-          "reason": "Atomic periodicity and chemical bonding are adjacent structure topics but answer different evidence questions.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.84,
           "use_cases": [
             "diagnosis",
             "hint_generation",
@@ -1864,24 +1842,22 @@
       ],
       "related": [
         {
-          "id": "chem_senior_chemical_bonding",
-          "relation": "co_occurs",
-          "reason": "Review 结构性质信息推断 together with 化学键与晶体类型 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_stoichiometry_limiting",
           "relation": "co_occurs",
-          "reason": "Review 结构性质信息推断 together with 过量与不足量计算 when diagnosing adjacent chemistry skills.",
+          "reason": "Practice chem_senior_material_structure_inference with chem_senior_stoichiometry_limiting because exam items often combine these ideas in one reasoning chain.",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.8,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "chemistry",
+            "target_subject": "chemistry",
+            "chapter_focus": "stoichiometry and solution"
+          }
         },
         {
           "id": "chem_senior_unknown_substance_inference",
@@ -2016,24 +1992,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_material_structure_inference",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_material_structure_inference with chem_senior_stoichiometry_limiting because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "stoichiometry and solution"
-          }
-        },
         {
           "id": "chem_senior_solution_concentration",
           "relation": "co_occurs",
@@ -2224,24 +2182,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_stoichiometry_limiting",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_stoichiometry_limiting with chem_senior_solution_concentration because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "stoichiometry and solution"
-          }
-        },
-        {
           "id": "chem_senior_ion_coexistence",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_ion_coexistence with chem_senior_solution_concentration because exam items often combine these ideas in one reasoning chain.",
@@ -2431,24 +2371,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_solution_concentration",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_solution_concentration with chem_senior_ion_coexistence because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "ion reaction"
-          }
-        },
-        {
           "id": "chem_senior_ionic_equation_writing",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_ionic_equation_writing with chem_senior_ion_coexistence because exam items often combine these ideas in one reasoning chain.",
@@ -2615,24 +2537,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_ion_coexistence",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_ion_coexistence with chem_senior_ionic_equation_writing because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "ion reaction"
-          }
-        },
         {
           "id": "chem_senior_redox_balance",
           "relation": "co_occurs",
@@ -2801,24 +2705,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_ionic_equation_writing",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_ionic_equation_writing with chem_senior_redox_balance because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "redox reaction"
-          }
-        },
-        {
           "id": "chem_senior_redox_titration",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_redox_titration with chem_senior_redox_balance because exam items often combine these ideas in one reasoning chain.",
@@ -2985,24 +2871,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_redox_balance",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_redox_balance with chem_senior_redox_titration because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "quantitative experiment"
-          }
-        },
         {
           "id": "chem_senior_reaction_heat_diagram",
           "relation": "co_occurs",
@@ -3171,24 +3039,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_redox_titration",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_redox_titration with chem_senior_reaction_heat_diagram because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "thermochemistry"
-          }
-        },
-        {
           "id": "chem_senior_rate_factors",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_rate_factors with chem_senior_reaction_heat_diagram because exam items often combine these ideas in one reasoning chain.",
@@ -3355,24 +3205,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_reaction_heat_diagram",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_reaction_heat_diagram with chem_senior_rate_factors because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "rate and equilibrium"
-          }
-        },
         {
           "id": "chem_senior_equilibrium_constant",
           "relation": "co_occurs",
@@ -3563,24 +3395,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_rate_factors",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_rate_factors with chem_senior_equilibrium_constant because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "rate and equilibrium"
-          }
-        },
-        {
           "id": "chem_senior_equilibrium_graph",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_equilibrium_graph with chem_senior_equilibrium_constant because exam items often combine these ideas in one reasoning chain.",
@@ -3770,24 +3584,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_equilibrium_constant",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_equilibrium_constant with chem_senior_equilibrium_graph because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "rate and equilibrium"
-          }
-        },
-        {
           "id": "chem_senior_acid_base_titration",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_acid_base_titration with chem_senior_equilibrium_graph because exam items often combine these ideas in one reasoning chain.",
@@ -3976,24 +3772,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_equilibrium_graph",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_equilibrium_graph with chem_senior_acid_base_titration because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "aqueous equilibrium"
-          }
-        },
         {
           "id": "chem_senior_ph_ionization",
           "relation": "co_occurs",
@@ -4222,24 +4000,22 @@
           ]
         },
         {
-          "id": "chem_senior_acid_base_titration",
-          "relation": "co_occurs",
-          "reason": "Review 弱电解质电离与 pH together with 酸碱中和滴定 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_precipitation_equilibrium",
           "relation": "co_occurs",
-          "reason": "Review 弱电解质电离与 pH together with 沉淀溶解平衡 when diagnosing adjacent chemistry skills.",
+          "reason": "Practice chem_senior_ph_ionization with chem_senior_precipitation_equilibrium because exam items often combine these ideas in one reasoning chain.",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.8,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "chemistry",
+            "target_subject": "chemistry",
+            "chapter_focus": "aqueous equilibrium"
+          }
         },
         {
           "id": "senior_logarithm_operation",
@@ -4375,24 +4151,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_ph_ionization",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_ph_ionization with chem_senior_precipitation_equilibrium because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "aqueous equilibrium"
-          }
-        },
-        {
           "id": "chem_senior_primary_battery",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_primary_battery with chem_senior_precipitation_equilibrium because exam items often combine these ideas in one reasoning chain.",
@@ -4421,24 +4179,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "aqueous equilibrium"
-          }
-        },
-        {
-          "id": "chem_senior_ion_coexistence",
-          "relation": "confusable",
-          "reason": "Ion coexistence often treats precipitation as complete, while Ksp questions require equilibrium judgment.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "chemistry",
@@ -4559,24 +4299,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_precipitation_equilibrium",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_precipitation_equilibrium with chem_senior_primary_battery because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "electrochemistry"
-          }
-        },
         {
           "id": "chem_senior_electrolysis_product",
           "relation": "co_occurs",
@@ -4745,24 +4467,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_primary_battery",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_primary_battery with chem_senior_electrolysis_product because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "electrochemistry"
-          }
-        },
-        {
           "id": "chem_senior_electrochem_calculation",
           "relation": "co_occurs",
           "reason": "Practice chem_senior_electrochem_calculation with chem_senior_electrolysis_product because exam items often combine these ideas in one reasoning chain.",
@@ -4791,24 +4495,6 @@
             "learning_path",
             "hint_generation",
             "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "electrochemistry"
-          }
-        },
-        {
-          "id": "chem_senior_primary_battery",
-          "relation": "confusable",
-          "reason": "Students often mix galvanic-cell spontaneous electrodes with electrolytic forced electrodes.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.84,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
           ],
           "metadata": {
             "source_subject": "chemistry",
@@ -4929,24 +4615,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_electrolysis_product",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_electrolysis_product with chem_senior_electrochem_calculation because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "electrochemistry"
-          }
-        },
         {
           "id": "chem_senior_organic_isomer",
           "relation": "co_occurs",
@@ -5129,16 +4797,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_electrochem_calculation",
-          "relation": "co_occurs",
-          "reason": "Review 有机同分异构体 together with 电化学定量计算 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_organic_reaction_route",
           "relation": "co_occurs",
           "reason": "Review 有机同分异构体 together with 有机合成路线推断 when diagnosing adjacent chemistry skills.",
@@ -5155,25 +4813,6 @@
           "priority": "core",
           "context": "practice",
           "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "practice_planning"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "organic",
-            "batch": "chemistry_ready_gap_2026_06"
-          }
-        },
-        {
-          "id": "chem_senior_organic_functional_group",
-          "relation": "confusable",
-          "reason": "Functional-group recognition identifies reactive sites, while isomer counting also tracks carbon skeleton and position.",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.85,
           "use_cases": [
             "diagnosis",
             "hint_generation",
@@ -5273,16 +4912,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_organic_isomer",
-          "relation": "co_occurs",
-          "reason": "Review 有机合成路线推断 together with 有机同分异构体 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "chem_senior_organic_polymer",
           "relation": "co_occurs",
@@ -5419,16 +5048,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_organic_reaction_route",
-          "relation": "co_occurs",
-          "reason": "Review 高分子与聚合反应 together with 有机合成路线推断 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_experiment_separation",
           "relation": "co_occurs",
           "reason": "Review 高分子与聚合反应 together with 物质分离提纯实验 when diagnosing adjacent chemistry skills.",
@@ -5563,16 +5182,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_organic_polymer",
-          "relation": "co_occurs",
-          "reason": "Review 物质分离提纯实验 together with 高分子与聚合反应 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "chem_senior_experiment_gas",
           "relation": "co_occurs",
@@ -5709,16 +5318,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_experiment_separation",
-          "relation": "co_occurs",
-          "reason": "Review 气体制备与检验 together with 物质分离提纯实验 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_experiment_variable_control",
           "relation": "co_occurs",
           "reason": "Review 气体制备与检验 together with 实验变量控制与评价 when diagnosing adjacent chemistry skills.",
@@ -5853,16 +5452,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_experiment_gas",
-          "relation": "co_occurs",
-          "reason": "Review 实验变量控制与评价 together with 气体制备与检验 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "chem_senior_industrial_process_flow",
           "relation": "co_occurs",
@@ -5999,16 +5588,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_experiment_variable_control",
-          "relation": "co_occurs",
-          "reason": "Review 工业流程信息题 together with 实验变量控制与评价 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_unknown_substance_inference",
           "relation": "co_occurs",
           "reason": "Review 工业流程信息题 together with 无机物推断综合 when diagnosing adjacent chemistry skills.",
@@ -6143,16 +5722,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_industrial_process_flow",
-          "relation": "co_occurs",
-          "reason": "Review 无机物推断综合 together with 工业流程信息题 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
         {
           "id": "chem_senior_data_table_reasoning",
           "relation": "co_occurs",
@@ -6289,16 +5858,6 @@
       ],
       "related": [
         {
-          "id": "chem_senior_unknown_substance_inference",
-          "relation": "co_occurs",
-          "reason": "Review 化学数据表格推理 together with 无机物推断综合 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_green_chemistry_context",
           "relation": "co_occurs",
           "reason": "Review 化学数据表格推理 together with 绿色化学与情境应用 when diagnosing adjacent chemistry skills.",
@@ -6434,24 +5993,22 @@
       ],
       "related": [
         {
-          "id": "chem_senior_data_table_reasoning",
-          "relation": "co_occurs",
-          "reason": "Review 绿色化学与情境应用 together with 化学数据表格推理 when diagnosing adjacent chemistry skills.",
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ]
-        },
-        {
           "id": "chem_senior_exam_synthesis_strategy",
           "relation": "co_occurs",
-          "reason": "Review 绿色化学与情境应用 together with 化学压轴综合策略 when diagnosing adjacent chemistry skills.",
+          "reason": "Practice chem_senior_green_chemistry_context with chem_senior_exam_synthesis_strategy because exam items often combine these ideas in one reasoning chain.",
+          "priority": "useful",
+          "context": "review",
+          "confidence": 0.8,
           "use_cases": [
             "diagnosis",
             "learning_path",
             "hint_generation"
-          ]
+          ],
+          "metadata": {
+            "source_subject": "chemistry",
+            "target_subject": "chemistry",
+            "chapter_focus": "exam synthesis"
+          }
         },
         {
           "id": "chem_senior_exam_synthesis_strategy",
@@ -6586,24 +6143,6 @@
         }
       ],
       "related": [
-        {
-          "id": "chem_senior_green_chemistry_context",
-          "relation": "co_occurs",
-          "reason": "Practice chem_senior_green_chemistry_context with chem_senior_exam_synthesis_strategy because exam items often combine these ideas in one reasoning chain.",
-          "priority": "useful",
-          "context": "review",
-          "confidence": 0.8,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "source_subject": "chemistry",
-            "target_subject": "chemistry",
-            "chapter_focus": "exam synthesis"
-          }
-        },
         {
           "id": "chem_senior_industrial_process_flow",
           "relation": "procedure_step",

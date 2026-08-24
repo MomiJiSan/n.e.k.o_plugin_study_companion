@@ -167,19 +167,6 @@
       "prerequisites": [],
       "related": [
         {
-          "id": "history_junior_qin_unification",
-          "relation": "confusable",
-          "priority": "useful",
-          "context": "diagnosis",
-          "confidence": 0.78,
-          "reason": "Learners often mix social-economic change with centralized political control, so contrast the historical evidence and scope.",
-          "use_cases": [
-            "diagnosis",
-            "hint_generation",
-            "review"
-          ]
-        },
-        {
           "id": "history_senior_economic_history",
           "relation": "application",
           "priority": "core",
