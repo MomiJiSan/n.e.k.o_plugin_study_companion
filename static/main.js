@@ -1515,8 +1515,7 @@ async function loadKnowledgeMap(requestId) {
   } catch (error) {
     const knowledgeMap = studyKnowledgeMap();
     if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
-    const message = error instanceof Error ? error.message : String(error);
-    setKnowledgeMapLoadState('error', message);
+    setKnowledgeMapLoadState('error', formatPluginError(error));
     syncKnowledgeMapContent();
   }
 }
@@ -1548,7 +1547,7 @@ function openKnowledgeMapFullscreen() {
   surfaceDrawer.setAttribute('aria-hidden', 'false');
   knowledgeMapFullscreenBtn?.setAttribute('aria-expanded', 'true');
   mountKnowledgeFullscreenHost();
-  syncKnowledgeMapContent();
+  if (knowledgeMapLoadState !== 'ready') syncKnowledgeMapContent();
   surfaceDrawerCloseBtn?.focus?.();
   return true;
 }

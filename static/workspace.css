@@ -302,6 +302,7 @@ body[data-active-workspace="notebook"],
 
 .knowledge-workspace {
   --knowledge-map-window-width: 100%;
+
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(460px, auto);

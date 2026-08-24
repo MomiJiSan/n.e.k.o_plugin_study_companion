@@ -88,7 +88,7 @@ function registerKnowledgeMapHost(host) {
         nextHost.replaceContent(knowledgeMapContentNode);
         knowledgeMapContentHost = nextHost;
       } else {
-        registeredHost.replaceContent(document.createDocumentFragment());
+        knowledgeMapContentNode.parentNode?.removeChild(knowledgeMapContentNode);
         knowledgeMapContentHost = null;
       }
     }

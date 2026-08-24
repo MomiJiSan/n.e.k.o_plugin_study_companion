@@ -176,11 +176,17 @@ def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
     payload_render = load_source.index("knowledgeMap.rerender(payload)")
     assert success_guard < payload_commit < payload_render
     assert "!knowledgeMap.isActive()" in load_source
+    assert "setKnowledgeMapLoadState('error', formatPluginError(error))" in load_source
 
     practice_start = main.index("async function activateKnowledgePracticeWorkspace")
     practice_end = main.index("function openKnowledgeMapFullscreen", practice_start)
     practice_source = main[practice_start:practice_end]
     assert practice_source.index("activateWorkspace('practice'") < practice_source.index("generateQuestionBtn?.focus?.()")
+
+    fullscreen_start = main.index("function openKnowledgeMapFullscreen")
+    fullscreen_end = main.index("function closeSurfaceDrawer", fullscreen_start)
+    fullscreen_source = main[fullscreen_start:fullscreen_end]
+    assert "if (knowledgeMapLoadState !== 'ready') syncKnowledgeMapContent()" in fullscreen_source
 
     leave_start = main.index("function canLeaveWorkspace")
     leave_end = main.index("function closeWorkspaceSurface", leave_start)
@@ -203,6 +209,9 @@ const requests = [];
 window.callPlugin = async (entryId, args) => await new Promise((resolve, reject) => {
   requests.push({ entryId, args, resolve, reject });
 });
+window.formatPluginError = (error) => error?.message === 'plugin_call_timeout'
+  ? 'Localized plugin timeout'
+  : error?.message || String(error);
 const loadFunction = """ + json.dumps(load_function) + r""";
 window.eval(`
 window.__knowledgeLoadHarness = (() => {
@@ -266,6 +275,20 @@ requests[3].resolve({ nodes: [{ id: 'inactive' }], edges: [] });
 await inactiveSuccess;
 if (harness.getPayload()?.nodes?.[0]?.id !== 'current' || harness.renders.length !== 1) {
   throw new Error('response for an inactive knowledge host was rendered');
+}
+
+harness.setRequestId(6);
+harness.setActive(true);
+const currentFailure = harness.load(6);
+await Promise.resolve();
+requests[4].reject(new Error('plugin_call_timeout'));
+await currentFailure;
+const currentError = harness.states.find((state) => state.state === 'error');
+if (currentError?.error !== 'Localized plugin timeout') {
+  throw new Error(`knowledge failure was not localized: ${JSON.stringify(currentError)}`);
+}
+if (harness.states.at(-1)?.state !== 'sync') {
+  throw new Error('current knowledge failure did not synchronize the error content');
 }
 """
     _run_frontend_script(script)
@@ -739,5 +762,8 @@ if (api.getState().subject !== 'math' || api.getState().zoomLevel !== 75) {
 }
 if (finalRelease() !== false) throw new Error('host release was not idempotent');
 releaseCentral();
+if (central.childElementCount !== 0 || sharedMap.isConnected) {
+  throw new Error('releasing the final inactive host left stale map content attached');
+}
 """
     _run_frontend_script(script)
