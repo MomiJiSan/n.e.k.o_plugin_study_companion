@@ -175,3 +175,65 @@ def test_focused_model_context_drops_nonincident_self_and_wrong_direction_edges(
         "guidance_nonincident_edge_dropped": 1,
         "guidance_direction_mismatch_dropped": 1,
     }
+
+
+def test_focused_context_and_semantic_evidence_share_all_relation_contracts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guidance, index_module = _modules(monkeypatch, "_focused_relation_contract_test")
+    topics = [
+        {"id": "target", "name": "Target", "prerequisites": [{"id": "pre"}], "related": [
+            {"id": "app", "relation": "application"},
+            {"id": "extension", "relation": "extends"},
+            {"id": "next", "relation": "next"},
+            {"id": "confusion", "relation": "confusable"},
+            {"id": "review", "relation": "co_occurs"},
+            {"id": "analogy", "relation": "analogy"},
+            {"id": "nearby", "relation": "nearby"},
+        ]},
+        {"id": "pre", "name": "Prerequisite"},
+        {"id": "procedure", "name": "Procedure", "related": [{"id": "target", "relation": "procedure_step"}]},
+        {"id": "app", "name": "Application"},
+        {"id": "extension", "name": "Extension"},
+        {"id": "next", "name": "Next"},
+        {"id": "support", "name": "Support", "related": [{"id": "target", "relation": "supports"}]},
+        {"id": "confusion", "name": "Confusion"},
+        {"id": "review", "name": "Review"},
+        {"id": "analogy", "name": "Analogy"},
+        {"id": "nearby", "name": "Nearby"},
+    ]
+    graph = index_module.KnowledgeGraphIndex(topics)
+    focused = guidance._build_focused_model_context(
+        selected_id="target",
+        by_id=graph.by_id,
+        incoming_edges=graph.incoming_edges,
+        outgoing_edges=graph.outgoing_edges,
+        relevant_subgraph={},
+    )
+    assert focused["prerequisites"] == ["Prerequisite"]
+    assert focused["procedure"] == ["Procedure"]
+    assert focused["applications"] == ["Application"]
+    assert focused["extensions"] == ["Extension"]
+    assert focused["supporting_concepts"] == ["Support"]
+    assert focused["next_topics"] == ["Next"]
+    assert focused["confusions"] == ["Confusion"]
+    assert focused["review_with"] == ["Nearby", "Review"]
+    assert focused["analogies"] == ["Analogy"]
+
+    canonical = guidance._canonical_necessary_relations(
+        topics=topics, topic_id="target"
+    )
+    assert canonical == {
+        key: focused[key]
+        for key in (
+            "prerequisites",
+            "procedure",
+            "confusions",
+            "applications",
+            "extensions",
+            "supporting_concepts",
+            "review_with",
+            "analogies",
+            "next_topics",
+        )
+    }

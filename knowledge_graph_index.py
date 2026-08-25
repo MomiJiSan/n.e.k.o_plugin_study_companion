@@ -14,6 +14,7 @@ from ._graph_utils import (
     topic_label as _topic_label,
 )
 from .knowledge_graph_edges import (
+    ALLOWED_RELATIONS,
     build_topic_edges,
     normalized_relation,
 )
@@ -26,6 +27,7 @@ CORE_RELATION_ORDER = (
     "prerequisite",
     "procedure_step",
     "confusable",
+    "analogy",
     "application",
     "extends",
     "co_occurs",
@@ -33,6 +35,7 @@ CORE_RELATION_ORDER = (
     "next",
     "nearby",
 )
+assert set(CORE_RELATION_ORDER) == set(ALLOWED_RELATIONS)
 RELATION_SCORE = {relation: index for index, relation in enumerate(CORE_RELATION_ORDER)}
 PRIORITY_SCORE = {"core": 0, "useful": 1, "optional": 2}
 
@@ -120,6 +123,7 @@ class SubgraphBudget:
             "prerequisite": 5,
             "procedure_step": 6,
             "confusable": 4,
+            "analogy": 3,
             "application": 4,
             "extends": 3,
             "co_occurs": 3,

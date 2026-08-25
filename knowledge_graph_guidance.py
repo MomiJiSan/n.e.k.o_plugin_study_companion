@@ -13,6 +13,9 @@ from ._graph_utils import (
     topic_label as _topic_label,
 )
 from .knowledge_graph_edges import (
+    ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+    FOCUSED_RELATION_DIRECTION as _FOCUSED_RELATION_DIRECTION,
+    SYMMETRIC_RELATIONS as _SYMMETRIC_RELATIONS,
     build_topic_edges as _build_topic_edges,
 )
 from .knowledge_graph_edges import (
@@ -885,7 +888,10 @@ def _build_focused_model_context(
         "confusions": [],
         "applications": [],
         "extensions": [],
+        "supporting_concepts": [],
         "review_with": [],
+        "analogies": [],
+        "next_topics": [],
         "practice_suggestions": [],
         "summary": _focused_context_summary(
             relevant_subgraph, diagnostics=diagnostics
@@ -900,20 +906,16 @@ def _build_focused_model_context(
         "confusions": [],
         "applications": [],
         "extensions": [],
+        "supporting_concepts": [],
         "review_with": [],
+        "analogies": [],
+        "next_topics": [],
     }
 
     # Keep direction checks explicit rather than inferring semantics from an
     # arbitrary subgraph edge.  Symmetric relations are allowed from either
     # side; all other supported relations have a single canonical direction.
-    supported_relations = {
-        "prerequisite",
-        "procedure_step",
-        "application",
-        "extends",
-        "confusable",
-        "co_occurs",
-    }
+    supported_relations = _ALLOWED_RELATIONS
     indexed_edges = [
         *(incoming_edges.get(selected_id) or []),
         *(outgoing_edges.get(selected_id) or []),
@@ -948,30 +950,36 @@ def _build_focused_model_context(
             continue
 
         incoming = target_id == selected_id
+        expected_direction = _FOCUSED_RELATION_DIRECTION.get(relation)
+        if expected_direction == "incoming" and not incoming:
+            diagnostics["guidance_direction_mismatch_dropped"] += 1
+            continue
+        if expected_direction == "outgoing" and incoming:
+            diagnostics["guidance_direction_mismatch_dropped"] += 1
+            continue
+
         if relation == "prerequisite":
-            if not incoming:
-                diagnostics["guidance_direction_mismatch_dropped"] += 1
-                continue
             bucket = "prerequisites"
         elif relation == "procedure_step":
-            if not incoming:
-                diagnostics["guidance_direction_mismatch_dropped"] += 1
-                continue
             bucket = "procedure"
         elif relation == "application":
-            if incoming:
-                diagnostics["guidance_direction_mismatch_dropped"] += 1
-                continue
             bucket = "applications"
         elif relation == "extends":
-            if incoming:
-                diagnostics["guidance_direction_mismatch_dropped"] += 1
-                continue
             bucket = "extensions"
+        elif relation == "supports":
+            bucket = "supporting_concepts"
+        elif relation == "next":
+            bucket = "next_topics"
         elif relation == "confusable":
             bucket = "confusions"
-        else:  # co_occurs
+        elif relation == "analogy":
+            bucket = "analogies"
+        elif relation in {"co_occurs", "nearby"}:
             bucket = "review_with"
+        else:  # Defensive assertion for a future relation-contract change.
+            if relation not in _SYMMETRIC_RELATIONS:
+                diagnostics["guidance_direction_mismatch_dropped"] += 1
+            continue
         relation_targets[bucket].append(
             (other_id, _topic_label(other_topic, other_id))
         )
@@ -999,13 +1007,17 @@ def _build_focused_model_context(
         "confusions",
         "applications",
         "extensions",
+        "supporting_concepts",
         "review_with",
+        "analogies",
+        "next_topics",
     ):
         context[key] = labels(relation_targets[key])
     context["practice_suggestions"] = labels(
         [
             *relation_targets["procedure"],
             *relation_targets["applications"],
+            *relation_targets["next_topics"],
         ],
         limit=6,
     )
@@ -1029,7 +1041,17 @@ def _canonical_necessary_relations(
     )
     return {
         key: list(focused.get(key) or [])
-        for key in ("prerequisites", "procedure", "confusions", "applications")
+        for key in (
+            "prerequisites",
+            "procedure",
+            "confusions",
+            "applications",
+            "extensions",
+            "supporting_concepts",
+            "review_with",
+            "analogies",
+            "next_topics",
+        )
         if focused.get(key)
     }
 
