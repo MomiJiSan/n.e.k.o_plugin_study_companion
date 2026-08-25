@@ -79,10 +79,9 @@ def _normalize_evaluation(
         for item in _as_list(raw.get("step_feedback"))
         if _as_str(item, str(item)).strip()
     ]
-    reference_answer = (
-        _as_str(raw.get("reference_answer")).strip()
-        or _as_str(context.get("expected_answer")).strip()
-    )
+    # The evaluator may explain its verdict, but it must never replace the
+    # server-held expected answer with a model-generated reference answer.
+    reference_answer = _as_str(context.get("expected_answer")).strip()
     return {
         "verdict": verdict,
         "score": score,

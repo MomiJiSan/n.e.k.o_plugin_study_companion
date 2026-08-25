@@ -66,14 +66,18 @@ def _normalize_question(
         for item in _as_list(raw.get("solution_steps"))
         if _as_str(item, str(item)).strip()
     ]
-    answer = (
-        _as_str(raw.get("answer")).strip()
-        or _as_str(raw.get("reference_answer")).strip()
-    )
+    raw_answer = _as_str(raw.get("answer")).strip()
+    raw_reference_answer = _as_str(raw.get("reference_answer")).strip()
+    # Keep one server-side expected answer throughout generation, semantic
+    # validation, and scoring.  Preserve a discrepancy flag for the targeted
+    # contract: both fields are synced below, so the repair loop needs this
+    # provenance to reject conflicting model output rather than silently
+    # choosing one value.
+    answer = raw_answer or raw_reference_answer
     normalized = {
         "question": question,
         "answer": answer,
-        "reference_answer": _as_str(raw.get("reference_answer")).strip() or answer,
+        "reference_answer": answer,
         "accepted_answers": accepted_answers,
         "key_points": key_points,
         "rubric": _as_dict(raw.get("rubric")),
@@ -89,6 +93,11 @@ def _normalize_question(
     }
     if bool(context.get("targeted_question")):
         normalized["target_topic_id"] = _as_str(raw.get("target_topic_id")).strip()
+        normalized["_answer_reference_answer_consistent"] = not (
+            raw_answer
+            and raw_reference_answer
+            and raw_answer != raw_reference_answer
+        )
         raw_difficulty = raw.get("difficulty")
         normalized["_targeted_difficulty_valid"] = (
             isinstance(raw_difficulty, int)

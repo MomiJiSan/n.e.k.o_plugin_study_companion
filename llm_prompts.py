@@ -187,12 +187,59 @@ def _targeted_context_parts(
         "course_family",
         "chapter",
         "unit",
-        "description",
-        "definition",
+        "skills",
+        "typical_misconceptions",
         "question_types",
-        "common_mistakes",
+        "examples",
     )
-    target_core = {key: target[key] for key in target_core_keys if key in target}
+    # Keep the actual seed evidence in the required prompt region.  The old
+    # description/definition/common_mistakes names are not seed fields, so
+    # they silently displaced the skills and misconceptions the model needs.
+    target_identity_keys = (
+        "id",
+        "name",
+        "title",
+        "subject",
+        "stage",
+        "course_family",
+        "chapter",
+        "unit",
+    )
+    target_core = {
+        key: target[key] for key in target_identity_keys if key in target
+    }
+    target_core.update(
+        _compact_prompt_value(
+            {
+                key: target[key]
+                for key in target_core_keys
+                if key not in target_identity_keys and key in target
+            },
+        list_limit=3,
+        string_limit=280,
+        dict_key_limit=12,
+        )
+    )
+    raw_candidate_evidence = params.get("candidate_evidence") or []
+    candidate_evidence = []
+    if isinstance(raw_candidate_evidence, list):
+        for item in raw_candidate_evidence[:3]:
+            if not isinstance(item, dict):
+                continue
+            candidate_evidence.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "item_type",
+                        "status",
+                        "score",
+                        "evidence_count",
+                        "payload_summary",
+                    )
+                    if item.get(key) not in (None, "", [], {})
+                }
+            )
     required_params = {
         key: params.get(key)
         for key in (
@@ -206,6 +253,13 @@ def _targeted_context_parts(
         if params.get(key) not in (None, "", [], {})
     }
     required_params["target_topic"] = target_core
+    if candidate_evidence:
+        required_params["candidate_evidence"] = _compact_prompt_value(
+            candidate_evidence,
+            list_limit=3,
+            string_limit=240,
+            dict_key_limit=8,
+        )
     required = {
         key: safe.get(key)
         for key in (
@@ -230,7 +284,6 @@ def _targeted_context_parts(
     required["knowledge_question_params"] = required_params
     optional = {
         "selection_reason_payload": safe.get("selection_reason_payload") or {},
-        "target_examples": target.get("examples") or [],
         "target_related": target.get("related") or [],
         "knowledge_guidance": safe.get("knowledge_guidance") or {},
     }

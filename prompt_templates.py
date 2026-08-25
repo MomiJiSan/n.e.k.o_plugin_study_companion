@@ -70,7 +70,6 @@ STUDY_ANSWER_EVALUATE_EXAMPLE = {
     "missing_points": ["missing step"],
     "misconceptions": [],
     "step_feedback": ["The first step is correct; add the missing relation."],
-    "reference_answer": "A complete answer includes the main idea and the missing relation.",
     "related_topics": ["core concept"],
     "math_equivalence_engine": {"enabled": False},
 }
@@ -134,7 +133,7 @@ STUDY_QUESTION_GENERATE_REQUIREMENTS = (
     "5. key_points: concise scoring points, not a full solution.\n"
     "6. rubric: small object mapping scoring point names to weights.\n"
     "7. solution_steps: concise solution/check steps.\n"
-    "8. question_type: short_answer / math_exact / math_reasoning / multiple_choice.\n"
+    "8. question_type: short_answer / math_exact / math_reasoning.\n"
     "9. hint: one direction-only hint; do not include the final answer or full solution.\n"
     "10. difficulty: integer from 1 to 5.\n"
     "11. topic: a short label for the target concept.\n"
@@ -160,7 +159,7 @@ STUDY_ANSWER_EVALUATE_REQUIREMENTS = (
     "6. final_answer_correct should be true only when the final answer is correct.\n"
     "7. covered_points and missing_points should summarize rubric coverage.\n"
     "8. step_feedback should summarize reasoning or math steps when applicable.\n"
-    "9. reference_answer may be returned after evaluation.\n"
+    "9. Do not return or replace reference_answer; the server retains the canonical expected answer.\n"
     "10. math_equivalence_engine.enabled must be false; do not claim symbolic equivalence verification.\n"
     "11. Use expected_answer and current question as the reference, but do not invent facts.\n"
     "12. When context.evaluation_correction is present, repair every listed contract violation and return one internally consistent evaluation.\n"
