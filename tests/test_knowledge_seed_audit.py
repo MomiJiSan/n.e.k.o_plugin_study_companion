@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
 import pytest
 
-from tools.audit_knowledge_seed import audit_knowledge_seed, verify_runtime_relation_semantics
+_audit_module = importlib.import_module("tools.audit_knowledge_seed")
+audit_knowledge_seed = _audit_module.audit_knowledge_seed
+verify_runtime_relation_semantics = _audit_module.verify_runtime_relation_semantics
 
 ROOT = Path(__file__).resolve().parents[1]
 LIVE_PLUGIN_ROOT = Path(r"C:\Users\ALEXGREENO\Desktop\CODE\N.E.K.O\plugin\plugins\study_companion")
