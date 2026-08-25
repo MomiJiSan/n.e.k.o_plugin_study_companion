@@ -848,6 +848,11 @@ def _topic_schema_ready(topic: KnowledgeSeedTopic) -> bool:
 def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, Any]:
     topic_ids = {str(topic.data.get("id") or "").strip() for topic in topics}
     topic_ids.discard("")
+    topic_by_id = {
+        str(topic.data.get("id") or "").strip(): topic
+        for topic in topics
+        if str(topic.data.get("id") or "").strip()
+    }
     topic_subject_by_id = {
         str(topic.data.get("id") or "").strip(): topic.subject or "<missing>"
         for topic in topics
@@ -881,6 +886,14 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
     cross_subject_relation_counts: dict[str, int] = {}
     legacy_edge_samples: list[dict[str, str]] = []
     symmetric_relations_by_topic: dict[str, set[str]] = {}
+    target_context_relations: dict[str, set[str]] = {}
+    prerequisite_inbound_counts: dict[str, int] = {
+        topic_id: 0 for topic_id in topic_ids
+    }
+    missing_required_mastery_count = 0
+    missing_required_mastery_by_subject: dict[str, int] = {}
+    prerequisite_depth_reverse_count = 0
+    prerequisite_difficulty_reverse_count = 0
 
     for topic in topics:
         source_id = str(topic.data.get("id") or "").strip()
@@ -955,6 +968,63 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
                     inbound[target_id] = inbound.get(target_id, 0) + 1
                 if field == "prerequisites" and relation == "prerequisite" and topic_id:
                     prerequisite_edges.setdefault(topic_id, set()).add(target_id)
+                canonical_source_id = target_id if field == "prerequisites" else topic_id
+                canonical_target_id = topic_id if field == "prerequisites" else target_id
+                if (
+                    canonical_source_id in topic_by_id
+                    and canonical_target_id in topic_by_id
+                ):
+                    if field == "prerequisites" and relation == "prerequisite":
+                        target_context_relations.setdefault(
+                            canonical_target_id, set()
+                        ).add("prerequisite")
+                        prerequisite_inbound_counts[canonical_target_id] += 1
+                        if not isinstance(ref, dict) or ref.get("required_mastery") is None:
+                            missing_required_mastery_count += 1
+                            missing_required_mastery_by_subject[subject] = (
+                                missing_required_mastery_by_subject.get(subject, 0) + 1
+                            )
+                        prerequisite_topic = topic_by_id[canonical_source_id]
+                        prerequisite_depth = prerequisite_topic.data.get("depth")
+                        target_depth = topic.data.get("depth")
+                        if (
+                            isinstance(prerequisite_depth, int)
+                            and not isinstance(prerequisite_depth, bool)
+                            and isinstance(target_depth, int)
+                            and not isinstance(target_depth, bool)
+                            and prerequisite_depth > target_depth
+                        ):
+                            prerequisite_depth_reverse_count += 1
+                        prerequisite_difficulty = prerequisite_topic.data.get(
+                            "difficulty"
+                        )
+                        target_difficulty = topic.data.get("difficulty")
+                        if (
+                            isinstance(prerequisite_difficulty, (int, float))
+                            and not isinstance(prerequisite_difficulty, bool)
+                            and isinstance(target_difficulty, (int, float))
+                            and not isinstance(target_difficulty, bool)
+                            and math.isfinite(float(prerequisite_difficulty))
+                            and math.isfinite(float(target_difficulty))
+                            and float(prerequisite_difficulty)
+                            > float(target_difficulty)
+                        ):
+                            prerequisite_difficulty_reverse_count += 1
+                    elif relation == "procedure_step":
+                        target_context_relations.setdefault(
+                            canonical_target_id, set()
+                        ).add("procedure_step")
+                    elif relation in {"application", "extends"}:
+                        target_context_relations.setdefault(
+                            canonical_source_id, set()
+                        ).add(relation)
+                    elif relation in SYMMETRIC_EDGE_RELATIONS:
+                        target_context_relations.setdefault(
+                            canonical_source_id, set()
+                        ).add(relation)
+                        target_context_relations.setdefault(
+                            canonical_target_id, set()
+                        ).add(relation)
                 target_subject = topic_subject_by_id.get(target_id)
                 if target_subject and target_subject != subject:
                     subject_edges = cross_subject_edge_counts.setdefault(subject, {})
@@ -1045,6 +1115,45 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         )
         for subject in standard_subjects
     }
+    subject_target_context_ready_counts: dict[str, int] = {
+        subject: 0 for subject in standard_subjects
+    }
+    subject_target_context_gap_counts: dict[str, int] = {
+        subject: 0 for subject in standard_subjects
+    }
+    subject_target_relation_gap_counts: dict[str, dict[str, int]] = {
+        subject: {} for subject in standard_subjects
+    }
+    for topic in topics:
+        subject = topic.subject or "<missing>"
+        standard = SUBJECT_MINIMUM_STANDARDS.get(subject)
+        if not standard:
+            continue
+        topic_id = str(topic.data.get("id") or "").strip()
+        required_relations = set(standard.get("relations", ()))
+        missing_relations = required_relations - target_context_relations.get(
+            topic_id, set()
+        )
+        if not missing_relations:
+            subject_target_context_ready_counts[subject] += 1
+            continue
+        subject_target_context_gap_counts[subject] += 1
+        relation_gaps = subject_target_relation_gap_counts[subject]
+        for relation in missing_relations:
+            relation_gaps[relation] = relation_gaps.get(relation, 0) + 1
+    root_topic_counts = sum(
+        1
+        for topic_id in topic_ids
+        if prerequisite_inbound_counts.get(topic_id, 0) == 0
+    )
+    depth_gt1_root_topic_counts = sum(
+        1
+        for topic_id, topic in topic_by_id.items()
+        if prerequisite_inbound_counts.get(topic_id, 0) == 0
+        and isinstance(topic.data.get("depth"), int)
+        and not isinstance(topic.data.get("depth"), bool)
+        and topic.data["depth"] > 1
+    )
     subject_minimum_standard_gap_rates = {
         subject: (
             subject_minimum_standard_gap_counts.get(subject, 0)
@@ -1149,6 +1258,24 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         "cross_subject_relation_counts": dict(
             sorted(cross_subject_relation_counts.items())
         ),
+        "subject_target_context_ready_counts": dict(
+            sorted(subject_target_context_ready_counts.items())
+        ),
+        "subject_target_context_gap_counts": dict(
+            sorted(subject_target_context_gap_counts.items())
+        ),
+        "subject_target_relation_gap_counts": {
+            subject: dict(sorted(counts.items()))
+            for subject, counts in sorted(subject_target_relation_gap_counts.items())
+        },
+        "root_topic_counts": root_topic_counts,
+        "depth_gt1_root_topic_counts": depth_gt1_root_topic_counts,
+        "missing_required_mastery_count": missing_required_mastery_count,
+        "missing_required_mastery_by_subject": dict(
+            sorted(missing_required_mastery_by_subject.items())
+        ),
+        "prerequisite_depth_reverse_count": prerequisite_depth_reverse_count,
+        "prerequisite_difficulty_reverse_count": prerequisite_difficulty_reverse_count,
         "legacy_edge_samples": legacy_edge_samples,
         "recommended_next_batch": recommended_next_batch,
         "relation_counts": dict(sorted(edge_counts.items())),

@@ -155,3 +155,20 @@ def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
     result = validate_knowledge_seed_manifest(manifest)
 
     assert result.is_valid
+
+
+def test_bundled_seed_target_context_audit_baseline() -> None:
+    manifest = Path(__file__).resolve().parents[1] / "static" / "knowledge_graph_seed.json"
+    result = validate_knowledge_seed_manifest(manifest)
+
+    assert result.report is not None
+    report = result.report
+    assert report["root_topic_counts"] == 106
+    assert report["depth_gt1_root_topic_counts"] == 100
+    assert report["missing_required_mastery_count"] == 105
+    assert report["prerequisite_depth_reverse_count"] == 48
+    assert report["prerequisite_difficulty_reverse_count"] == 80
+    assert sum(report["missing_required_mastery_by_subject"].values()) == 105
+    assert sum(report["subject_target_context_ready_counts"].values()) + sum(
+        report["subject_target_context_gap_counts"].values()
+    ) == report["topic_count"]

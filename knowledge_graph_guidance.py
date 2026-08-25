@@ -35,6 +35,7 @@ RELATION_PRIORITY = {
     "next": 6,
     "confusable": 7,
 }
+_PUBLIC_LEARNING_PATH_LIMIT = 64
 GENERIC_QUERY_TERMS = {
     "\u4e0d\u4f1a",
     "\u4e0d\u61c2",
@@ -477,6 +478,42 @@ def _learning_path_for_topic(
     return path
 
 
+def _public_learning_path_sort_key(edge: dict[str, Any]) -> tuple[int, int, str, str, str, str]:
+    return (
+        int(edge.get("depth") or 0),
+        _relation_priority(edge),
+        _text(edge.get("from_label")),
+        _text(edge.get("to_label")),
+        _text(edge.get("from")),
+        _text(edge.get("to")),
+    )
+
+
+def _limit_public_learning_path(
+    learning_path: list[dict[str, Any]], *, max_items: int = _PUBLIC_LEARNING_PATH_LIMIT
+) -> list[dict[str, Any]]:
+    """Bound public learning-path payloads without hiding direct prerequisites.
+
+    Direct neighbours are retained before deeper context.  Each bucket has a
+    canonical sort key, so its selection remains stable if graph construction
+    changes iteration order.  Bundled graph nodes have fewer than 64 direct
+    parents; the final slice is a defensive hard cap for externally supplied
+    topic data.
+    """
+    bounded_limit = max(0, int(max_items))
+    if not bounded_limit:
+        return []
+    direct = sorted(
+        (edge for edge in learning_path if int(edge.get("depth") or 0) == 1),
+        key=_public_learning_path_sort_key,
+    )
+    remaining = sorted(
+        (edge for edge in learning_path if int(edge.get("depth") or 0) != 1),
+        key=_public_learning_path_sort_key,
+    )
+    return [*direct, *remaining][:bounded_limit]
+
+
 def _sort_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         _dedupe_edges(edges),
@@ -497,9 +534,10 @@ def _build_relation_groups(
     confusions: list[dict[str, Any]],
     next_practice: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    candidates = _dedupe_edges(
-        [*learning_path, *applications, *confusions, *next_practice]
-    )
+    # These public groups are a view of ``learning_path``.  Keep their edge
+    # set identical to the already-budgeted path; the dedicated application,
+    # confusion, and next-practice fields retain their established contracts.
+    candidates = _dedupe_edges(learning_path)
     grouped: dict[str, list[dict[str, Any]]] = {
         relation: [] for relation in RELATION_GROUP_ORDER
     }
@@ -560,29 +598,138 @@ def _question_payload(
     return payload
 
 
+def _direct_diagnosis_edges(
+    *,
+    selected_id: str,
+    by_id: dict[str, dict[str, Any]],
+    incoming: dict[str, list[dict[str, Any]]],
+    outgoing: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return the canonical one-hop evidence allowed to drive diagnosis.
+
+    Learning paths intentionally include ancestors several hops away.  Those
+    edges remain useful public explanation, but asking a learner a diagnostic
+    question about them implies a direct relationship that may not exist.
+    """
+    selected_id = _text(selected_id)
+    if not selected_id or selected_id not in by_id:
+        return []
+    evidence: list[dict[str, Any]] = []
+    for edge in [*(incoming.get(selected_id) or []), *(outgoing.get(selected_id) or [])]:
+        if not isinstance(edge, dict):
+            continue
+        source_id = _text(edge.get("from"))
+        target_id = _text(edge.get("to"))
+        relation = _normalized_relation(edge.get("relation"))
+        if selected_id not in {source_id, target_id}:
+            continue
+        if not source_id or not target_id or source_id == target_id:
+            continue
+        # Diagnostics only use a relation in the direction its wording claims.
+        if relation in {"prerequisite", "procedure_step"} and target_id != selected_id:
+            continue
+        if relation in {"application", "extends", "next"} and source_id != selected_id:
+            continue
+        if relation not in {
+            "prerequisite",
+            "procedure_step",
+            "application",
+            "extends",
+            "next",
+            "confusable",
+            "co_occurs",
+        }:
+            continue
+        other_id = target_id if source_id == selected_id else source_id
+        other_topic = by_id.get(other_id)
+        source_topic = by_id.get(source_id)
+        target_topic = by_id.get(target_id)
+        if other_topic is None or source_topic is None or target_topic is None:
+            continue
+        normalized = dict(edge)
+        normalized.update(
+            {
+                "from": source_id,
+                "to": target_id,
+                "from_label": _topic_label(source_topic, source_id),
+                "to_label": _topic_label(target_topic, target_id),
+                "relation": relation,
+            }
+        )
+        evidence.append(normalized)
+    return _sort_edges(evidence)
+
+
 def _build_diagnosis_questions(
     *,
     selected_id: str,
     selected_label: str,
-    learning_path: list[dict[str, Any]],
-    confusions: list[dict[str, Any]],
-    next_practice: list[dict[str, Any]],
+    direct_edges: list[dict[str, Any]],
     limit: int = 8,
 ) -> list[dict[str, Any]]:
     questions: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    kind_limits = {
+        "prerequisite_probe": 3,
+        "procedure_probe": 2,
+        "confusion_check": 2,
+        "application_practice": 2,
+        "extension_suggestion": 1,
+        "next_step": 1,
+        "related_review": 1,
+    }
 
     def add(payload: dict[str, Any]) -> None:
         key = (_text(payload.get("kind")), _text(payload.get("topic_id")))
         if not key[0] or not key[1] or key in seen:
             return
+        if sum(1 for item in questions if item["kind"] == key[0]) >= kind_limits.get(
+            key[0], 0
+        ):
+            return
         seen.add(key)
         questions.append(payload)
 
-    for edge in sorted(learning_path, key=lambda item: (_relation_priority(item), int(item.get("depth") or 0))):
+    # Reserve one signal for each supported direct relation.  In particular, a
+    # dense prerequisite chain must not starve application, extension, or next
+    # step actions under the total public output budget.
+    reserved_relations = (
+        "prerequisite",
+        "procedure_step",
+        "application",
+        "extends",
+        "next",
+        "confusable",
+        "co_occurs",
+    )
+    ordered_edges: list[dict[str, Any]] = []
+    reserved_keys: set[tuple[str, str, str]] = set()
+    for relation in reserved_relations:
+        for edge in direct_edges:
+            if _normalized_relation(edge.get("relation")) != relation:
+                continue
+            key = (
+                _text(edge.get("from")),
+                _text(edge.get("to")),
+                relation,
+            )
+            if key not in reserved_keys:
+                reserved_keys.add(key)
+                ordered_edges.append(edge)
+            break
+    ordered_edges.extend(
+        edge
+        for edge in direct_edges
+        if (
+            _text(edge.get("from")),
+            _text(edge.get("to")),
+            _normalized_relation(edge.get("relation")),
+        )
+        not in reserved_keys
+    )
+
+    for edge in ordered_edges:
         relation = _normalized_relation(edge.get("relation"))
-        if relation not in {"prerequisite", "application", "procedure_step"}:
-            continue
         topic_id, topic_label = _other_topic_for_edge(edge, selected_id)
         if not topic_id or topic_id == selected_id:
             continue
@@ -599,8 +746,7 @@ def _build_diagnosis_questions(
                     edge=edge,
                 )
             )
-            continue
-        if relation == "application":
+        elif relation == "application":
             add(
                 _question_payload(
                     kind="application_practice",
@@ -613,68 +759,26 @@ def _build_diagnosis_questions(
                     edge=edge,
                 )
             )
-            continue
-        if len(
-            [item for item in questions if item["kind"] == "prerequisite_probe"]
-        ) >= 3:
-            continue
-        add(
-            _question_payload(
-                kind="prerequisite_probe",
-                topic_id=topic_id,
-                topic_label=topic_label,
-                question=(
-                    f"你是卡在“{topic_label or topic_id}”，"
-                    f"还是不知道它怎样用于“{selected_label}”？"
-                ),
-                edge=edge,
-            )
-        )
-
-    for edge in confusions:
-        topic_id, topic_label = _other_topic_for_edge(edge, selected_id)
-        if not topic_id or topic_id == selected_id:
-            continue
-        add(
-            _question_payload(
-                kind="confusion_check",
-                topic_id=topic_id,
-                topic_label=topic_label,
-                question=f"你是不是把“{selected_label}”和“{topic_label or topic_id}”混在一起了？",
-                edge=edge,
-            )
-        )
-        if len([item for item in questions if item["kind"] == "confusion_check"]) >= 2:
-            break
-
-    for edge in next_practice:
-        relation = _normalized_relation(edge.get("relation"))
-        topic_id, topic_label = _other_topic_for_edge(edge, selected_id)
-        if not topic_id or topic_id == selected_id:
-            continue
-        if relation == "application":
+        elif relation == "prerequisite":
             add(
                 _question_payload(
-                    kind="application_practice",
+                    kind="prerequisite_probe",
                     topic_id=topic_id,
                     topic_label=topic_label,
                     question=(
-                        f"要不要用“{topic_label or topic_id}”做一道典型题，"
-                        f"把“{selected_label}”用到具体场景里？"
+                        f"你是卡在“{topic_label or topic_id}”，"
+                        f"还是不知道它怎样用于“{selected_label}”？"
                     ),
                     edge=edge,
                 )
             )
-        elif relation == "procedure_step":
+        elif relation == "confusable":
             add(
                 _question_payload(
-                    kind="procedure_probe",
+                    kind="confusion_check",
                     topic_id=topic_id,
                     topic_label=topic_label,
-                    question=(
-                        f"你是卡在“{topic_label or topic_id}”这一步，"
-                        f"还是不知道它怎样推进“{selected_label}”？"
-                    ),
+                    question=f"你是不是把“{selected_label}”和“{topic_label or topic_id}”混在一起了？",
                     edge=edge,
                 )
             )
@@ -703,7 +807,7 @@ def _build_diagnosis_questions(
                     edge=edge,
                 )
             )
-        else:
+        elif relation == "next":
             add(
                 _question_payload(
                     kind="next_step",
@@ -1045,6 +1149,9 @@ def build_knowledge_guidance_payload(
                 "matched": False,
                 "topic_count": len(topic_items),
                 "edge_count": len(edges),
+                "learning_path_total_count": 0,
+                "learning_path_returned_count": 0,
+                "learning_path_truncated": False,
                 "active_relation_group_count": 0,
                 "diagnosis_question_count": 0,
                 "subgraph_node_count": relevant_subgraph["summary"]["node_count"],
@@ -1082,17 +1189,38 @@ def build_knowledge_guidance_payload(
         learning_path = []
         confusions = []
         next_practice = []
+    direct_diagnosis_edges = _direct_diagnosis_edges(
+        selected_id=selected_id,
+        by_id=by_id,
+        incoming=incoming,
+        outgoing=outgoing,
+    )
+    direct_public_path_items: list[dict[str, Any]] = []
+    for edge in direct_diagnosis_edges:
+        relation = _normalized_relation(edge.get("relation"))
+        if relation not in {"application", "confusable", "co_occurs", "next"}:
+            continue
+        other_id, _other_label = _other_topic_for_edge(edge, selected_id)
+        other_topic = by_id.get(other_id)
+        if not other_topic:
+            continue
+        item = dict(edge)
+        item["depth"] = 1
+        item["topic"] = other_topic
+        direct_public_path_items.append(item)
+    public_learning_path_source = [*learning_path, *direct_public_path_items]
+    public_learning_path = _limit_public_learning_path(
+        public_learning_path_source
+    )
     diagnosis_questions = _build_diagnosis_questions(
         selected_id=selected_id,
         selected_label=_topic_label(selected_topic, selected_id),
-        learning_path=learning_path,
-        confusions=confusions,
-        next_practice=next_practice,
+        direct_edges=direct_diagnosis_edges,
     )
     if normalized_response_mode != "problem_solving":
         diagnosis_questions = []
     relation_groups = _build_relation_groups(
-        learning_path=learning_path,
+        learning_path=public_learning_path,
         applications=applications,
         confusions=confusions,
         next_practice=next_practice,
@@ -1115,7 +1243,7 @@ def build_knowledge_guidance_payload(
             ),
         },
         "matches": matches,
-        "learning_path": learning_path,
+        "learning_path": public_learning_path,
         "applications": applications,
         "confusions": confusions,
         "next_practice_topics": next_practice,
@@ -1129,6 +1257,9 @@ def build_knowledge_guidance_payload(
             "topic_count": len(topic_items),
             "edge_count": len(edges),
             "learning_path_count": len(learning_path),
+            "learning_path_total_count": len(public_learning_path_source),
+            "learning_path_returned_count": len(public_learning_path),
+            "learning_path_truncated": len(public_learning_path) < len(public_learning_path_source),
             "application_count": len(applications),
             "confusion_count": len(confusions),
             "next_practice_count": len(next_practice),
