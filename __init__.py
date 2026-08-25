@@ -48,6 +48,7 @@ from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
 from .entry_export_support import _ExportSupportMixin
 from .entry_goal_entries import _GoalEntriesMixin
 from .entry_knowledge_entries import _KnowledgeEntriesMixin
+from .entry_local_model_entries import _LocalModelEntriesMixin
 from .entry_memory_card_entries import _MemoryCardEntriesMixin
 from .entry_memory_deck_entries import _MemoryDeckEntriesMixin
 from .entry_memory_import_entries import _MemoryImportEntriesMixin
@@ -258,6 +259,7 @@ class StudyCompanionPlugin(
     _CommunicationTutorEventsMixin,
     _ExportSupportMixin,
     _StatusEntriesMixin,
+    _LocalModelEntriesMixin,
     _MemoryCardEntriesMixin,
     _MemoryDeckEntriesMixin,
     _MemoryImportEntriesMixin,
@@ -299,6 +301,9 @@ class StudyCompanionPlugin(
         self._notebook_store = NotebookStore(self._store)
         self._ocr_pipeline: StudyOcrPipeline | None = None
         self._agent: TutorLLMAgent | None = None
+        self._local_model_manager: Any | None = None
+        self._local_model_catalog_cache: list[dict[str, object]] = []
+        self._local_model_manager_error = ""
         self._mode_manager = ModeManager()
         self._knowledge_tracker = KnowledgeTracker(
             self._store,
@@ -351,6 +356,10 @@ class StudyCompanionPlugin(
             )
             await asyncio.to_thread(self._store.open)
             self._cfg = await asyncio.to_thread(self._store.load_config, self._cfg)
+            # Asset management is file-only at startup.  It may create and
+            # catalog-scan its private directory, but never downloads or
+            # starts the local inference runtime.
+            await self._initialize_local_model_manager()
             self._knowledge_tracker = KnowledgeTracker(
                 self._store,
                 retention_target=self._cfg.fsrs_retention_target,
@@ -464,8 +473,10 @@ class StudyCompanionPlugin(
         await self._cancel_pomodoro_watcher()
         event_bus = self._event_bus
         agent = self._agent
+        local_model_manager = self._local_model_manager
         ocr_pipeline = self._ocr_pipeline
         self._agent = None
+        self._local_model_manager = None
         self._ocr_pipeline = None
         self._knowledge_tracker = None
         self._memory_deck_store = None
@@ -498,6 +509,18 @@ class StudyCompanionPlugin(
             except Exception as exc:
                 self.logger.warning(
                     "study startup cleanup agent shutdown failed: {}", exc
+                )
+        if local_model_manager is not None:
+            try:
+                shutdown = getattr(local_model_manager, "shutdown", None)
+                if callable(shutdown):
+                    result = shutdown()
+                    if hasattr(result, "__await__"):
+                        await result
+            except Exception:
+                self.logger.warning(
+                    "study startup cleanup local model manager failed: {}",
+                    "local_model_store_unavailable",
                 )
         if ocr_pipeline is not None:
             try:
@@ -542,6 +565,7 @@ class StudyCompanionPlugin(
             self.logger.warning("study shutdown dynamic entry cleanup failed: {}", exc)
         if self._agent is not None:
             await self._agent.shutdown()
+        await self._shutdown_local_model_manager()
         ocr_pipeline = self._ocr_pipeline
         self._ocr_pipeline = None
         if ocr_pipeline is not None:

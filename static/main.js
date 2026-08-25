@@ -185,6 +185,7 @@ let lastStatusPayload = {};
 let settingsConfig = null;
 let settingsCommunicationStatus = {};
 let settingsLocalModelsRuntimeStatus = {};
+let settingsLocalModelAssetsStatus = {};
 let settingsConfigLoading = false;
 let firstRunDismissed = false;
 let advancedSettingsOpen = false;
@@ -2003,6 +2004,15 @@ function syncSettingsSavingControls(saving = false) {
   syncCommunicationControls(saving);
 }
 
+const localModelsController = window.StudyLocalModels?.create({
+  callPlugin,
+  t,
+  onDirectoryUpdated: (directory) => {
+    if (!settingsConfig) return;
+    ensureConfigSection(settingsConfig, 'llm').local_models_directory = directory;
+  },
+});
+
 function renderCommunicationRuntime(status = settingsCommunicationStatus) {
   if (!settingsCommunicationRuntime) return;
   const enabled = status.configured_enabled === true;
@@ -2058,6 +2068,7 @@ function applySettingsConfig(config) {
   syncCommunicationControls();
   renderCommunicationRuntime();
   renderLocalModelsRuntime();
+  localModelsController?.apply(settingsLocalModelAssetsStatus, llm);
   if (Object.prototype.hasOwnProperty.call(llm, 'llm_vision_max_image_px')) applyVisionMaxImagePx(llm.llm_vision_max_image_px);
 }
 
@@ -2072,6 +2083,7 @@ async function loadSettingsConfig(force = false) {
     settingsLocalModelsRuntimeStatus = cloneConfig(
       payload.local_runtime || payload.model_runtime?.local || {},
     );
+    settingsLocalModelAssetsStatus = cloneConfig(payload.local_model_assets || {});
     applySettingsConfig(settingsConfig);
     renderModelRuntime(payload.model_runtime || {});
     setSettingsConfigStatus('ui.status.config_loaded', 'Settings loaded');
@@ -2099,6 +2111,7 @@ function collectSettingsConfig() {
   llm.llm_vision_enabled = settingsLlmVisionEnabled ? settingsLlmVisionEnabled.checked : false;
   llm.llm_vision_max_image_px = normalizeVisionMaxImagePx(llm.llm_vision_max_image_px);
   llm.local_models_enabled = settingsLocalModelsEnabled ? settingsLocalModelsEnabled.checked : false;
+  llm.local_models_directory = localModelsController?.directory?.() || '';
   communication.enabled = settingsCommunicationEnabled ? settingsCommunicationEnabled.checked : true;
   communication.solution_narration_enabled = settingsSolutionNarrationEnabled ? settingsSolutionNarrationEnabled.checked : true;
   communication.general_narration_enabled = settingsGeneralNarrationEnabled ? settingsGeneralNarrationEnabled.checked : true;
@@ -2122,6 +2135,12 @@ async function saveSettingsConfig(statusTarget = settingsConfigStatus) {
     settingsConfig = cloneConfig(getConfigRoot(payload) || next);
     settingsCommunicationStatus = cloneConfig(payload.communication_status || {});
     applySettingsConfig(settingsConfig);
+    try {
+      settingsLocalModelAssetsStatus = cloneConfig(await localModelsController?.refresh?.() || {});
+      localModelsController?.apply(settingsLocalModelAssetsStatus, settingsConfig.llm || {});
+    } catch (_error) {
+      // Saving configuration already succeeded. Asset diagnostics remain optional.
+    }
     setSettingsConfigStatus('ui.status.config_saved', 'Saved', statusTarget);
     window.parent.postMessage({type: 'neko-plugin-context-invalidated'}, window.location.origin);
     if (surfaceDrawer?.dataset.open === 'true' && surfaceDrawer.dataset.surfaceId === 'note-exporter') {

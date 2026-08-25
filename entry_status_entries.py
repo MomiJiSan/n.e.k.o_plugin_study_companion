@@ -29,6 +29,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
             "llm_vision_enabled": config.llm_vision_enabled,
             "llm_vision_max_image_px": config.llm_vision_max_image_px,
             "local_models_enabled": config.local_models_enabled,
+            "local_models_directory": config.local_models_directory,
         },
         "communication": config.communication.to_dict(),
         "doc_export": config.doc_export.to_dict(),
@@ -131,6 +132,8 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         next_values["local_models_enabled"] = _coerce_bool(
             llm.get("local_models_enabled"), current.local_models_enabled
         )
+    if "local_models_directory" in llm:
+        next_values["local_models_directory"] = llm.get("local_models_directory")
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
         next_communication["enabled"] = _coerce_bool(
@@ -284,8 +287,16 @@ class _StatusEntriesMixin:
         previous_runtime_enabled: bool,
         runtime_reconciled: bool,
         persist_previous_config: bool,
+        local_models_directory_changed: bool,
     ) -> None:
         self._restore_runtime_settings_config(previous_config)
+        try:
+            await self._set_local_model_manager_directory(previous_config)
+        except BaseException:
+            self.logger.warning(
+                "study local model directory rollback failed: {}",
+                "local_model_path_invalid",
+            )
         if runtime_reconciled:
             try:
                 await self._set_communication_runtime(previous_runtime_enabled)
@@ -299,7 +310,10 @@ class _StatusEntriesMixin:
             self.logger.warning("study settings dependency rollback failed: {}", exc)
         if persist_previous_config:
             try:
-                await self._persist_state()
+                if local_models_directory_changed:
+                    await self._persist_local_models_directory(previous_config)
+                else:
+                    await self._persist_state()
             except BaseException as exc:
                 self.logger.warning("study settings persistence rollback failed: {}", exc)
 
@@ -342,6 +356,7 @@ class _StatusEntriesMixin:
             "communication_status",
             "model_runtime",
             "local_runtime",
+            "local_model_assets",
         ],
     )
     async def study_get_settings_config(self, **_):
@@ -365,12 +380,14 @@ class _StatusEntriesMixin:
                 self.logger.warning(
                     "study local runtime diagnostics unavailable: {}", exc
                 )
+        local_model_assets = await self._local_model_status_payload()
         return Ok(
             {
                 "config": _settings_config_payload(self._cfg),
                 "communication_status": _communication_status_payload(self),
                 "model_runtime": model_runtime,
                 "local_runtime": local_runtime,
+                "local_model_assets": local_model_assets,
             }
         )
 
@@ -406,6 +423,10 @@ class _StatusEntriesMixin:
                     getattr(self, "_event_bus", None) is not None
                 )
                 next_config = _apply_settings_config(previous_config, raw_config)
+                local_models_directory_changed = (
+                    next_config.local_models_directory
+                    != previous_config.local_models_directory
+                )
                 config_application_attempted = False
                 try:
                     if runtime_reconciled:
@@ -414,14 +435,20 @@ class _StatusEntriesMixin:
                         )
                     config_application_attempted = True
                     self._apply_runtime_settings_config(next_config)
+                    if local_models_directory_changed:
+                        await self._set_local_model_manager_directory(next_config)
                     await self._refresh_dependency_status()
-                    await self._persist_state()
+                    if local_models_directory_changed:
+                        await self._persist_local_models_directory(next_config)
+                    else:
+                        await self._persist_state()
                 except BaseException:
                     await self._rollback_settings_update(
                         previous_config,
                         previous_runtime_enabled=previous_runtime_enabled,
                         runtime_reconciled=runtime_reconciled,
                         persist_previous_config=config_application_attempted,
+                        local_models_directory_changed=local_models_directory_changed,
                     )
                     raise
                 return Ok(
