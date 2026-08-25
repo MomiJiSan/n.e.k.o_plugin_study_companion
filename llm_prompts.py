@@ -41,6 +41,11 @@ from .prompt_templates import (
     STUDY_SUMMARIZE_SESSION_REQUIREMENTS,
     STUDY_SUMMARIZE_SESSION_SYSTEM_PROMPT,
 )
+from .targeted_question_contract import (
+    TARGET_TOPIC_IDENTITY_FIELDS,
+    TARGET_TOPIC_KNOWLEDGE_FIELDS,
+    project_target_topic_evidence,
+)
 
 _TARGETED_PROMPT_ALLOWED_FIELDS = frozenset(
     {
@@ -178,46 +183,22 @@ def _targeted_context_parts(
     safe = _prompt_context(context)
     params = dict(safe.get("knowledge_question_params") or {})
     target = dict(params.get("target_topic") or {})
-    target_core_keys = (
-        "id",
-        "name",
-        "title",
-        "subject",
-        "stage",
-        "course_family",
-        "chapter",
-        "unit",
-        "skills",
-        "typical_misconceptions",
-        "question_types",
-        "examples",
-    )
-    # Keep the actual seed evidence in the required prompt region.  The old
-    # description/definition/common_mistakes names are not seed fields, so
-    # they silently displaced the skills and misconceptions the model needs.
-    target_identity_keys = (
-        "id",
-        "name",
-        "title",
-        "subject",
-        "stage",
-        "course_family",
-        "chapter",
-        "unit",
-    )
+    projected_target = project_target_topic_evidence(target)
     target_core = {
-        key: target[key] for key in target_identity_keys if key in target
+        key: projected_target[key]
+        for key in TARGET_TOPIC_IDENTITY_FIELDS
+        if key in projected_target
     }
     target_core.update(
         _compact_prompt_value(
             {
-                key: target[key]
-                for key in target_core_keys
-                if key not in target_identity_keys and key in target
+                key: projected_target[key]
+                for key in TARGET_TOPIC_KNOWLEDGE_FIELDS
+                if key in projected_target
             },
-        list_limit=3,
-        string_limit=280,
-        dict_key_limit=12,
+            list_limit=3,
+            string_limit=280,
+            dict_key_limit=12,
         )
     )
     raw_candidate_evidence = params.get("candidate_evidence") or []

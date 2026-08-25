@@ -46,6 +46,45 @@ def test_targeted_question_contract_rejects_failure_modes(
     } <= set(invalid.errors)
 
 
+def test_target_topic_evidence_projection_is_the_single_seed_field_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_target_topic_evidence_contract_test")
+    contract = importlib.import_module(f"{package}.targeted_question_contract")
+    projected = contract.project_target_topic_evidence(
+        {
+            "id": "target",
+            "name": "Target",
+            "subject": "math",
+            "skills": ["SKILL_SENTINEL"],
+            "typical_misconceptions": ["MISCONCEPTION_SENTINEL"],
+            "question_types": ["short_answer"],
+            "examples": [{"prompt": "EXAMPLE_SENTINEL"}],
+            "description": "LEGACY_DESCRIPTION",
+            "definition": "LEGACY_DEFINITION",
+            "common_mistakes": ["LEGACY_MISTAKE"],
+            "internal_private_payload": {"answer": "PRIVATE_ANSWER"},
+            "empty": "",
+        }
+    )
+    assert tuple(projected) == (
+        "id",
+        "name",
+        "subject",
+        "skills",
+        "typical_misconceptions",
+        "question_types",
+        "examples",
+    )
+    assert not {
+        "description",
+        "definition",
+        "common_mistakes",
+        "internal_private_payload",
+        "empty",
+    } & projected.keys()
+
+
 def test_targeted_question_contract_rejects_answer_hint_and_copied_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -355,6 +394,13 @@ def test_targeted_prompt_budget_keeps_required_contract(
     assert "wrong-id" in rendered
     assert prompts.count_tokens(rendered) <= 4500
 
+    required, _optional = prompts._targeted_context_parts(context)
+    compact_examples = required["knowledge_question_params"]["target_topic"][
+        "examples"
+    ]
+    assert len(compact_examples) == 3
+    assert all("...[truncated " in example for example in compact_examples)
+
 
 def test_targeted_prompt_keeps_seed_and_candidate_evidence(
     monkeypatch: pytest.MonkeyPatch,
@@ -372,6 +418,9 @@ def test_targeted_prompt_keeps_seed_and_candidate_evidence(
                     "skills": ["SKILL_SENTINEL"],
                     "typical_misconceptions": ["MISCONCEPTION_SENTINEL"],
                     "examples": ["EXAMPLE_SENTINEL"],
+                    "description": "LEGACY_DESCRIPTION",
+                    "definition": "LEGACY_DEFINITION",
+                    "common_mistakes": ["LEGACY_MISTAKE"],
                 },
                 "candidate_evidence": [
                     {
@@ -393,6 +442,12 @@ def test_targeted_prompt_keeps_seed_and_candidate_evidence(
     ):
         assert sentinel in rendered
     assert "MUST_NOT_APPEAR" not in rendered
+    for legacy_sentinel in (
+        "LEGACY_DESCRIPTION",
+        "LEGACY_DEFINITION",
+        "LEGACY_MISTAKE",
+    ):
+        assert legacy_sentinel not in rendered
 
 
 def test_targeted_prompt_rejects_oversized_required_context(
@@ -574,7 +629,16 @@ def test_semantic_validation_uses_only_rebuilt_canonical_relations(
         {"question": "Question", "reference_answer": "Answer"},
         {
             "question_params": {
-                "target_topic": {"id": "target", "name": "Target"},
+                "target_topic": {
+                    "id": "target",
+                    "name": "Target",
+                    "skills": ["SKILL_SENTINEL"],
+                    "typical_misconceptions": ["MISCONCEPTION_SENTINEL"],
+                    "examples": [{"prompt": "EXAMPLE_SENTINEL"}],
+                    "description": "LEGACY_DESCRIPTION",
+                    "definition": "LEGACY_DEFINITION",
+                    "common_mistakes": ["LEGACY_MISTAKE"],
+                },
                 "blockers": [{"id": "client-blocker"}],
             },
             "knowledge_guidance": {
@@ -589,6 +653,57 @@ def test_semantic_validation_uses_only_rebuilt_canonical_relations(
     }
     assert "forged prerequisite" not in str(context)
     assert "client-blocker" not in str(context)
+    for sentinel in (
+        "SKILL_SENTINEL",
+        "MISCONCEPTION_SENTINEL",
+        "EXAMPLE_SENTINEL",
+    ):
+        assert sentinel in str(context["target_topic"])
+    for legacy_sentinel in (
+        "LEGACY_DESCRIPTION",
+        "LEGACY_DEFINITION",
+        "LEGACY_MISTAKE",
+    ):
+        assert legacy_sentinel not in str(context)
+
+
+def test_relationless_seed_topics_keep_semantic_validation_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_relationless_evidence_test")
+    requested_ids = {
+        "english_junior_tense_system",
+        "history_senior_chronology_spatial",
+        "geo_senior_rock_cycle",
+        "geo_senior_population_change",
+    }
+    topics: dict[str, dict[str, Any]] = {}
+    for filename in ("english.json", "history.json", "geography.json"):
+        payload = json.loads(
+            (ROOT / "static" / "knowledge_seeds" / filename).read_text(
+                encoding="utf-8"
+            )
+        )
+        topics.update(
+            {
+                str(topic.get("id")): topic
+                for topic in payload.get("topics", [])
+                if str(topic.get("id")) in requested_ids
+            }
+        )
+
+    assert topics.keys() == requested_ids
+    for topic_id, topic in topics.items():
+        context = entries._question_validation_context(
+            {"question": "Question", "reference_answer": "Answer"},
+            {"question_params": {"target_topic": topic}},
+            canonical_relations={},
+        )
+        assert context["target_topic"]["id"] == topic_id
+        assert context["target_topic"]["skills"]
+        assert context["target_topic"]["typical_misconceptions"]
+        assert context["target_topic"]["examples"]
+        assert context["necessary_relations"] == {}
 
 
 def test_semantic_validation_rebuilds_relations_from_server_topics(
