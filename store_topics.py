@@ -4,6 +4,10 @@ import hashlib
 import hmac
 
 from .knowledge_graph_edges import build_topic_edges
+from .knowledge_seed_semantics import (
+    normalize_runtime_topic_relations,
+    validate_normalized_knowledge_topics,
+)
 from .store_common import (
     Any,
     Path,
@@ -36,7 +40,7 @@ def _normalize_seed_topic(item: object, defaults: dict[str, Any]) -> dict[str, A
     stage = _seed_stage(item, str(defaults["stage"]))
     if not all((topic_id, name, subject, chapter, unit, stage)):
         raise ValueError("invalid_topic")
-    return {
+    normalized = {
         "id": topic_id,
         "name": name,
         "subject": subject,
@@ -58,6 +62,7 @@ def _normalize_seed_topic(item: object, defaults: dict[str, Any]) -> dict[str, A
         "aliases": item.get("aliases") if isinstance(item.get("aliases"), list) else [],
         "source": "seed",
     }
+    return normalize_runtime_topic_relations(normalized)
 
 
 def _read_seed_payload(path: Path) -> dict[str, Any]:
@@ -125,6 +130,10 @@ def _read_knowledge_seed_bundle(
         topics.extend(_normalize_seed_topic(item, defaults) for item in raw_topics)
     if len({topic["id"] for topic in topics}) != len(topics):
         raise ValueError("duplicate_topic_id")
+    semantic_issues = validate_normalized_knowledge_topics(topics)
+    if semantic_issues:
+        issue_codes = ",".join(sorted({issue.code for issue in semantic_issues}))
+        raise ValueError(f"invalid_topic_semantics:{issue_codes}")
     expected_total = manifest.get("total_topics")
     if isinstance(expected_total, int) and expected_total != len(topics):
         raise ValueError("invalid_manifest")

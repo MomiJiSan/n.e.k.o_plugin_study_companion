@@ -104,6 +104,28 @@ def _has_cross_subject_edge(
     return False
 
 
+@pytest.mark.parametrize(
+    "query",
+    ("帮我出一道题", "请根据这段内容生题", "给我一个练习"),
+)
+def test_generic_generation_intent_does_not_match_a_topic(
+    monkeypatch: pytest.MonkeyPatch, query: str
+) -> None:
+    support = _context_support_module(monkeypatch)
+    assert support.match_topics(_bundled_topics(), query=query, limit=3) == []
+
+
+def test_generation_intent_keeps_meaningful_topic_terms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    support = _context_support_module(monkeypatch)
+    matches = support.match_topics(
+        _bundled_topics(), query="请根据函数连续性内容出题", limit=3
+    )
+    assert matches
+    assert matches[0]["id"] == "college_continuity"
+
+
 def _context_has_cross_subject_cue(
     payload: dict[str, object],
     topic_labels: dict[str, str],

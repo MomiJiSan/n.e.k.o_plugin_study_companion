@@ -273,8 +273,54 @@ def test_state_edge_count_uses_runtime_graph_normalization(tmp_path: Path) -> No
             "SELECT topic_count, edge_count FROM knowledge_seed_state"
         ).fetchone()
         assert (state["topic_count"], state["edge_count"]) == (2, 1)
+        stored = store.get_topic("dependent")
+        assert stored is not None
+        assert stored["prerequisites"] == [
+            {"id": "base", "required_mastery": 0.55}
+        ]
     finally:
         store.close()
+
+
+def test_runtime_seed_semantics_reject_invalid_graphs_before_writes(
+    tmp_path: Path,
+) -> None:
+    missing = _topic("missing-owner")
+    missing["prerequisites"] = [
+        {"id": "does-not-exist", "required_mastery": 0.55}
+    ]
+    unknown = _topic("unknown-owner")
+    unknown_target = _topic("unknown-target")
+    unknown["related"] = [
+        {"id": "unknown-target", "relation": "invented_relation"}
+    ]
+    cycle_a = _topic("cycle-a")
+    cycle_b = _topic("cycle-b")
+    cycle_a["prerequisites"] = [{"id": "cycle-b", "required_mastery": 0.55}]
+    cycle_b["prerequisites"] = [{"id": "cycle-a", "required_mastery": 0.55}]
+    mastery = _topic("mastery-owner")
+    mastery_target = _topic("mastery-target")
+    mastery["prerequisites"] = [{"id": "mastery-target"}]
+
+    cases = (
+        ("missing", [missing]),
+        ("unknown", [unknown, unknown_target]),
+        ("cycle", [cycle_a, cycle_b]),
+        ("mastery", [mastery, mastery_target]),
+    )
+    for name, topics in cases:
+        case_root = tmp_path / name
+        case_root.mkdir()
+        manifest = _write_manifest(case_root, revision="r1", topics=topics)
+        store = _store(case_root, manifest)
+        try:
+            assert store.list_topics(None) == []
+            state_count = store._require_conn().execute(
+                "SELECT COUNT(*) AS count FROM knowledge_seed_state"
+            ).fetchone()["count"]
+            assert state_count == 0
+        finally:
+            store.close()
 
 
 def test_seed_load_preserves_a_callers_pending_transaction(tmp_path: Path) -> None:
