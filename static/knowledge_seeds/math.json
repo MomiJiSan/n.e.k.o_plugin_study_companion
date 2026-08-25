@@ -13078,6 +13078,25 @@
       ],
       "related": [
         {
+          "id": "primary_math_practice_project",
+          "relation": "supports",
+          "reason": "Collecting and organizing data or measurements supports analysis in primary math practice projects.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.9,
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "batch": "math_relation_gap_fill",
+            "scope": "phase4_project_parameter_estimation"
+          }
+        },
+        {
           "id": "mean_median_mode",
           "relation": "extends",
           "reason": "平均数中位数众数 extends 数据收集与整理 in the math learning path.",
@@ -33988,23 +34007,7 @@
             "learning_path",
             "hint_generation"
           ]
-        },
-        {
-          "id": "data_collection",
-          "reason": "Primary math practice projects require collecting and organizing data or measurements before analyzing a real task.",
-          "priority": "core",
-          "context": "diagnosis",
-          "confidence": 0.9,
-          "use_cases": [
-            "diagnosis",
-            "learning_path",
-            "hint_generation"
-          ],
-          "metadata": {
-            "batch": "math_relation_gap_fill",
-            "scope": "phase4_project_parameter_estimation"
-          }
-        , "required_mastery": 0.55}
+        }
       ],
       "related": [
         {
@@ -42905,6 +42908,26 @@
       ],
       "related": [
         {
+          "id": "physics_senior_motion_graph_synthesis",
+          "relation": "supports",
+          "reason": "The derivative definition supports interpreting instantaneous velocity, instantaneous acceleration, and tangent slope in motion graphs.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.89,
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "physics",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "导数->速度/加速度",
+            "physics_use": "用变化率解释图像切线斜率"
+          }
+        },
+        {
           "id": "college_derivative_calculation",
           "relation": "procedure_step",
           "reason": "Use 导数定义 as a procedure step when working through 一元函数求导.",
@@ -48405,6 +48428,26 @@
         }
       ],
       "related": [
+        {
+          "id": "physics_senior_work_energy_path",
+          "relation": "supports",
+          "reason": "Definite integrals support interpreting continuous accumulation in variable-force work and displacement from velocity-time graphs.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.9,
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "physics",
+            "bridge_direction": "math_to_physics",
+            "bridge_focus": "积分->位移/功",
+            "physics_use": "用面积或累积量解释位移、功和能量变化"
+          }
+        },
         {
           "id": "college_newton_leibniz",
           "relation": "procedure_step",

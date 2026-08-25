@@ -179,25 +179,7 @@
             "chapter_focus": "primary_sight_words"
           },
           "required_mastery": 0.52
-        },
-        {
-          "id": "english_junior_reading_detail",
-          "reason": "Fast recognition of high-frequency words reduces decoding load before students locate details in junior reading passages.",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.86,
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "english",
-            "target_subject": "english",
-            "validation_batch": "english_internal_bridge_2026_06_28",
-            "bridge_focus": "primary_sight_words_to_junior_reading_detail"
-          }
-        , "required_mastery": 0.55}
+        }
       ],
       "related": [
         {
@@ -765,7 +747,28 @@
       "chapter": "英语语法",
       "depth": 2,
       "difficulty": 0.46,
-      "prerequisites": [],
+      "prerequisites": [
+        {
+          "id": "english_primary_sight_words",
+          "relation": "prerequisite",
+          "reason": "Fast recognition of high-frequency words reduces decoding load before students locate details in junior reading passages.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.86,
+          "use_cases": [
+            "learning_path",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "english",
+            "target_subject": "english",
+            "validation_batch": "english_internal_bridge_2026_06_28",
+            "bridge_focus": "primary_sight_words_to_junior_reading_detail"
+          },
+          "required_mastery": 0.55
+        }
+      ],
       "related": [
         {
           "id": "english_junior_cloze_context",
