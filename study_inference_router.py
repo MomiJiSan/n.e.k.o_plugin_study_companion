@@ -7,7 +7,7 @@ local-runtime failure so callers never send a question to an API implicitly.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from .local_runtime_client import LocalRuntimeClient
 from .local_runtime_supervisor import LocalRuntimeSupervisor
@@ -18,6 +18,10 @@ from .study_model_gateway import (
     StudyModelResult,
     StudyModelRuntimeSnapshot,
 )
+
+# The local-runtime infrastructure remains in the plugin, but the user-facing
+# product is intentionally paused until a future model decision re-enables it.
+LOCAL_MODELS_PRODUCT_ENABLED: Final = False
 
 
 class StudyInferenceRouter:
@@ -51,9 +55,11 @@ class StudyInferenceRouter:
 
     @property
     def local_models_enabled(self) -> bool:
-        """Return a safe default for configurations predating this setting."""
+        """Return whether the paused local-model product is available."""
 
-        return bool(getattr(self._config, "local_models_enabled", False))
+        return LOCAL_MODELS_PRODUCT_ENABLED and bool(
+            getattr(self._config, "local_models_enabled", False)
+        )
 
     async def call(
         self,
