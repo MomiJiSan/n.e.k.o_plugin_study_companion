@@ -167,6 +167,8 @@ const settingsOcrLanguages = $id('settingsOcrLanguages');
 const settingsOcrQuestionPersistence = $id('settingsOcrQuestionPersistence');
 const settingsLlmTimeout = $id('settingsLlmTimeout');
 const settingsLlmVisionEnabled = $id('settingsLlmVisionEnabled');
+const settingsLocalModelsEnabled = $id('settingsLocalModelsEnabled');
+const settingsLocalModelsRuntime = $id('settingsLocalModelsRuntime');
 const settingsModelRefreshBtn = $id('settingsModelRefreshBtn');
 const settingsModelRuntimeCards = Array.from(document.querySelectorAll('[data-model-runtime]'));
 const settingsCommunicationEnabled = $id('settingsCommunicationEnabled');
@@ -182,6 +184,7 @@ const NEKO_COACH_SCENE_ACTIONS=Object.freeze({idle:'explain-current/quiz-me',foc
 let lastStatusPayload = {};
 let settingsConfig = null;
 let settingsCommunicationStatus = {};
+let settingsLocalModelsRuntimeStatus = {};
 let settingsConfigLoading = false;
 let firstRunDismissed = false;
 let advancedSettingsOpen = false;
@@ -1996,6 +1999,7 @@ function syncSettingsSavingControls(saving = false) {
   if (settingsSaveBtn) settingsSaveBtn.disabled = saving;
   if (settingsDataSaveBtn) settingsDataSaveBtn.disabled = saving;
   if (settingsDocExportEnabled) settingsDocExportEnabled.disabled = saving;
+  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = saving;
   syncCommunicationControls(saving);
 }
 
@@ -2010,6 +2014,23 @@ function renderCommunicationRuntime(status = settingsCommunicationStatus) {
 
 function renderModelRuntime(runtime = {}) {
   window.StudyModelRuntime.render(settingsModelRuntimeCards, runtime, t, tf);
+}
+
+function renderLocalModelsRuntime(runtime = settingsLocalModelsRuntimeStatus) {
+  if (!settingsLocalModelsRuntime) return;
+  const state = String(runtime?.state || 'stopped').trim().toLowerCase();
+  const key = state === 'ready'
+    ? 'ready'
+    : state === 'starting'
+      ? 'starting'
+      : ['unavailable', 'crashed', 'error', 'failed'].includes(state)
+        ? 'error'
+        : 'not_started';
+  settingsLocalModelsRuntime.textContent = t(
+    `ui.settings.local_models.status.${key}`,
+    ({ not_started: 'Not started', starting: 'Starting...', ready: 'Ready', error: 'Unavailable' })[key],
+  );
+  settingsLocalModelsRuntime.dataset.localRuntimeState = state || 'stopped';
 }
 
 function applySettingsConfig(config) {
@@ -2029,12 +2050,14 @@ function applySettingsConfig(config) {
   }
   if (settingsLlmTimeout) settingsLlmTimeout.value = String(Number.isFinite(Number(llm.llm_call_timeout_seconds)) ? Number(llm.llm_call_timeout_seconds) : 30);
   if (settingsLlmVisionEnabled) settingsLlmVisionEnabled.checked = llm.llm_vision_enabled === true;
+  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.checked = llm.local_models_enabled === true;
   if (settingsCommunicationEnabled) settingsCommunicationEnabled.checked = communication.enabled !== false;
   if (settingsSolutionNarrationEnabled) settingsSolutionNarrationEnabled.checked = communication.solution_narration_enabled !== false;
   if (settingsGeneralNarrationEnabled) settingsGeneralNarrationEnabled.checked = communication.general_narration_enabled !== false;
   if (settingsDocExportEnabled) settingsDocExportEnabled.checked = docExport.enabled === true;
   syncCommunicationControls();
   renderCommunicationRuntime();
+  renderLocalModelsRuntime();
   if (Object.prototype.hasOwnProperty.call(llm, 'llm_vision_max_image_px')) applyVisionMaxImagePx(llm.llm_vision_max_image_px);
 }
 
@@ -2046,6 +2069,9 @@ async function loadSettingsConfig(force = false) {
     const payload = await callPlugin('study_get_settings_config');
     settingsConfig = cloneConfig(getConfigRoot(payload));
     settingsCommunicationStatus = cloneConfig(payload.communication_status || {});
+    settingsLocalModelsRuntimeStatus = cloneConfig(
+      payload.local_runtime || payload.model_runtime?.local || {},
+    );
     applySettingsConfig(settingsConfig);
     renderModelRuntime(payload.model_runtime || {});
     setSettingsConfigStatus('ui.status.config_loaded', 'Settings loaded');
@@ -2072,6 +2098,7 @@ function collectSettingsConfig() {
   llm.llm_call_timeout_seconds = Math.max(1, Math.min(3600, Math.round(Number(settingsLlmTimeout?.value) || 30)));
   llm.llm_vision_enabled = settingsLlmVisionEnabled ? settingsLlmVisionEnabled.checked : false;
   llm.llm_vision_max_image_px = normalizeVisionMaxImagePx(llm.llm_vision_max_image_px);
+  llm.local_models_enabled = settingsLocalModelsEnabled ? settingsLocalModelsEnabled.checked : false;
   communication.enabled = settingsCommunicationEnabled ? settingsCommunicationEnabled.checked : true;
   communication.solution_narration_enabled = settingsSolutionNarrationEnabled ? settingsSolutionNarrationEnabled.checked : true;
   communication.general_narration_enabled = settingsGeneralNarrationEnabled ? settingsGeneralNarrationEnabled.checked : true;
@@ -2755,7 +2782,12 @@ async function bootstrap() {
     });
   }
   if (settingsModelRefreshBtn) {
-    settingsModelRefreshBtn.addEventListener('click', () => StudyModelRuntime.refresh(callPlugin, t, tf));
+    // Settings diagnostics are read-only: this refresh must never start the
+    // local runtime or download models.
+    settingsModelRefreshBtn.addEventListener('click', () => {
+      void StudyModelRuntime.refresh(callPlugin, t, tf);
+      void loadSettingsConfig(true);
+    });
   }
   if (settingsDataSaveBtn) {
     settingsDataSaveBtn.addEventListener('click', () => {

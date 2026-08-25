@@ -601,6 +601,16 @@
                     <span data-i18n="ui.settings.llm_vision_enabled.label">Enable image explanation</span>
                   </label>
                   <p id="settingsLlmVisionHelp" data-i18n="ui.settings.llm_vision_enabled.help">Allows pasted JPEG/PNG images to be used for explanation, question generation, and answer evaluation. Requires a vision-capable model.</p>
+                  <section class="local-models-setting" aria-labelledby="settingsLocalModelsTitle">
+                    <h4 id="settingsLocalModelsTitle" data-i18n="ui.settings.local_models.title">Local models</h4>
+                    <label class="setting-toggle">
+                      <input id="settingsLocalModelsEnabled" type="checkbox" aria-describedby="settingsLocalModelsHelp settingsLocalModelsRuntime settingsLocalModelsNotInstalled" />
+                      <span data-i18n="ui.settings.local_models.enabled.label">Use local models</span>
+                    </label>
+                    <p id="settingsLocalModelsHelp" data-i18n="ui.settings.local_models.enabled.help">When off, requests use the N.E.K.O API. When on, requests use only the local runtime and are not uploaded automatically.</p>
+                    <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="stopped" data-i18n="ui.settings.local_models.status.not_started">Not started</p>
+                    <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">No local models are installed yet. This setting does not download anything.</p>
+                  </section>
                 </article>
                 <article class="settings-card">
                   <h3 data-i18n="ui.settings.communication.title">N.E.K.O proactive communication</h3>
@@ -757,6 +767,6 @@
     <script src="./model-runtime.js?v=study-provider-gateway-20260813"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-settings-drawer-20260824"></script>
+    <script src="./main.js?v=study-local-model-settings-20260825"></script>
   </body>
 </html>

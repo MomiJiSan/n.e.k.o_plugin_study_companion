@@ -393,6 +393,9 @@ class StudyConfig:
     llm_call_timeout_seconds: float = 30.0
     llm_vision_enabled: bool = False
     llm_vision_max_image_px: int = 768
+    # Opt-in only.  When disabled, requests continue through the configured
+    # N.E.K.O model gateway; enabling this setting must never download models.
+    local_models_enabled: bool = False
     fsrs_retention_target: float = 0.90
     fsrs_auto_optimize_interval_days: int = 30
     knowledge_contribution_opt_in: bool = False
@@ -439,6 +442,7 @@ class StudyConfig:
         self.llm_vision_max_image_px = max(
             64, min(4096, self._coerce_int(self.llm_vision_max_image_px, 768))
         )
+        self.local_models_enabled = bool(self.local_models_enabled)
         self.fsrs_retention_target = self._clamp_float(
             self.fsrs_retention_target, 0.1, 0.99, 0.90
         )
@@ -873,6 +877,9 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
                 4096,
                 _int(llm, "llm_vision_max_image_px", 768, "llm_vision_max_image_px"),
             ),
+        ),
+        local_models_enabled=_bool(
+            llm, "local_models_enabled", False, "local_models_enabled"
         ),
         fsrs_retention_target=_clamp(
             _float(fsrs, "retention_target", 0.90, "fsrs_retention_target"),

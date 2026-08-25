@@ -154,4 +154,4 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in index
-    assert "./main.js?v=study-settings-drawer-20260824" in index
+    assert "./main.js?v=study-local-model-settings-20260825" in index

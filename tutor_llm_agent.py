@@ -9,6 +9,7 @@ from .qwen_native_client import (
     messages_have_image,
     new_operation_deadline,
 )
+from .study_inference_router import StudyInferenceRouter
 from .study_model_gateway import (
     AgentQuotaReservation,
     StudyModelGateway,
@@ -84,15 +85,21 @@ class TutorLLMAgent:
         self._logger = logger
         self._config = config
         self._model_gateway = StudyModelGateway(logger=logger)
+        self._inference_router = StudyInferenceRouter(
+            logger=logger,
+            config=config,
+            api_gateway=self._model_gateway,
+        )
         # Compatibility seam for focused legacy tests and private embedders.
         self._qwen_client = self._model_gateway.native_client
         self._json_corrector = _JSONCorrector(logger=logger)
 
     def update_config(self, config: StudyConfig) -> None:
         self._config = config
+        self._inference_router.update_config(config)
 
     async def shutdown(self) -> None:
-        return None
+        await self._inference_router.shutdown()
 
     async def resolve_model_runtime(
         self, model_group: str = "agent"
@@ -101,6 +108,11 @@ class TutorLLMAgent:
 
     async def describe_model_runtimes(self) -> dict[str, dict[str, object]]:
         return await self._model_gateway.describe_runtimes()
+
+    async def describe_local_runtime(self) -> dict[str, object]:
+        """Expose safe local-runtime state without causing a cold start."""
+
+        return await self._inference_router.describe_local_runtime()
 
     async def reserve_optional_agent_call(
         self, operation: str
@@ -404,7 +416,10 @@ class TutorLLMAgent:
         )
         # Preserve instance-level replacement used by older integrations without
         # making the production router depend on a Qwen-specific client.
-        if self._qwen_client is not self._model_gateway.native_client:
+        if (
+            not self._inference_router.local_models_enabled
+            and self._qwen_client is not self._model_gateway.native_client
+        ):
             return await self._qwen_client.call(
                 messages,
                 operation=operation,
@@ -418,7 +433,7 @@ class TutorLLMAgent:
         }
         if quota_reservation is not None:
             call_kwargs["quota_reservation"] = quota_reservation
-        return await self._model_gateway.call(messages, **call_kwargs)
+        return await self._inference_router.call(messages, **call_kwargs)
 
     def _new_operation_deadline(
         self, operation: str, messages: list[dict[str, Any]]
