@@ -19,6 +19,12 @@ except ImportError:  # pragma: no cover - direct script execution
 
 EDGE_RELATION_ALIASES = frozenset({"related", "similar", "compare"})
 DEFAULT_PREREQUISITE_REQUIRED_MASTERY = 0.55
+STAGE_ORDER = {
+    "primary": 0,
+    "junior_high": 1,
+    "senior_high": 2,
+    "college": 3,
+}
 
 
 @dataclass(frozen=True)
@@ -109,6 +115,11 @@ def validate_normalized_knowledge_topics(
     topic_items = [dict(topic or {}) for topic in topics]
     topic_ids = {_text(topic.get("id")) for topic in topic_items}
     topic_ids.discard("")
+    topic_stage_by_id = {
+        _text(topic.get("id")): _text(topic.get("stage"))
+        for topic in topic_items
+        if _text(topic.get("id"))
+    }
     issues: list[KnowledgeSeedSemanticIssue] = []
     seen_edges: dict[tuple[str, str, str], str] = {}
     prerequisite_edges: dict[str, set[str]] = {}
@@ -181,6 +192,30 @@ def validate_normalized_knowledge_topics(
                                     owner_id,
                                 )
                             )
+                    if relation == "prerequisite":
+                        prerequisite_rank = STAGE_ORDER.get(
+                            topic_stage_by_id.get(target_id, "")
+                        )
+                        target_rank = STAGE_ORDER.get(
+                            topic_stage_by_id.get(owner_id, "")
+                        )
+                        if (
+                            prerequisite_rank is not None
+                            and target_rank is not None
+                            and prerequisite_rank > target_rank
+                        ):
+                            issues.append(
+                                KnowledgeSeedSemanticIssue(
+                                    "reverse_stage_prerequisite",
+                                    (
+                                        "prerequisite source stage must not be higher "
+                                        f"than target stage: {target_id} "
+                                        f"({topic_stage_by_id[target_id]}) -> {owner_id} "
+                                        f"({topic_stage_by_id[owner_id]})"
+                                    ),
+                                    owner_id,
+                                )
+                            )
                 if not target_id:
                     issues.append(
                         KnowledgeSeedSemanticIssue(
@@ -245,6 +280,7 @@ __all__ = [
     "DEFAULT_PREREQUISITE_REQUIRED_MASTERY",
     "EDGE_RELATION_ALIASES",
     "KnowledgeSeedSemanticIssue",
+    "STAGE_ORDER",
     "normalize_runtime_topic_relations",
     "validate_normalized_knowledge_topics",
 ]

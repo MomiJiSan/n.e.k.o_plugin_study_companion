@@ -106,7 +106,13 @@ def _has_cross_subject_edge(
 
 @pytest.mark.parametrize(
     "query",
-    ("帮我出一道题", "请根据这段内容生题", "给我一个练习"),
+    (
+        "帮我出一道题",
+        "请根据这段内容生题",
+        "给我一个练习",
+        "来一道圆题",
+        "create a question",
+    ),
 )
 def test_generic_generation_intent_does_not_match_a_topic(
     monkeypatch: pytest.MonkeyPatch, query: str

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import sys
@@ -282,6 +283,48 @@ def test_state_edge_count_uses_runtime_graph_normalization(tmp_path: Path) -> No
         store.close()
 
 
+def test_legacy_scalar_prerequisite_keeps_pre_upgrade_manifest_hash(
+    tmp_path: Path,
+) -> None:
+    prerequisite = _topic("base")
+    dependent = _topic("dependent")
+    dependent["prerequisites"] = ["base", "base"]
+    raw_topics = [prerequisite, dependent]
+    hash_topics = [
+        topics_module._normalize_seed_topic(
+            topic, {"subject": "math", "stage": "junior_high"}
+        )
+        for topic in raw_topics
+    ]
+    hash_topics.sort(key=lambda topic: topic["id"])
+    canonical = json.dumps(
+        {"protocol": 1, "revision": "r1", "topics": hash_topics},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    legacy_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    manifest = _write_manifest(
+        tmp_path,
+        revision="r1",
+        topics=raw_topics,
+        manifest_sha256=legacy_hash,
+    )
+
+    store = _store(tmp_path, manifest)
+    try:
+        state = store._require_conn().execute(
+            "SELECT content_hash FROM knowledge_seed_state"
+        ).fetchone()
+        assert state["content_hash"] == legacy_hash
+        assert store.get_topic("dependent")["prerequisites"] == [
+            {"id": "base", "required_mastery": 0.55}
+        ]
+        assert store.load_knowledge_seed(manifest) == 2
+    finally:
+        store.close()
+
+
 def test_runtime_seed_semantics_reject_invalid_graphs_before_writes(
     tmp_path: Path,
 ) -> None:
@@ -301,12 +344,20 @@ def test_runtime_seed_semantics_reject_invalid_graphs_before_writes(
     mastery = _topic("mastery-owner")
     mastery_target = _topic("mastery-target")
     mastery["prerequisites"] = [{"id": "mastery-target"}]
+    reverse_target = _topic("reverse-target")
+    reverse_target["stage"] = "primary"
+    reverse_source = _topic("reverse-source")
+    reverse_source["stage"] = "junior_high"
+    reverse_target["prerequisites"] = [
+        {"id": "reverse-source", "required_mastery": 0.55}
+    ]
 
     cases = (
         ("missing", [missing]),
         ("unknown", [unknown, unknown_target]),
         ("cycle", [cycle_a, cycle_b]),
         ("mastery", [mastery, mastery_target]),
+        ("reverse-stage", [reverse_target, reverse_source]),
     )
     for name, topics in cases:
         case_root = tmp_path / name

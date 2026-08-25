@@ -26,10 +26,12 @@ except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
 
 try:  # Support both package imports and the standalone validation command.
     from .knowledge_seed_semantics import (
+        STAGE_ORDER,
         validate_normalized_knowledge_topics,
     )
 except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
     from knowledge_seed_semantics import (
+        STAGE_ORDER,
         validate_normalized_knowledge_topics,
     )
 
@@ -111,12 +113,6 @@ SUBJECT_MINIMUM_STANDARDS: dict[str, dict[str, tuple[str, ...]]] = {
 SUBJECT_MINIMUM_GAP_SAMPLE_LIMIT = 10
 QUALITY_ACTION_LIST_LIMIT = 12
 LEGACY_EDGE_SAMPLE_LIMIT = 20
-STAGE_ORDER = {
-    "primary": 0,
-    "junior_high": 1,
-    "senior_high": 2,
-    "college": 3,
-}
 
 
 @dataclass(frozen=True)
@@ -737,45 +733,6 @@ def _validate_references(
         )
 
 
-def _validate_prerequisite_stage_order(
-    topics: Iterable[KnowledgeSeedTopic],
-    issues: list[KnowledgeSeedIssue],
-) -> None:
-    topic_by_id = {
-        str(topic.data.get("id") or "").strip(): topic
-        for topic in topics
-        if str(topic.data.get("id") or "").strip()
-    }
-    for target_topic in topics:
-        target_id = str(target_topic.data.get("id") or "").strip()
-        target_rank = STAGE_ORDER.get(target_topic.stage)
-        refs = target_topic.data.get("prerequisites")
-        if target_rank is None or not isinstance(refs, list):
-            continue
-        for ref in refs:
-            if _edge_relation("prerequisites", ref) != "prerequisite":
-                continue
-            prerequisite_id = _ref_id(ref)
-            prerequisite_topic = topic_by_id.get(prerequisite_id)
-            if prerequisite_topic is None:
-                continue
-            prerequisite_rank = STAGE_ORDER.get(prerequisite_topic.stage)
-            if prerequisite_rank is None or prerequisite_rank <= target_rank:
-                continue
-            issues.append(
-                KnowledgeSeedIssue(
-                    "reverse_stage_prerequisite",
-                    (
-                        "prerequisite source stage must not be higher than target "
-                        f"stage: {prerequisite_id} ({prerequisite_topic.stage}) -> "
-                        f"{target_id} ({target_topic.stage})"
-                    ),
-                    str(target_topic.path),
-                    target_id,
-                )
-            )
-
-
 def _find_prerequisite_cycle_nodes(prerequisite_edges: dict[str, set[str]]) -> set[str]:
     cycle_nodes: set[str] = set()
     visiting: set[str] = set()
@@ -1377,7 +1334,6 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
             continue
         topic_ids.add(topic_id)
     _validate_references(topics, topic_ids, issues)
-    _validate_prerequisite_stage_order(topics, issues)
     _validate_taxonomy_coverage(topics, issues)
     _validate_stage_specific_context(topics, issues)
 

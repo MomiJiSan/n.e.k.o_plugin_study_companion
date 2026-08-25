@@ -82,6 +82,11 @@ GENERIC_QUERY_TERMS = {
     "\u5e2e\u6211",
     "\u7ed9\u6211",
     "\u8fd9\u6bb5",
+    "create",
+    "generate",
+    "question",
+    "practice",
+    "exercise",
 }
 SUBJECT_QUERY_HINTS = {
     "math": {
@@ -364,7 +369,10 @@ def _query_terms(query: str) -> list[str]:
 
 def _has_meaningful_plain_query_term(query: str) -> bool:
     normalized = _text(query).lower()
-    if any(len(token) >= 2 for token in re.findall(r"[a-z0-9]+", normalized)):
+    if any(
+        len(token) >= 2 and token not in GENERIC_QUERY_TERMS
+        for token in re.findall(r"[a-z0-9]+", normalized)
+    ):
         return True
     cjk = "".join(
         char if "\u4e00" <= char <= "\u9fff" else " " for char in normalized
@@ -410,9 +418,12 @@ def match_topics(
         ]
     query_text = query or topic_id
     subject_scope = _text(subject).lower()
-    if not subject_scope and not _has_meaningful_plain_query_term(query_text):
+    plain_query = not subject_scope
+    if plain_query and not _has_meaningful_plain_query_term(query_text):
         return []
     terms = _query_terms(query_text)
+    if plain_query:
+        terms = [term for term in terms if len(term) >= 2]
     subject_hints = _subject_hints(query_text)
     if not terms:
         return []
