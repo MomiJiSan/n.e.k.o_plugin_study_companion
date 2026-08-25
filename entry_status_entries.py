@@ -28,6 +28,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
             "llm_call_timeout_seconds": config.llm_call_timeout_seconds,
             "llm_vision_enabled": config.llm_vision_enabled,
             "llm_vision_max_image_px": config.llm_vision_max_image_px,
+            "local_models_enabled": config.local_models_enabled,
         },
         "communication": config.communication.to_dict(),
         "doc_export": config.doc_export.to_dict(),
@@ -125,6 +126,10 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
     if "llm_vision_max_image_px" in llm:
         next_values["llm_vision_max_image_px"] = _coerce_int(
             llm.get("llm_vision_max_image_px"), current.llm_vision_max_image_px
+        )
+    if "local_models_enabled" in llm:
+        next_values["local_models_enabled"] = _coerce_bool(
+            llm.get("local_models_enabled"), current.local_models_enabled
         )
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
@@ -332,7 +337,12 @@ class _StatusEntriesMixin:
             default="Return the running study companion settings used by the static UI.",
         ),
         input_schema={"type": "object", "properties": {}},
-        llm_result_fields=["config", "communication_status", "model_runtime"],
+        llm_result_fields=[
+            "config",
+            "communication_status",
+            "model_runtime",
+            "local_runtime",
+        ],
     )
     async def study_get_settings_config(self, **_):
         describe_model_runtimes = getattr(
@@ -346,11 +356,21 @@ class _StatusEntriesMixin:
                 self.logger.warning(
                     "study model runtime diagnostics unavailable: {}", exc
                 )
+        describe_local_runtime = getattr(self._agent, "describe_local_runtime", None)
+        local_runtime = {}
+        if callable(describe_local_runtime):
+            try:
+                local_runtime = await describe_local_runtime()
+            except Exception as exc:
+                self.logger.warning(
+                    "study local runtime diagnostics unavailable: {}", exc
+                )
         return Ok(
             {
                 "config": _settings_config_payload(self._cfg),
                 "communication_status": _communication_status_payload(self),
                 "model_runtime": model_runtime,
+                "local_runtime": local_runtime,
             }
         )
 
