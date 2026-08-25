@@ -78,7 +78,7 @@ def test_local_models_settings_payload_round_trips_without_side_effects(
     assert invalid.local_models_enabled is False
 
 
-def test_local_models_setting_ui_is_opt_in_and_has_no_download_action() -> None:
+def test_local_models_setting_ui_is_coming_soon_and_cannot_enable_local_mode() -> None:
     index_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     manifest = (ROOT / "plugin.toml").read_text(encoding="utf-8")
@@ -87,8 +87,12 @@ def test_local_models_setting_ui_is_opt_in_and_has_no_download_action() -> None:
     assert 'id="settingsLocalModelsEnabled"' in index_html
     assert 'id="settingsLocalModelsRuntime"' in index_html
     assert 'id="settingsLocalModelsNotInstalled"' in index_html
+    assert 'id="settingsLocalModelsEnabled" type="checkbox" disabled' in index_html
+    assert 'class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle" hidden' in index_html
     assert "local_models_enabled" in main
     assert "renderLocalModelsRuntime" in main
+    assert "const LOCAL_MODELS_AVAILABLE = false" in main
+    assert "llm.local_models_enabled = false" in main
     assert "/models/install" not in index_html + main
     section_start = index_html.index('<section class="local-models-setting"')
     local_models_section = index_html[

@@ -155,7 +155,7 @@ def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in index
     assert "./local-models-controller.js?v=study-local-model-assets-20260825" in index
-    assert "./main.js?v=study-local-model-assets-20260825" in index
+    assert "./main.js?v=study-local-models-coming-soon-20260825" in index
 
 
 def test_local_model_controller_normalizes_transfer_states_and_uses_canceled() -> None:

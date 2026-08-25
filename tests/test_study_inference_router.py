@@ -148,23 +148,21 @@ async def test_api_mode_keeps_gateway_path_and_never_starts_local_runtime(
 
 
 @pytest.mark.asyncio
-async def test_local_mode_never_calls_api_and_preserves_local_error(
+async def test_paused_local_mode_uses_gateway_even_for_a_legacy_enabled_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     router, gateway, local, _config = _router(
         monkeypatch, local_models_enabled=True
     )
-    local.call_error = RuntimeError("local_models_not_installed")
+    result = await router.call(
+        [{"role": "user", "content": "hello"}],
+        operation="concept_explain",
+        deadline=123.0,
+    )
 
-    with pytest.raises(RuntimeError, match="local_models_not_installed"):
-        await router.call(
-            [{"role": "user", "content": "hello"}],
-            operation="concept_explain",
-            deadline=123.0,
-        )
-
-    assert gateway.calls == []
-    assert len(local.calls) == 1
+    assert result.text == "api"
+    assert len(gateway.calls) == 1
+    assert local.calls == []
 
 
 @pytest.mark.asyncio
@@ -188,33 +186,26 @@ async def test_disabled_local_status_does_not_touch_client(
 
 
 @pytest.mark.asyncio
-async def test_enabled_local_status_is_safe_and_does_not_start_a_job(
+async def test_paused_local_status_does_not_touch_a_legacy_enabled_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     router, _gateway, local, _config = _router(
         monkeypatch, local_models_enabled=True
     )
-    local.status_payload = {
-        "state": "ready",
-        "models": ["none"],
-        "capabilities": [],
-        "active_job": None,
-    }
-
     status = await router.describe_local_runtime()
 
     assert status == {
-        "state": "ready",
-        "models": ["none"],
+        "state": "stopped",
+        "models": [],
         "capabilities": [],
         "active_job": None,
         "error_code": "",
     }
-    assert local.status_calls == 1
+    assert local.status_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_config_update_switches_route_without_recreating_client(
+async def test_config_update_cannot_reenable_the_paused_local_product(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     router, gateway, local, config = _router(
@@ -225,8 +216,8 @@ async def test_config_update_switches_route_without_recreating_client(
     await router.call([], operation="concept_explain", deadline=123.0)
 
     assert config.local_models_enabled is False
-    assert gateway.calls == []
-    assert len(local.calls) == 1
+    assert len(gateway.calls) == 1
+    assert local.calls == []
 
 
 @pytest.mark.asyncio

@@ -602,16 +602,16 @@
                   </label>
                   <p id="settingsLlmVisionHelp" data-i18n="ui.settings.llm_vision_enabled.help">Allows pasted JPEG/PNG images to be used for explanation, question generation, and answer evaluation. Requires a vision-capable model.</p>
                   <section class="local-models-setting" aria-labelledby="settingsLocalModelsTitle">
-                    <h4 id="settingsLocalModelsTitle" data-i18n="ui.settings.local_models.title">Local models</h4>
+                    <h4 id="settingsLocalModelsTitle" data-i18n="ui.settings.local_models.title">Local models (coming soon)</h4>
                     <label class="setting-toggle">
-                      <input id="settingsLocalModelsEnabled" type="checkbox" aria-describedby="settingsLocalModelsHelp settingsLocalModelsRuntime settingsLocalModelsNotInstalled" />
-                      <span data-i18n="ui.settings.local_models.enabled.label">Use local models</span>
+                      <input id="settingsLocalModelsEnabled" type="checkbox" disabled aria-describedby="settingsLocalModelsHelp settingsLocalModelsRuntime settingsLocalModelsNotInstalled" />
+                      <span data-i18n="ui.settings.local_models.enabled.label">Coming soon</span>
                     </label>
-                    <p id="settingsLocalModelsHelp" data-i18n="ui.settings.local_models.enabled.help">When off, requests use the N.E.K.O API. When on, requests use only the local runtime and are not uploaded automatically.</p>
-                    <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="stopped" data-i18n="ui.settings.local_models.status.not_started">Not started</p>
-                    <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">No local models are installed yet. This setting does not download anything.</p>
+                    <p id="settingsLocalModelsHelp" data-i18n="ui.settings.local_models.enabled.help">Local model support is under development. Requests currently use the N.E.K.O API; no local model is downloaded or started.</p>
+                    <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="coming-soon" data-i18n="ui.settings.local_models.status.not_started">Coming soon</p>
+                    <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">Local model support is not available yet.</p>
                   </section>
-                  <section class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle">
+                  <section class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle" hidden>
                     <h4 id="settingsLocalModelsAssetsTitle" data-i18n="ui.settings.local_models.assets.title">Local model files</h4>
                     <label class="setting-field">
                       <span data-i18n="ui.settings.local_models.directory.label">Model directory</span>
@@ -783,6 +783,6 @@
     <script src="./local-models-controller.js?v=study-local-model-assets-20260825"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-local-model-assets-20260825"></script>
+    <script src="./main.js?v=study-local-models-coming-soon-20260825"></script>
   </body>
 </html>

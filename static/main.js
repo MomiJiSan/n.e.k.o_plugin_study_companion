@@ -2000,18 +2000,23 @@ function syncSettingsSavingControls(saving = false) {
   if (settingsSaveBtn) settingsSaveBtn.disabled = saving;
   if (settingsDataSaveBtn) settingsDataSaveBtn.disabled = saving;
   if (settingsDocExportEnabled) settingsDocExportEnabled.disabled = saving;
-  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = saving;
+  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = true;
   syncCommunicationControls(saving);
 }
 
-const localModelsController = window.StudyLocalModels?.create({
-  callPlugin,
-  t,
-  onDirectoryUpdated: (directory) => {
-    if (!settingsConfig) return;
-    ensureConfigSection(settingsConfig, 'llm').local_models_directory = directory;
-  },
-});
+// Local model execution is intentionally frozen after the A/B infrastructure
+// stages. Keep the code path dormant until a later product decision re-enables it.
+const LOCAL_MODELS_AVAILABLE = false;
+const localModelsController = LOCAL_MODELS_AVAILABLE
+  ? window.StudyLocalModels?.create({
+    callPlugin,
+    t,
+    onDirectoryUpdated: (directory) => {
+      if (!settingsConfig) return;
+      ensureConfigSection(settingsConfig, 'llm').local_models_directory = directory;
+    },
+  })
+  : null;
 
 function renderCommunicationRuntime(status = settingsCommunicationStatus) {
   if (!settingsCommunicationRuntime) return;
@@ -2028,6 +2033,14 @@ function renderModelRuntime(runtime = {}) {
 
 function renderLocalModelsRuntime(runtime = settingsLocalModelsRuntimeStatus) {
   if (!settingsLocalModelsRuntime) return;
+  if (!LOCAL_MODELS_AVAILABLE) {
+    settingsLocalModelsRuntime.textContent = t(
+      'ui.settings.local_models.status.not_started',
+      'Coming soon',
+    );
+    settingsLocalModelsRuntime.dataset.localRuntimeState = 'coming-soon';
+    return;
+  }
   const state = String(runtime?.state || 'stopped').trim().toLowerCase();
   const key = state === 'ready'
     ? 'ready'
@@ -2060,7 +2073,7 @@ function applySettingsConfig(config) {
   }
   if (settingsLlmTimeout) settingsLlmTimeout.value = String(Number.isFinite(Number(llm.llm_call_timeout_seconds)) ? Number(llm.llm_call_timeout_seconds) : 30);
   if (settingsLlmVisionEnabled) settingsLlmVisionEnabled.checked = llm.llm_vision_enabled === true;
-  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.checked = llm.local_models_enabled === true;
+  if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.checked = false;
   if (settingsCommunicationEnabled) settingsCommunicationEnabled.checked = communication.enabled !== false;
   if (settingsSolutionNarrationEnabled) settingsSolutionNarrationEnabled.checked = communication.solution_narration_enabled !== false;
   if (settingsGeneralNarrationEnabled) settingsGeneralNarrationEnabled.checked = communication.general_narration_enabled !== false;
@@ -2110,8 +2123,10 @@ function collectSettingsConfig() {
   llm.llm_call_timeout_seconds = Math.max(1, Math.min(3600, Math.round(Number(settingsLlmTimeout?.value) || 30)));
   llm.llm_vision_enabled = settingsLlmVisionEnabled ? settingsLlmVisionEnabled.checked : false;
   llm.llm_vision_max_image_px = normalizeVisionMaxImagePx(llm.llm_vision_max_image_px);
-  llm.local_models_enabled = settingsLocalModelsEnabled ? settingsLocalModelsEnabled.checked : false;
-  llm.local_models_directory = localModelsController?.directory?.() || '';
+  llm.local_models_enabled = false;
+  llm.local_models_directory = LOCAL_MODELS_AVAILABLE
+    ? localModelsController?.directory?.() || ''
+    : String(llm.local_models_directory || '');
   communication.enabled = settingsCommunicationEnabled ? settingsCommunicationEnabled.checked : true;
   communication.solution_narration_enabled = settingsSolutionNarrationEnabled ? settingsSolutionNarrationEnabled.checked : true;
   communication.general_narration_enabled = settingsGeneralNarrationEnabled ? settingsGeneralNarrationEnabled.checked : true;
