@@ -405,13 +405,11 @@ class _TutorContextSupportMixin:
                     semantics=semantics,
                     semantic_status="available",
                 )
-            subject_topics = [
-                topic
-                for topic in topic_items
-                if str(topic.get("subject") or "").strip().lower() == semantics.subject
-            ]
             guidance = build_knowledge_guidance_payload(
-                topics=subject_topics,
+                # Match selection remains subject-scoped above.  Build the
+                # selected topic's graph from the complete server-side set so
+                # incident cross-subject edges retain both endpoints.
+                topics=topic_items,
                 topic_id=str(matches[0].get("id") or ""),
                 query=semantic_query,
                 response_mode=semantics.response_mode,
