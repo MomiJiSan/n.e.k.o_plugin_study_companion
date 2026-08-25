@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "导出结果失败：HTTP {status}",
     "ui.error.run_id_missing":  "未获取到 run_id",
     "ui.error.plugin_call_failed":  "插件调用失败",
+    "ui.error.question_operation_in_progress":  "另一项题目操作正在进行，请稍候重试。",
     "ui.error.plugin_call_timeout":  "插件调用超时",
     "ui.error.mode_switch_failed":  "模式切换失败",
     "ui.label.screen":  "屏幕",

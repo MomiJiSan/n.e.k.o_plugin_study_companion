@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 import uuid
+from functools import wraps
 
 from .entry_common import (
     LLM_OPERATION_QUESTION_GENERATE,
@@ -29,10 +31,42 @@ from .targeted_question_contract import (
     semantic_validation_passed,
     validate_targeted_question,
 )
+from .tutor_lifecycle import (
+    release_question_lifecycle,
+    reserve_question_lifecycle,
+)
 
 IMAGE_ONLY_QUESTION_PROMPT_EN = "Generate a study question from the pasted image."
 IMAGE_ONLY_QUESTION_PROMPT_ZH_CN = "请根据这张图片生成一道学习题。"
 IMAGE_ONLY_QUESTION_PROMPT_ZH_TW = "請根據這張圖片生成一道學習題。"
+
+
+def _with_question_generation_reservation(function):
+    """Reserve before any entry-path reads of ``_lock``-protected state."""
+
+    @wraps(function)
+    async def wrapped(self, *args, **kwargs):
+        active_operation = await reserve_question_lifecycle(
+            self, "question_generation"
+        )
+        if active_operation:
+            code = (
+                "QUESTION_GENERATION_IN_PROGRESS"
+                if active_operation == "question_generation"
+                else "ANSWER_EVALUATION_IN_PROGRESS"
+            )
+            return Err(
+                SdkError(
+                    "another study question operation is already in progress; retry shortly",
+                    code=code,
+                )
+            )
+        try:
+            return await function(self, *args, **kwargs)
+        finally:
+            await release_question_lifecycle(self, "question_generation")
+
+    return wrapped
 TARGETED_SELECTION_TTL_SECONDS = 10 * 60
 TARGETED_HINT_MAX_CHARS = 240
 TARGETED_GENERATION_TIMEOUT_SECONDS = 125.0
@@ -69,7 +103,18 @@ def _safe_hint(payload: dict[str, Any]) -> str:
     ]
     for value in forbidden_values:
         text = str(value or "").strip()
-        if text and (hint_lower == text.lower() or text.lower() in hint_lower):
+        normalized = text.lower()
+        if not normalized:
+            continue
+        if hint_lower == normalized:
+            return ""
+        # A one-character answer such as "A" must not match every ordinary
+        # English word containing that character.  Keep the same word-boundary
+        # semantics as the targeted-question structural validator.
+        if len(normalized) == 1 and normalized.isalnum():
+            if re.search(rf"(?<![\w]){re.escape(normalized)}(?![\w])", hint_lower):
+                return ""
+        elif normalized in hint_lower:
             return ""
     for field_name in ("key_points", "solution_steps"):
         items = [
@@ -596,7 +641,7 @@ class _TutorQuestionEntriesMixin:
         stored = self._store_targeted_context(selection)
         return stored
 
-    async def _generate_question_payload(
+    async def _generate_question_payload_impl(
         self,
         *,
         source_text: str,
@@ -841,7 +886,72 @@ class _TutorQuestionEntriesMixin:
         payload["screen_classification"] = (
             tutor_context.get("screen_classification") or {}
         )
+        if targeted_context:
+            # Usage means an accepted question was committed as the current
+            # attempt, not merely that a candidate was selected for an LLM.
+            tracker = getattr(self, "_knowledge_tracker", None)
+            record_usage = getattr(
+                tracker, "record_prompt_usage_for_question_params", None
+            )
+            if callable(record_usage):
+                await asyncio.to_thread(
+                    record_usage, targeted_context.get("question_params") or {}
+                )
         return payload
+
+    async def _generate_question_payload(
+        self,
+        *,
+        source_text: str,
+        topic: str = "",
+        source: str = "manual",
+        source_question_id: str = "",
+        vision_image_payload: str = "",
+        targeted_context: dict[str, Any] | None = None,
+        lifecycle_reserved: bool = False,
+    ) -> dict[str, Any]:
+        """Generate a question without allowing another request to replace it.
+
+        The reservation spans the whole operation, including finalization that
+        writes ``current_question``.  It deliberately does not hold ``_lock``
+        while awaiting LLM calls; callers that subsequently need question state
+        acquire the lifecycle reservation before ``_lock``.
+        """
+
+        if lifecycle_reserved:
+            return await self._generate_question_payload_impl(
+                source_text=source_text,
+                topic=topic,
+                source=source,
+                source_question_id=source_question_id,
+                vision_image_payload=vision_image_payload,
+                targeted_context=targeted_context,
+            )
+
+        active_operation = await reserve_question_lifecycle(
+            self, "question_generation"
+        )
+        if active_operation:
+            code = (
+                "QUESTION_GENERATION_IN_PROGRESS"
+                if active_operation == "question_generation"
+                else "ANSWER_EVALUATION_IN_PROGRESS"
+            )
+            raise SdkError(
+                "another study question operation is already in progress; retry shortly",
+                code=code,
+            )
+        try:
+            return await self._generate_question_payload_impl(
+                source_text=source_text,
+                topic=topic,
+                source=source,
+                source_question_id=source_question_id,
+                vision_image_payload=vision_image_payload,
+                targeted_context=targeted_context,
+            )
+        finally:
+            await release_question_lifecycle(self, "question_generation")
 
     @ui.action()
     @plugin_entry(
@@ -920,6 +1030,7 @@ class _TutorQuestionEntriesMixin:
             "selection_reason",
         ],
     )
+    @_with_question_generation_reservation
     async def study_generate_targeted_question(
         self, selection_context_id: str = "", **_
     ):
@@ -952,10 +1063,6 @@ class _TutorQuestionEntriesMixin:
                         code="NO_TARGETED_QUESTION_DATA",
                     )
                 )
-            await asyncio.to_thread(
-                self._knowledge_tracker.record_prompt_usage_for_question_params,
-                targeted_context.get("question_params") or {},
-            )
             source_text = (
                 "Generate one adaptive practice question.\n"
                 f"Target topic: {targeted_context.get('selected_topic_name') or targeted_context.get('selected_topic_id')}\n"
@@ -967,6 +1074,7 @@ class _TutorQuestionEntriesMixin:
                 topic=str(targeted_context.get("selected_topic_id") or ""),
                 source="targeted_question",
                 targeted_context=targeted_context,
+                lifecycle_reserved=True,
             )
             return Ok(payload)
         except SdkError as exc:
@@ -1002,6 +1110,7 @@ class _TutorQuestionEntriesMixin:
             "topic",
         ],
     )
+    @_with_question_generation_reservation
     async def study_generate_question(
         self,
         text: str = "",
@@ -1059,8 +1168,11 @@ class _TutorQuestionEntriesMixin:
                 ),
                 source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
+                lifecycle_reserved=True,
             )
             return Ok(payload)
+        except SdkError as exc:
+            return Err(exc)
         except Exception as exc:
             return _entry_exception_error(
                 self, exc, operation="study_generate_question"

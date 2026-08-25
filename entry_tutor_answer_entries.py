@@ -19,6 +19,10 @@ from .evaluation_contract import canonicalize_evaluation, validate_evaluation
 from .models import public_current_question_payload
 from .practice_outcome import build_practice_outcome
 from .target_binding import validated_target_topic_id
+from .tutor_lifecycle import (
+    release_question_lifecycle,
+    reserve_question_lifecycle,
+)
 
 
 class _TutorAnswerEntriesMixin:
@@ -183,6 +187,34 @@ class _TutorAnswerEntriesMixin:
         ],
     )
     async def study_evaluate_answer(
+        self, answer: str = "", question: str = "", expected_answer: str = "", **kwargs
+    ):
+        active_operation = await reserve_question_lifecycle(
+            self, "answer_evaluation"
+        )
+        if active_operation:
+            code = (
+                "QUESTION_GENERATION_IN_PROGRESS"
+                if active_operation == "question_generation"
+                else "ANSWER_EVALUATION_IN_PROGRESS"
+            )
+            return Err(
+                SdkError(
+                    "another study question operation is already in progress; retry shortly",
+                    code=code,
+                )
+            )
+        try:
+            return await self._study_evaluate_answer_impl(
+                answer=answer,
+                question=question,
+                expected_answer=expected_answer,
+                **kwargs,
+            )
+        finally:
+            await release_question_lifecycle(self, "answer_evaluation")
+
+    async def _study_evaluate_answer_impl(
         self, answer: str = "", question: str = "", expected_answer: str = "", **kwargs
     ):
         if self._agent is None:

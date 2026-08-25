@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "결과 내보내기 실패: HTTP {status}",
     "ui.error.run_id_missing":  "run_id가 없습니다",
     "ui.error.plugin_call_failed":  "플러그인 호출 실패",
+    "ui.error.question_operation_in_progress":  "다른 문제 작업이 진행 중입니다. 잠시 후 다시 시도하세요.",
     "ui.error.plugin_call_timeout":  "플러그인 호출 시간이 초과되었습니다",
     "ui.error.mode_switch_failed":  "모드 전환에 실패했습니다",
     "ui.label.screen":  "화면",

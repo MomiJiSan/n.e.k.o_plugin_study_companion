@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "Falha ao exportar resultado: HTTP {status}",
     "ui.error.run_id_missing":  "run_id ausente",
     "ui.error.plugin_call_failed":  "Falha na chamada do plugin",
+    "ui.error.question_operation_in_progress":  "Outra operação de questão já está em andamento. Aguarde um momento e tente novamente.",
     "ui.error.plugin_call_timeout":  "Tempo esgotado na chamada do plugin",
     "ui.error.mode_switch_failed":  "Falha ao trocar de modo",
     "ui.label.screen":  "Tela",

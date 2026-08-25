@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "Run export failed: HTTP {status}",
     "ui.error.run_id_missing":  "Run id missing",
     "ui.error.plugin_call_failed":  "Plugin call failed",
+    "ui.error.question_operation_in_progress":  "Another question operation is already running. Please wait a moment and retry.",
     "ui.error.plugin_call_timeout":  "Plugin call timed out",
     "ui.error.mode_switch_failed":  "Mode switch failed",
     "ui.label.screen":  "Screen",

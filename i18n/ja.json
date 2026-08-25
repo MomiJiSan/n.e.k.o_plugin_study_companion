@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "結果のエクスポートに失敗しました: HTTP {status}",
     "ui.error.run_id_missing":  "run_id が見つかりません",
     "ui.error.plugin_call_failed":  "プラグイン呼び出しに失敗しました",
+    "ui.error.question_operation_in_progress":  "別の問題操作が進行中です。しばらくしてから再試行してください。",
     "ui.error.plugin_call_timeout":  "プラグイン呼び出しがタイムアウトしました",
     "ui.error.mode_switch_failed":  "モード切り替えに失敗しました",
     "ui.label.screen":  "画面",

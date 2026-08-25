@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "匯出結果失敗：HTTP {status}",
     "ui.error.run_id_missing":  "未取得 run_id",
     "ui.error.plugin_call_failed":  "外掛呼叫失敗",
+    "ui.error.question_operation_in_progress":  "另一項題目操作正在進行，請稍候再試。",
     "ui.error.plugin_call_timeout":  "外掛呼叫逾時",
     "ui.error.mode_switch_failed":  "模式切換失敗",
     "ui.label.screen":  "螢幕",
