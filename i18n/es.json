@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "Error al exportar el resultado: HTTP {status}",
     "ui.error.run_id_missing":  "Falta run_id",
     "ui.error.plugin_call_failed":  "Falló la llamada del plugin",
+    "ui.error.question_operation_in_progress":  "Ya hay otra operación de pregunta en curso. Espera un momento y vuelve a intentarlo.",
     "ui.error.plugin_call_timeout":  "La llamada del plugin agotó el tiempo",
     "ui.error.mode_switch_failed":  "Falló el cambio de modo",
     "ui.label.screen":  "Pantalla",

@@ -117,6 +117,7 @@
     "ui.error.run_export_failed":  "Не удалось экспортировать результат: HTTP {status}",
     "ui.error.run_id_missing":  "run_id отсутствует",
     "ui.error.plugin_call_failed":  "Вызов плагина не удался",
+    "ui.error.question_operation_in_progress":  "Выполняется другая операция с вопросом. Подождите немного и повторите попытку.",
     "ui.error.plugin_call_timeout":  "Вызов плагина истек по времени",
     "ui.error.mode_switch_failed":  "Не удалось сменить режим",
     "ui.label.screen":  "Экран",

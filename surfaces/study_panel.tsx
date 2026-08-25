@@ -412,7 +412,7 @@ const ENTRY_TIMEOUT_MS: Record<string, number> = {
   study_cancel_document_analysis: 15000,
   study_generate_question: 75000,
   study_question_context: 30000,
-  study_generate_targeted_question: 60000,
+  study_generate_targeted_question: 130000,
   study_evaluate_answer: 75000,
   study_summarize_session: 90000,
 };
@@ -1201,6 +1201,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         'The answer evaluation was inconsistent. Please try evaluating again.',
       );
     }
+    if (code === 'QUESTION_GENERATION_IN_PROGRESS' || code === 'ANSWER_EVALUATION_IN_PROGRESS') {
+      return t(
+        'ui.error.question_operation_in_progress',
+        'Another question operation is already running. Please wait a moment and retry.',
+      );
+    }
     return error instanceof Error && error.message === 'plugin_call_timeout'
       ? t('ui.error.plugin_call_timeout', 'Plugin call timed out')
       : error instanceof Error && error.message === 'run_id_missing'
@@ -1215,7 +1221,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   function isRetryablePracticeError(error: unknown) {
     const candidate = error as { code?: unknown; message?: unknown } | null;
     const code = String(candidate?.code || candidate?.message || '').trim();
-    return code === 'QUESTION_VALIDATION_FAILED' || code === 'EVALUATION_INCONSISTENT';
+    return code === 'QUESTION_VALIDATION_FAILED'
+      || code === 'EVALUATION_INCONSISTENT'
+      || code === 'QUESTION_GENERATION_IN_PROGRESS'
+      || code === 'ANSWER_EVALUATION_IN_PROGRESS';
   }
 
   function practiceAttemptMessage(status: unknown) {
