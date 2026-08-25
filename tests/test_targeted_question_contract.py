@@ -71,16 +71,37 @@ def test_targeted_question_contract_rejects_answer_hint_and_copied_retry(
     )
 
 
+def test_targeted_question_contract_rejects_conflicting_answer_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_targeted_answer_contract_test")
+    contract = importlib.import_module(f"{package}.targeted_question_contract")
+    invalid = contract.validate_targeted_question(
+        {
+            "question": "What is 2 + 2?",
+            "answer": "4",
+            "reference_answer": "5",
+            "question_type": "math_exact",
+            "difficulty": 2,
+            "target_topic_id": "target",
+        },
+        target_topic_id="target",
+        target_topic_name="Target topic",
+    )
+    assert not invalid.valid
+    assert "answer_reference_answer_mismatch" in invalid.errors
+
+
 def test_targeted_question_contract_handles_single_letter_answer_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     package = _package(monkeypatch, "_targeted_short_answer_hint_test")
     contract = importlib.import_module(f"{package}.targeted_question_contract")
     base = {
-        "question": "Choose the best option.",
+        "question": "Name the applicable category.",
         "answer": "A",
         "reference_answer": "A",
-        "question_type": "multiple_choice",
+        "question_type": "short_answer",
         "difficulty": 2,
         "topic": "Target topic",
         "target_topic_id": "target",
@@ -97,6 +118,157 @@ def test_targeted_question_contract_handles_single_letter_answer_hint(
     )
     assert safe.valid
     assert "hint_leaks_answer" in leaked.errors
+
+
+def test_targeted_question_contract_rejects_multiple_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_targeted_no_multiple_choice_test")
+    contract = importlib.import_module(f"{package}.targeted_question_contract")
+    invalid = contract.validate_targeted_question(
+        {
+            "question": "Choose the best option.",
+            "answer": "A",
+            "reference_answer": "A",
+            "question_type": "multiple_choice",
+            "difficulty": 2,
+            "target_topic_id": "target",
+        },
+        target_topic_id="target",
+        target_topic_name="Target topic",
+    )
+    assert not invalid.valid
+    assert "unsupported_question_type" in invalid.errors
+
+
+def _load_question_and_evaluation_normalizers(
+    monkeypatch: pytest.MonkeyPatch, package: str
+):
+    _package(monkeypatch, package)
+    common = ModuleType(f"{package}.tutor_llm_agent_common")
+
+    class SdkError(Exception):
+        pass
+
+    common.LLM_OPERATION_QUESTION_GENERATE = "question_generate"
+    common.LLM_OPERATION_ANSWER_EVALUATE = "answer_evaluate"
+    common.MODE_COMPANION = "companion"
+    common.STUDY_FALLBACK_QUESTION_EMPTY = {}
+    common.STUDY_FALLBACK_QUESTION_TEMPLATE = {}
+    common.Any = Any
+    common.SdkError = SdkError
+    common.TutorReply = Any
+    common._ANSWER_VERDICTS = frozenset({"correct", "partial", "wrong", "dont_know"})
+    common._as_dict = lambda value: dict(value or {}) if isinstance(value, dict) else {}
+    common._as_list = lambda value: list(value or []) if isinstance(value, list) else []
+    common._as_str = lambda value, default="": str(
+        default if value is None else value
+    )
+    common._clamp_int = lambda value, minimum, maximum, default: (
+        value
+        if isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
+        else default
+    )
+    common.normalize_mode = lambda value: str(value or "companion")
+    monkeypatch.setitem(sys.modules, f"{package}.tutor_llm_agent_common", common)
+    return (
+        importlib.import_module(f"{package}.tutor_llm_agent_question_generate"),
+        importlib.import_module(f"{package}.tutor_llm_agent_answer_evaluate"),
+    )
+
+
+def test_question_normalizer_syncs_canonical_answer_and_preserves_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question_generate, _ = _load_question_and_evaluation_normalizers(
+        monkeypatch, "_canonical_question_normalizer_test"
+    )
+
+    class Owner:
+        _guess_topic = staticmethod(lambda _context: "Fallback")
+        _screen_type_from_context = staticmethod(lambda _context: "")
+
+    normalized = question_generate._normalize_question(
+        Owner(),
+        {
+            "question": "What is 2 + 2?",
+            "answer": "4",
+            "reference_answer": "5",
+            "question_type": "math_exact",
+            "difficulty": 2,
+            "target_topic_id": "target",
+        },
+        {"targeted_question": True},
+    )
+    assert normalized["answer"] == "4"
+    assert normalized["reference_answer"] == "4"
+    assert normalized["_answer_reference_answer_consistent"] is False
+
+    reference_only = question_generate._normalize_question(
+        Owner(),
+        {
+            "question": "What is 2 + 2?",
+            "reference_answer": "4",
+            "question_type": "math_exact",
+            "difficulty": 2,
+            "target_topic_id": "target",
+        },
+        {"targeted_question": True},
+    )
+    assert reference_only["answer"] == "4"
+    assert reference_only["reference_answer"] == "4"
+    assert reference_only["_answer_reference_answer_consistent"] is True
+
+
+def test_evaluation_normalizer_keeps_server_expected_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, answer_evaluate = _load_question_and_evaluation_normalizers(
+        monkeypatch, "_canonical_evaluation_normalizer_test"
+    )
+
+    class Owner:
+        _screen_type_from_context = staticmethod(lambda _context: "")
+        _verdict_from_score = staticmethod(lambda _score, *, answer: "wrong")
+        _fallback_feedback = staticmethod(lambda _verdict, _context: "")
+        _fallback_next_action = staticmethod(lambda _verdict: "")
+
+    normalized = answer_evaluate._normalize_evaluation(
+        Owner(),
+        {
+            "verdict": "correct",
+            "score": 100,
+            "feedback": "Correct.",
+            "next_action": "Continue.",
+            "reference_answer": "MODEL_REPLACEMENT",
+        },
+        {"answer": "4", "expected_answer": "SERVER_CANONICAL"},
+    )
+    assert normalized["reference_answer"] == "SERVER_CANONICAL"
+
+
+def test_question_generation_prompt_excludes_multiple_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts = _load_prompts(monkeypatch, "_targeted_question_types_prompt_test")
+    assert "multiple_choice" not in prompts.STUDY_QUESTION_GENERATE_REQUIREMENTS
+
+
+def test_public_question_payload_hides_answer_consistency_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_targeted_private_metadata_test")
+    mode_manager = ModuleType(f"{package}.mode_manager")
+    mode_manager.normalize_mode = lambda value: str(value or "companion")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, f"{package}.mode_manager", mode_manager)
+    models = importlib.import_module(f"{package}.models")
+    public = models.public_current_question_payload(
+        {
+            "question": "Question",
+            "_answer_reference_answer_consistent": False,
+        }
+    )
+    assert "_answer_reference_answer_consistent" not in public
 
 
 def _load_prompts(monkeypatch: pytest.MonkeyPatch, package: str):
@@ -182,6 +354,45 @@ def test_targeted_prompt_budget_keeps_required_contract(
     assert "blocker-id" in rendered
     assert "wrong-id" in rendered
     assert prompts.count_tokens(rendered) <= 4500
+
+
+def test_targeted_prompt_keeps_seed_and_candidate_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts = _load_prompts(monkeypatch, "_targeted_prompt_evidence_test")
+    rendered = prompts._context_json_for_prompt(
+        "question_generate",
+        {
+            "targeted_question": True,
+            "knowledge_question_params": {
+                "target_topic_id": "target-id",
+                "target_topic": {
+                    "id": "target-id",
+                    "name": "Target",
+                    "skills": ["SKILL_SENTINEL"],
+                    "typical_misconceptions": ["MISCONCEPTION_SENTINEL"],
+                    "examples": ["EXAMPLE_SENTINEL"],
+                },
+                "candidate_evidence": [
+                    {
+                        "id": "candidate-id",
+                        "item_type": "topic",
+                        "status": "trusted",
+                        "payload_summary": "CANDIDATE_SENTINEL",
+                        "private_token": "MUST_NOT_APPEAR",
+                    }
+                ],
+            },
+        },
+    )
+    for sentinel in (
+        "SKILL_SENTINEL",
+        "MISCONCEPTION_SENTINEL",
+        "EXAMPLE_SENTINEL",
+        "CANDIDATE_SENTINEL",
+    ):
+        assert sentinel in rendered
+    assert "MUST_NOT_APPEAR" not in rendered
 
 
 def test_targeted_prompt_rejects_oversized_required_context(
@@ -445,10 +656,17 @@ async def _server_binding_overrides_model_claim(
                 {"relevant": True, "answer_supported": True, "retry": False},
             )
 
+    class Tracker:
+        recorded: list[dict[str, Any]] = []
+
+        def record_prompt_usage_for_question_params(self, params: dict[str, Any]) -> None:
+            self.recorded.append(dict(params))
+
     class Subject(entries._TutorQuestionEntriesMixin):
         _lock = asyncio.Lock()
         _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
         _agent = Agent()
+        _knowledge_tracker = Tracker()
         private_payload = None
         public_payload = None
 
@@ -498,6 +716,7 @@ async def _server_binding_overrides_model_claim(
     }
     assert "target_binding" not in subject.public_payload
     assert "answer" not in subject.public_payload
+    assert subject._knowledge_tracker.recorded == [targeted["question_params"]]
 
 
 def test_server_binding_overrides_model_claim_and_stays_private(
@@ -542,10 +761,17 @@ async def _second_semantic_failure_never_finalizes_question(
                 },
             )
 
+    class Tracker:
+        recorded: list[dict[str, Any]] = []
+
+        def record_prompt_usage_for_question_params(self, params: dict[str, Any]) -> None:
+            self.recorded.append(dict(params))
+
     class Subject(entries._TutorQuestionEntriesMixin):
         _lock = asyncio.Lock()
         _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
         _agent = Agent()
+        _knowledge_tracker = Tracker()
         finalized = 0
 
         async def _build_learning_context(self, _operation, *, input_text, extra):
@@ -580,6 +806,7 @@ async def _second_semantic_failure_never_finalizes_question(
     assert subject._agent.generated == 2
     assert subject._agent.validated == 2
     assert subject.finalized == 0
+    assert subject._knowledge_tracker.recorded == []
 
 
 def test_second_semantic_failure_never_finalizes_question(
