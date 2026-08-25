@@ -157,8 +157,16 @@ def load_knowledge_seed(self, path: Path | str | None = None, _visited: set[str]
         return 0
     with self._lock:
         conn = self._require_conn()
+        nested_transaction = conn.in_transaction
+        savepoint_started = False
         try:
-            conn.execute("BEGIN IMMEDIATE")
+            if nested_transaction:
+                # Callers may deliberately batch a topic update with commit=False.
+                # Keep that transaction intact while making this seed upgrade atomic.
+                conn.execute("SAVEPOINT knowledge_seed_load")
+                savepoint_started = True
+            else:
+                conn.execute("BEGIN IMMEDIATE")
             existing = conn.execute("SELECT protocol, revision, content_hash FROM knowledge_seed_state WHERE seed_key = ?", (seed_key,)).fetchone()
             if existing is not None:
                 existing_protocol = int(existing["protocol"])
@@ -167,42 +175,47 @@ def load_knowledge_seed(self, path: Path | str | None = None, _visited: set[str]
                 if existing_protocol == protocol and existing_revision == revision:
                     if not hmac.compare_digest(existing_hash, content_hash):
                         raise ValueError("revision_hash_conflict")
-                    conn.execute("COMMIT")
-                    return len(topics)
-                if (
+                elif (
                     existing_protocol == protocol
                     and numeric_revision is not None
                     and existing_revision.isdecimal()
                     and numeric_revision < int(existing_revision)
                 ):
                     raise ValueError("revision_downgrade")
-            for topic in topics:
-                _upsert_topic_no_commit(self, topic)
-            conn.execute(
-                """UPDATE knowledge_seed_membership
-                SET active = 0, retired_at = COALESCE(retired_at, datetime('now')), updated_at = datetime('now')
-                WHERE seed_key = ? AND active = 1""",
-                (seed_key,),
-            )
-            for topic in topics:
+            if existing is None or existing_revision != revision:
+                for topic in topics:
+                    _upsert_topic_no_commit(self, topic)
                 conn.execute(
-                    """INSERT INTO knowledge_seed_membership (seed_key, topic_id, protocol, revision, content_hash, active, retired_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 1, NULL, datetime('now'))
-                    ON CONFLICT(seed_key, topic_id) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, active = 1, retired_at = NULL, updated_at = datetime('now')""",
-                    (seed_key, topic["id"], protocol, revision, _seed_topic_hash(topic)),
+                    """UPDATE knowledge_seed_membership
+                    SET active = 0, retired_at = COALESCE(retired_at, datetime('now')), updated_at = datetime('now')
+                    WHERE seed_key = ? AND active = 1""",
+                    (seed_key,),
                 )
-            edge_count = len(build_topic_edges(topics))
-            conn.execute(
-                """INSERT INTO knowledge_seed_state (seed_key, protocol, revision, content_hash, topic_count, edge_count, applied_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-                ON CONFLICT(seed_key) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, topic_count = excluded.topic_count, edge_count = excluded.edge_count, applied_at = datetime('now'), updated_at = datetime('now')""",
-                (seed_key, protocol, revision, content_hash, len(topics), edge_count),
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            if conn.in_transaction:
+                for topic in topics:
+                    conn.execute(
+                        """INSERT INTO knowledge_seed_membership (seed_key, topic_id, protocol, revision, content_hash, active, retired_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 1, NULL, datetime('now'))
+                        ON CONFLICT(seed_key, topic_id) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, active = 1, retired_at = NULL, updated_at = datetime('now')""",
+                        (seed_key, topic["id"], protocol, revision, _seed_topic_hash(topic)),
+                    )
+                edge_count = len(build_topic_edges(topics))
+                conn.execute(
+                    """INSERT INTO knowledge_seed_state (seed_key, protocol, revision, content_hash, topic_count, edge_count, applied_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    ON CONFLICT(seed_key) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, topic_count = excluded.topic_count, edge_count = excluded.edge_count, applied_at = datetime('now'), updated_at = datetime('now')""",
+                    (seed_key, protocol, revision, content_hash, len(topics), edge_count),
+                )
+            if savepoint_started:
+                conn.execute("RELEASE SAVEPOINT knowledge_seed_load")
+            else:
+                conn.execute("COMMIT")
+        except Exception as exc:
+            if savepoint_started:
+                conn.execute("ROLLBACK TO SAVEPOINT knowledge_seed_load")
+                conn.execute("RELEASE SAVEPOINT knowledge_seed_load")
+            elif not nested_transaction and conn.in_transaction:
                 conn.execute("ROLLBACK")
-            self._log_warning("study knowledge seed transaction failed")
+            self._log_warning("study knowledge seed transaction failed: %s", exc)
             return 0
     return len(topics)
 
@@ -416,6 +429,12 @@ def find_topic_by_name(self, name: str) -> dict[str, Any] | None:
 
 
 def _active_seed_membership_clause() -> str:
+    """Hide a seeded topic only after every seed that owns its ID retires it.
+
+    Membership intentionally spans seed keys: compatible seed bundles may share
+    an ID, and that topic remains available while at least one bundle is active.
+    """
+
     return """(source != 'seed'
         OR NOT EXISTS (SELECT 1 FROM knowledge_seed_membership retired WHERE retired.topic_id = topics.id)
         OR EXISTS (SELECT 1 FROM knowledge_seed_membership active WHERE active.topic_id = topics.id AND active.active = 1))"""

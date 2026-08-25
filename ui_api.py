@@ -182,6 +182,7 @@ def build_knowledge_map_payload(
     weak_items = list(weak_topics or [])
     wrong_items = list(wrong_questions or [])
     mastery_by_topic = {str(item.get("topic_id") or ""): item for item in mastery_items}
+    weak_by_topic = {str(item.get("topic_id") or ""): item for item in weak_items}
     weak_topic_ids = {str(item.get("topic_id") or "") for item in weak_items}
     topics_by_id = {
         str(topic.get("id") or "").strip(): topic
@@ -262,7 +263,9 @@ def build_knowledge_map_payload(
             chapter_counts[chapter] = chapter_counts.get(chapter, 0) + 1
             unit_key = f"{subject}:{unit}" if subject else unit
             unit_counts[unit_key] = unit_counts.get(unit_key, 0) + 1
-        mastery = mastery_by_topic.get(topic_id)
+        # Weak-topic results are assessment evidence too.  They can be absent
+        # from a caller's bounded mastery overview, so use them as a fallback.
+        mastery = mastery_by_topic.get(topic_id) or weak_by_topic.get(topic_id)
         assessed, mastery_value, mastery_status, weak = _knowledge_map_mastery_state(
             mastery,
             listed_as_weak=topic_id in weak_topic_ids,

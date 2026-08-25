@@ -71,3 +71,21 @@ def test_knowledge_map_false_mastery_is_weak_even_at_high_score(
     assert node["mastery_status"] == "weak"
     assert node["weak"] is True
     assert payload["summary"]["weak_topic_count"] == 1
+
+
+def test_knowledge_map_uses_weak_results_when_overview_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ui_api = _load_ui_api(monkeypatch)
+    payload = ui_api.build_knowledge_map_payload(
+        topics=[{"id": "omitted", "name": "仅在薄弱结果中"}],
+        mastery_overview=[],
+        weak_topics=[{"topic_id": "omitted", "mastery": 0.2, "flags": []}],
+    )
+
+    node = payload["nodes"][0]
+    assert node["assessed"] is True
+    assert node["mastery"] == 0.2
+    assert node["mastery_status"] == "weak"
+    assert node["weak"] is True
+    assert payload["summary"]["weak_topic_count"] == 1

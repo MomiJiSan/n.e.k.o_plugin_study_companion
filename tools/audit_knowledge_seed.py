@@ -10,13 +10,19 @@ import argparse
 import hashlib
 import importlib
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-DEFAULT_LIVE_PLUGIN_ROOT = Path(r"C:\Users\ALEXGREENO\Desktop\CODE\N.E.K.O\plugin\plugins\study_companion")
+LIVE_PLUGIN_ROOT_ENV = "STUDY_COMPANION_LIVE_PLUGIN_ROOT"
+
+
+def _default_live_plugin_root() -> Path | None:
+    value = os.environ.get(LIVE_PLUGIN_ROOT_ENV, "").strip()
+    return Path(value) if value else None
 
 
 def _seed_root(plugin_root: Path) -> Path:
@@ -80,7 +86,10 @@ def _runtime_edges(workspace_root: Path, topics: list[dict[str, Any]]) -> list[d
     package = ModuleType(package_name)
     package.__path__ = [str(root)]  # type: ignore[attr-defined]
     sys.modules.setdefault(package_name, package)
-    module = importlib.import_module(f"{package_name}.knowledge_graph_edges")
+    try:
+        module = importlib.import_module(f"{package_name}.knowledge_graph_edges")
+    except (ImportError, SyntaxError) as exc:
+        raise ValueError("workspace_runtime_unavailable") from exc
     if Path(module.__file__ or "").resolve() != module_file:
         raise ValueError("workspace_runtime_unavailable")
     edges = module.build_topic_edges(topics)
@@ -228,7 +237,14 @@ def audit_knowledge_seed(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Read-only knowledge seed convergence audit")
     parser.add_argument("--workspace-root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--live-plugin-root", type=Path, default=DEFAULT_LIVE_PLUGIN_ROOT)
+    default_live_plugin_root = _default_live_plugin_root()
+    parser.add_argument(
+        "--live-plugin-root",
+        type=Path,
+        default=default_live_plugin_root,
+        required=default_live_plugin_root is None,
+        help=f"live plugin root (or set {LIVE_PLUGIN_ROOT_ENV})",
+    )
     args = parser.parse_args(argv)
     try:
         report = audit_knowledge_seed(args.workspace_root, args.live_plugin_root)

@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 _audit_module = importlib.import_module("tools.audit_knowledge_seed")
 audit_knowledge_seed = _audit_module.audit_knowledge_seed
+audit_main = _audit_module.main
 verify_runtime_relation_semantics = _audit_module.verify_runtime_relation_semantics
+LIVE_PLUGIN_ROOT_ENV = _audit_module.LIVE_PLUGIN_ROOT_ENV
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_PLUGIN_ROOT = Path(r"C:\Users\ALEXGREENO\Desktop\CODE\N.E.K.O\plugin\plugins\study_companion")
 
 
 def _write_seed(root: Path, topics: list[dict[str, object]]) -> None:
@@ -82,13 +84,44 @@ def test_workspace_runtime_keeps_sensitive_relation_names_distinct() -> None:
     )
 
 
+def test_audit_cli_reports_broken_workspace_runtime_as_json(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace, live = tmp_path / "workspace", tmp_path / "live"
+    _write_seed(workspace, [{"id": "topic", "label": "Topic"}])
+    _write_seed(live, [{"id": "topic", "label": "Topic"}])
+    (workspace / "knowledge_graph_edges.py").write_text("def build_topic_edges(topics):\n    return []\n", encoding="utf-8")
+
+    def _raise_syntax_error(*_args, **_kwargs):
+        raise SyntaxError("simulated broken runtime")
+
+    monkeypatch.setattr(_audit_module.importlib, "import_module", _raise_syntax_error)
+
+    assert audit_main(["--workspace-root", str(workspace), "--live-plugin-root", str(live)]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == "workspace_runtime_unavailable"
+
+
+def test_audit_cli_requires_live_root_without_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(LIVE_PLUGIN_ROOT_ENV, raising=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        audit_main(["--workspace-root", str(ROOT)])
+
+    assert exc_info.value.code == 2
+
+
 def test_live_seed_audit_does_not_modify_live_plugin_files() -> None:
-    if not LIVE_PLUGIN_ROOT.is_dir():
-        pytest.skip("local live plugin checkout is unavailable")
-    manifest = LIVE_PLUGIN_ROOT / "static" / "knowledge_graph_seed.json"
+    configured_root = os.environ.get(LIVE_PLUGIN_ROOT_ENV, "").strip()
+    if not configured_root or not Path(configured_root).is_dir():
+        pytest.skip(f"{LIVE_PLUGIN_ROOT_ENV} does not name a local live plugin checkout")
+    manifest = Path(configured_root) / "static" / "knowledge_graph_seed.json"
     before = manifest.read_bytes()
 
-    report = audit_knowledge_seed(ROOT, LIVE_PLUGIN_ROOT)
+    report = audit_knowledge_seed(ROOT, Path(configured_root))
 
     assert manifest.read_bytes() == before
     assert report["read_only"] is True

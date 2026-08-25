@@ -20,14 +20,13 @@ shared_package = ModuleType("plugin.sdk.shared")
 shared_package.__path__ = []  # type: ignore[attr-defined]
 i18n_module = ModuleType("plugin.sdk.shared.i18n")
 i18n_module.load_plugin_i18n_from_dir = lambda *_args, **_kwargs: None  # type: ignore[attr-defined]
-sys.modules.update(
-    {
-        "plugin": plugin_package,
-        "plugin.sdk": sdk_package,
-        "plugin.sdk.shared": shared_package,
-        "plugin.sdk.shared.i18n": i18n_module,
-    }
-)
+for _name, _module in (
+    ("plugin", plugin_package),
+    ("plugin.sdk", sdk_package),
+    ("plugin.sdk.shared", shared_package),
+    ("plugin.sdk.shared.i18n", i18n_module),
+):
+    sys.modules.setdefault(_name, _module)
 
 StudyStore = importlib.import_module(f"{PACKAGE_NAME}.store").StudyStore
 topics_module = importlib.import_module(f"{PACKAGE_NAME}.store_topics")
@@ -59,6 +58,7 @@ def _write_manifest(
     *,
     revision: str,
     topics: list[dict[str, object]],
+    seed_id: str = "knowledge_seed",
     protocol: object = 1,
     content_revision: int | None = None,
     manifest_sha256: str | None = None,
@@ -67,6 +67,7 @@ def _write_manifest(
     seed.write_text(json.dumps({"topics": topics}), encoding="utf-8")
     manifest = root / "manifest.json"
     payload: dict[str, object] = {
+        "seed_id": seed_id,
         "seed_protocol_version": protocol,
         "revision": revision,
         "files": [{"path": "topics.json", "topic_count": len(topics)}],
@@ -244,10 +245,48 @@ def test_state_edge_count_uses_runtime_graph_normalization(tmp_path: Path) -> No
         store.close()
 
 
+def test_seed_load_preserves_a_callers_pending_transaction(tmp_path: Path) -> None:
+    initial = _write_manifest(tmp_path, revision="r1", topics=[_topic("seed")])
+    store = _store(tmp_path, initial)
+    try:
+        store.upsert_topic(_topic("pending"), commit=False)
+        conn = store._require_conn()
+        assert conn.in_transaction is True
+
+        upgraded = _write_manifest(tmp_path, revision="r2", topics=[_topic("upgraded")])
+        assert store.load_knowledge_seed(upgraded) == 1
+        assert conn.in_transaction is True
+        conn.commit()
+
+        assert store.get_topic("pending") is not None
+        assert store.get_topic("upgraded") is not None
+    finally:
+        store.close()
+
+
+def test_active_membership_from_another_seed_keeps_shared_topic_visible(tmp_path: Path) -> None:
+    alpha = _write_manifest(tmp_path, revision="r1", seed_id="alpha", topics=[_topic("shared")])
+    store = _store(tmp_path, alpha)
+    try:
+        beta = _write_manifest(tmp_path, revision="r1", seed_id="beta", topics=[_topic("shared")])
+        assert store.load_knowledge_seed(beta) == 1
+
+        retired_alpha = _write_manifest(tmp_path, revision="r2", seed_id="alpha", topics=[])
+        assert store.load_knowledge_seed(retired_alpha) == 0
+        assert [topic["id"] for topic in store.list_topics(limit=10)] == ["shared"]
+
+        retired_beta = _write_manifest(tmp_path, revision="r2", seed_id="beta", topics=[])
+        assert store.load_knowledge_seed(retired_beta) == 0
+        assert store.list_topics(limit=10) == []
+    finally:
+        store.close()
+
+
 def test_existing_production_manifest_remains_protocol_compatible() -> None:
+    manifest = json.loads((ROOT / "static" / "knowledge_graph_seed.json").read_text(encoding="utf-8"))
     _key, protocol, _revision, content_hash, topics, _number = topics_module._read_knowledge_seed_bundle(
         ROOT / "static" / "knowledge_graph_seed.json"
     )
     assert protocol == 1
     assert len(content_hash) == 64
-    assert len(topics) == 892
+    assert len(topics) == manifest["total_topics"]
