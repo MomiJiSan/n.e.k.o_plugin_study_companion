@@ -222,7 +222,7 @@ async def test_startup_status_failure_is_safe_and_does_not_block_asset_manager(
 
 @pytest.mark.asyncio
 async def test_install_requires_confirmation_and_directory_updates_without_download(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     module, models, package_name = _load_entry_module(monkeypatch, "_local_assets_actions")
     manager_module = ModuleType(f"{package_name}.local_model_download_manager")
@@ -241,7 +241,7 @@ async def test_install_requires_confirmation_and_directory_updates_without_downl
     assert installed["result"] == {"state": "installing"}
     assert manager.install_calls == [("math-basic", "1.0.0")]
 
-    directory = "C:/local-models-test"
+    directory = str(tmp_path / "local-models")
     updated = await owner.study_local_models_set_directory(directory)
     assert updated["config"]["local_models_directory"] == directory
     assert owner._cfg.local_models_directory == directory
