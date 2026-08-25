@@ -10,12 +10,16 @@ from typing import Any, Iterable
 try:  # Support both package imports and the standalone validation command.
     from .knowledge_graph_edges import (
         ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+    )
+    from .knowledge_graph_edges import (
         SEMANTIC_RELATIONS,
         SYMMETRIC_RELATIONS,
     )
 except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
     from knowledge_graph_edges import (
         ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+    )
+    from knowledge_graph_edges import (
         SEMANTIC_RELATIONS,
         SYMMETRIC_RELATIONS,
     )
