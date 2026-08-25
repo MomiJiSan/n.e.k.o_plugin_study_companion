@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -351,6 +352,51 @@ def _validate_topic_fields(
                     topic_id,
                 )
             )
+    if "depth" not in data:
+        issues.append(
+            KnowledgeSeedIssue(
+                "missing_required_field",
+                "topic missing required field: depth",
+                str(topic.path),
+                topic_id,
+            )
+        )
+    elif not (
+        isinstance(data["depth"], int)
+        and not isinstance(data["depth"], bool)
+        and 1 <= data["depth"] <= 4
+    ):
+        issues.append(
+            KnowledgeSeedIssue(
+                "invalid_depth",
+                "topic depth must be an integer from 1 to 4",
+                str(topic.path),
+                topic_id,
+            )
+        )
+    if "difficulty" not in data:
+        issues.append(
+            KnowledgeSeedIssue(
+                "missing_required_field",
+                "topic missing required field: difficulty",
+                str(topic.path),
+                topic_id,
+            )
+        )
+    elif not (
+        isinstance(data["difficulty"], (int, float))
+        and not isinstance(data["difficulty"], bool)
+        and math.isfinite(float(data["difficulty"]))
+        and 0.1 <= float(data["difficulty"]) <= 1.0
+    ):
+        issues.append(
+            KnowledgeSeedIssue(
+                "invalid_difficulty",
+                "topic difficulty must be a finite number from 0.1 to 1.0",
+                str(topic.path),
+                topic_id,
+            )
+        )
     for field in REQUIRED_LIST_FIELDS:
         value = data.get(field)
         if not isinstance(value, list):
@@ -774,6 +820,21 @@ def _topic_schema_ready(topic: KnowledgeSeedTopic) -> bool:
         str(data.get("unit") or "").strip(),
     ]
     if not all(scalar_values):
+        return False
+    depth = data.get("depth")
+    if not (
+        isinstance(depth, int)
+        and not isinstance(depth, bool)
+        and 1 <= depth <= 4
+    ):
+        return False
+    difficulty = data.get("difficulty")
+    if not (
+        isinstance(difficulty, (int, float))
+        and not isinstance(difficulty, bool)
+        and math.isfinite(float(difficulty))
+        and 0.1 <= float(difficulty) <= 1.0
+    ):
         return False
     for field in (*REQUIRED_LIST_FIELDS, *DEFAULTABLE_LIST_FIELDS):
         if not isinstance(data.get(field), list):

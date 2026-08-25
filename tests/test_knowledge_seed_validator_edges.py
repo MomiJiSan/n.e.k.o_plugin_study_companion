@@ -11,6 +11,8 @@ def _topic(topic_id: str, **overrides: object) -> dict[str, object]:
         "id": topic_id,
         "name": topic_id,
         "chapter": "test",
+        "depth": 1,
+        "difficulty": 0.5,
         "prerequisites": [],
         "related": [],
         "skills": [],
@@ -112,6 +114,40 @@ def test_validator_detects_canonical_prerequisite_cycles(tmp_path: Path) -> None
     )
 
     assert "prerequisite_cycle" in {issue.code for issue in result.issues}
+
+
+def test_validator_requires_sortable_depth_and_difficulty(tmp_path: Path) -> None:
+    missing_depth_topic = _topic("missing-depth")
+    missing_depth_topic.pop("depth")
+    missing_difficulty_topic = _topic("missing-difficulty")
+    missing_difficulty_topic.pop("difficulty")
+    missing_depth = _validate(tmp_path, [missing_depth_topic])
+    missing_difficulty = _validate(tmp_path, [missing_difficulty_topic])
+    invalid_depth = _validate(
+        tmp_path,
+        [_topic("invalid-depth", depth=True), _topic("fractional-depth", depth=2.5)],
+    )
+    invalid_difficulty = _validate(
+        tmp_path,
+        [
+            _topic("boolean-difficulty", difficulty=True),
+            _topic("nan-difficulty", difficulty=float("nan")),
+            _topic("out-of-range-difficulty", difficulty=1.1),
+        ],
+    )
+
+    assert "missing_required_field" in {issue.code for issue in missing_depth.issues}
+    assert "missing_required_field" in {issue.code for issue in missing_difficulty.issues}
+    assert "invalid_depth" in {issue.code for issue in invalid_depth.issues}
+    assert "invalid_difficulty" in {issue.code for issue in invalid_difficulty.issues}
+    assert missing_depth.report is not None
+    assert missing_difficulty.report is not None
+    assert invalid_depth.report is not None
+    assert invalid_difficulty.report is not None
+    assert missing_depth.report["schema_ready_topics"] == 0
+    assert missing_difficulty.report["schema_ready_topics"] == 0
+    assert invalid_depth.report["schema_ready_topics"] == 0
+    assert invalid_difficulty.report["schema_ready_topics"] == 0
 
 
 def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
