@@ -197,7 +197,7 @@
             "validation_batch": "english_internal_bridge_2026_06_28",
             "bridge_focus": "primary_sight_words_to_junior_reading_detail"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {

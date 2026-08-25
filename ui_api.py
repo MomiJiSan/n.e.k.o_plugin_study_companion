@@ -36,9 +36,14 @@ def _knowledge_map_mastery_state(
     mastery: dict[str, Any] | None,
     *,
     listed_as_weak: bool = False,
+    has_active_wrong_question: bool = False,
 ) -> tuple[bool, float | None, str, bool]:
     """Return the UI contract for one topic without conflating no evidence with 0%."""
     if not mastery:
+        if has_active_wrong_question:
+            # A retained wrong question is assessment evidence and must remain
+            # actionable even if its historical mastery snapshot was pruned.
+            return True, None, "weak", True
         return False, None, "unassessed", False
 
     try:
@@ -48,9 +53,18 @@ def _knowledge_map_mastery_state(
     value = max(0.0, min(1.0, value))
     flags = mastery.get("flags")
     false_mastery = isinstance(flags, list) and "false_mastery" in flags
-    weak = bool(listed_as_weak or value < 0.60 or false_mastery)
+    weak = bool(
+        listed_as_weak
+        or has_active_wrong_question
+        or value < 0.60
+        or false_mastery
+    )
     if false_mastery or value < 0.40:
         status = "weak"
+    elif has_active_wrong_question:
+        # Match the practice outcome contract: an unresolved retry blocks a
+        # topic from being mastered, even with a high numerical score.
+        status = "progress"
     elif value < 0.60:
         status = "progress"
     elif value < 0.80:
@@ -184,6 +198,11 @@ def build_knowledge_map_payload(
     mastery_by_topic = {str(item.get("topic_id") or ""): item for item in mastery_items}
     weak_by_topic = {str(item.get("topic_id") or ""): item for item in weak_items}
     weak_topic_ids = {str(item.get("topic_id") or "") for item in weak_items}
+    active_wrong_topic_ids = {
+        str(item.get("topic_id") or "")
+        for item in wrong_items
+        if str(item.get("status") or "").strip().lower() in {"active", "retrying"}
+    }
     topics_by_id = {
         str(topic.get("id") or "").strip(): topic
         for topic in topic_items
@@ -269,6 +288,7 @@ def build_knowledge_map_payload(
         assessed, mastery_value, mastery_status, weak = _knowledge_map_mastery_state(
             mastery,
             listed_as_weak=topic_id in weak_topic_ids,
+            has_active_wrong_question=topic_id in active_wrong_topic_ids,
         )
         if weak and in_scope:
             weak_node_count += 1

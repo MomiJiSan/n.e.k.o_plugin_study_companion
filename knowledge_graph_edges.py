@@ -10,9 +10,54 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from ._graph_utils import text, topic_id, topic_label
+try:  # Keep ``uv run python knowledge_seed_validator.py`` supported.
+    from ._graph_utils import text, topic_id, topic_label
+except ImportError:  # pragma: no cover - direct validator CLI execution
+    from _graph_utils import text, topic_id, topic_label
 
-SYMMETRIC_RELATIONS = frozenset({"confusable", "co_occurs", "nearby"})
+
+# This is the one relationship contract used by seed validation, indexing and
+# model guidance.  ``from -> to`` is directional unless the relation appears
+# in ``SYMMETRIC_RELATIONS``.
+ALLOWED_RELATIONS = frozenset(
+    {
+        "prerequisite",
+        "application",
+        "procedure_step",
+        "confusable",
+        "extends",
+        "analogy",
+        "co_occurs",
+        "supports",
+        "next",
+        "nearby",
+    }
+)
+SYMMETRIC_RELATIONS = frozenset({"analogy", "confusable", "co_occurs", "nearby"})
+SEMANTIC_RELATIONS = frozenset(
+    {
+        "application",
+        "procedure_step",
+        "confusable",
+        "co_occurs",
+        "supports",
+        "analogy",
+        "next",
+        "nearby",
+    }
+)
+
+# Which endpoint a focused topic must occupy for a directional relation.  The
+# relation names intentionally retain their seed semantics rather than being
+# collapsed into an undirected "related" link.
+FOCUSED_RELATION_DIRECTION = {
+    "prerequisite": "incoming",
+    "procedure_step": "incoming",
+    "application": "outgoing",
+    "extends": "outgoing",
+    "supports": "incoming",
+    "next": "outgoing",
+}
 
 
 def normalized_relation(relation: Any) -> str:

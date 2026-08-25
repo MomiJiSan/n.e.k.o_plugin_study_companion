@@ -4587,7 +4587,7 @@
             "added_for": "cs_math_cross_seed_links",
             "chapter_focus": "数据结构"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -5081,7 +5081,7 @@
             "target_subject": "computer_science",
             "chapter_focus": "数据结构"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -6014,7 +6014,7 @@
             "learning_path",
             "hint_generation"
           ]
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {

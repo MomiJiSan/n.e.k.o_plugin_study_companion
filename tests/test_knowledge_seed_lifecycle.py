@@ -166,6 +166,38 @@ def test_seed_revision_is_idempotent_and_retires_without_deleting_history(tmp_pa
         store.close()
 
 
+def test_topic_and_scoped_wrong_question_queries_support_unbounded_reads(
+    tmp_path: Path,
+) -> None:
+    manifest = _write_manifest(
+        tmp_path,
+        revision="r1",
+        topics=[_topic("one"), _topic("two")],
+    )
+    store = _store(tmp_path, manifest)
+    try:
+        assert {topic["id"] for topic in store.list_topics(None)} == {"one", "two"}
+        for topic_id in ("one", "two"):
+            store.add_wrong_question(
+                topic_id=topic_id,
+                question={"question": topic_id},
+                user_answer="wrong",
+                expected_answer="right",
+                error_type="concept",
+                verdict="wrong",
+            )
+
+        rows = store.list_wrong_questions(
+            limit=None,
+            topic_ids={"one", "two"},
+            statuses=("active", "retrying"),
+        )
+        assert {row["topic_id"] for row in rows} == {"one", "two"}
+        assert len(store.list_wrong_questions(limit=1)) == 1
+    finally:
+        store.close()
+
+
 def test_unsupported_protocol_rejects_before_any_database_change(tmp_path: Path) -> None:
     manifest = _write_manifest(tmp_path, revision="r1", topics=[_topic("valid")])
     store = _store(tmp_path, manifest)

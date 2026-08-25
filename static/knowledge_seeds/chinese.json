@@ -168,7 +168,7 @@
             "target_subject": "chinese",
             "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -444,7 +444,7 @@
       "chapter": "语文基础",
       "depth": 2,
       "difficulty": 0.44,
-      "prerequisites": [{"id": "chinese_primary_sentence_expansion","reason": "Observation writing needs sentence expansion so details can be written clearly instead of listed loosely.","priority": "core","context": "explanation","confidence": 0.89,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}}],
+      "prerequisites": [{"id": "chinese_primary_sentence_expansion","reason": "Observation writing needs sentence expansion so details can be written clearly instead of listed loosely.","priority": "core","context": "explanation","confidence": 0.89,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}, "required_mastery": 0.55}],
       "related": [
         {
           "id": "chinese_primary_sentence_expansion",
@@ -892,7 +892,7 @@
       "chapter": "现代文阅读",
       "depth": 2,
       "difficulty": 0.6,
-      "prerequisites": [{"id": "chinese_senior_classical_function_words","reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.","priority": "core","context": "explanation","confidence": 0.88,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}}],
+      "prerequisites": [{"id": "chinese_senior_classical_function_words","reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.","priority": "core","context": "explanation","confidence": 0.88,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}, "required_mastery": 0.55}],
       "related": [
         {
           "id": "chinese_senior_classical_translation",
@@ -6724,7 +6724,7 @@
             "target_subject": "chinese",
             "validation_batch": "chinese_ready_core_relations_2026_06_26"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {

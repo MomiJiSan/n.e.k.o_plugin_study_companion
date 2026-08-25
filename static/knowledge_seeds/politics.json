@@ -702,7 +702,7 @@
       "chapter": "高中政治",
       "depth": 2,
       "difficulty": 0.64,
-      "prerequisites": [{"id": "pol_junior_rule_law","priority": "core","context": "diagnosis","confidence": 0.84,"reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.","use_cases": ["diagnosis","learning_path","hint_generation"]}],
+      "prerequisites": [{"id": "pol_junior_rule_law","priority": "core","context": "diagnosis","confidence": 0.84,"reason": "This topic should be understood first and is used for diagnosis and learning-path guidance.","use_cases": ["diagnosis","learning_path","hint_generation"], "required_mastery": 0.55}],
       "related": [
         {
           "id": "pol_junior_rule_morality",
