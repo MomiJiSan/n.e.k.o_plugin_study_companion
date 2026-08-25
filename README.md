@@ -26,6 +26,9 @@ TXT/Markdown 文档分析、知识图谱范围练习、FSRS 记忆卡组、学�
 
 ## Development
 
+项目模块边界、主要执行链路和修改导航见
+[`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md)。
+
 This repository is meant to live at:
 
 ```text
@@ -41,7 +44,18 @@ n.e.k.o_plugin_study_companion
 From this plugin repository root:
 
 ```bash
+uv sync --group dev
+uv run python -m pytest -q
 uvx ruff==0.12.4 check --ignore-noqa --config ruff.toml .
+```
+
+Frontend DOM tests additionally require Node.js 22 and the locked test dependencies:
+
+```bash
+cd tests/frontend
+npm ci
+cd ../..
+uv run python -m pytest tests/test_workspace_frontend.py tests/test_notebook_frontend.py -q
 ```
 
 From the N.E.K.O repository root:
