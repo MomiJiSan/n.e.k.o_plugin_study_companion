@@ -28,6 +28,7 @@ from .practice_scope import (
     practice_scope_matches_topic,
 )
 from .targeted_question_contract import (
+    project_target_topic_evidence,
     semantic_validation_passed,
     validate_targeted_question,
 )
@@ -243,24 +244,7 @@ def _question_validation_context(
 ) -> dict[str, Any]:
     params = dict(targeted_context.get("question_params") or {})
     target_topic = dict(params.get("target_topic") or {})
-    target_metadata = {
-        key: target_topic.get(key)
-        for key in (
-            "id",
-            "name",
-            "title",
-            "subject",
-            "stage",
-            "course_family",
-            "chapter",
-            "unit",
-            "description",
-            "definition",
-            "question_types",
-            "common_mistakes",
-        )
-        if target_topic.get(key) not in (None, "", [], {})
-    }
+    target_metadata = project_target_topic_evidence(target_topic)
     return {
         "question": payload.get("question") or "",
         "reference_answer": payload.get("reference_answer")

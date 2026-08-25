@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,11 +9,43 @@ SUPPORTED_TARGETED_QUESTION_TYPES = frozenset(
     {"short_answer", "math_exact", "math_reasoning"}
 )
 
+TARGET_TOPIC_IDENTITY_FIELDS = (
+    "id",
+    "name",
+    "title",
+    "subject",
+    "stage",
+    "course_family",
+    "chapter",
+    "unit",
+)
+TARGET_TOPIC_KNOWLEDGE_FIELDS = (
+    "skills",
+    "typical_misconceptions",
+    "question_types",
+    "examples",
+)
+TARGET_TOPIC_EVIDENCE_FIELDS = (
+    *TARGET_TOPIC_IDENTITY_FIELDS,
+    *TARGET_TOPIC_KNOWLEDGE_FIELDS,
+)
+
 
 @dataclass(frozen=True)
 class TargetedQuestionValidation:
     valid: bool
     errors: tuple[str, ...]
+
+
+def project_target_topic_evidence(topic: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the single server-owned topic evidence contract used by LLMs."""
+
+    source = topic if isinstance(topic, Mapping) else {}
+    return {
+        key: source[key]
+        for key in TARGET_TOPIC_EVIDENCE_FIELDS
+        if key in source and source[key] not in (None, "", [], {})
+    }
 
 
 def _text(value: object) -> str:
