@@ -722,6 +722,214 @@ def _build_diagnosis_questions(
     return questions[:limit]
 
 
+def _focused_context_summary(
+    relevant_subgraph: dict[str, Any], *, diagnostics: dict[str, int]
+) -> dict[str, Any]:
+    """Return the non-relational portion of the compact model context.
+
+    ``relevant_subgraph`` remains the public, retrieval-oriented explanation of
+    a match.  The model context is deliberately stricter: it is evidence for one
+    selected topic, rather than a summary of every edge in the retrieved
+    neighbourhood.
+    """
+    summary = (
+        dict(relevant_subgraph.get("summary") or {})
+        if isinstance(relevant_subgraph, dict)
+        else {}
+    )
+    return {
+        "node_count": int(summary.get("node_count") or 0),
+        "edge_count": int(summary.get("edge_count") or 0),
+        "raw_seed_included": False,
+        "diagnostics": dict(diagnostics),
+    }
+
+
+def _build_focused_model_context(
+    *,
+    selected_id: str,
+    by_id: dict[str, dict[str, Any]],
+    incoming_edges: dict[str, list[dict[str, Any]]],
+    outgoing_edges: dict[str, list[dict[str, Any]]],
+    relevant_subgraph: dict[str, Any],
+    mode: str = "guidance",
+) -> dict[str, Any]:
+    """Build generation evidence from canonical, one-hop topic relations.
+
+    The graph UI may include a multi-hop retrieved subgraph.  Reusing its
+    relation groups here previously made edges between two neighbouring topics
+    look like direct relations of ``selected_id``.  This function intentionally
+    reads only the canonical incident-edge index and derives every label from
+    the canonical topic map.
+    """
+    selected_id = _text(selected_id)
+    diagnostics = {
+        "guidance_self_relation_dropped": 0,
+        "guidance_nonincident_edge_dropped": 0,
+        "guidance_direction_mismatch_dropped": 0,
+    }
+    focus_topic = by_id.get(selected_id) if selected_id else None
+    context: dict[str, Any] = {
+        "mode": mode,
+        "query": _text(relevant_subgraph.get("query")),
+        "focus": {
+            "id": selected_id if focus_topic else "",
+            "label": _topic_label(focus_topic, selected_id) if focus_topic else "",
+        },
+        "prerequisites": [],
+        "procedure": [],
+        "confusions": [],
+        "applications": [],
+        "extensions": [],
+        "review_with": [],
+        "practice_suggestions": [],
+        "summary": _focused_context_summary(
+            relevant_subgraph, diagnostics=diagnostics
+        ),
+    }
+    if not selected_id or focus_topic is None:
+        return context
+
+    relation_targets: dict[str, list[tuple[str, str]]] = {
+        "prerequisites": [],
+        "procedure": [],
+        "confusions": [],
+        "applications": [],
+        "extensions": [],
+        "review_with": [],
+    }
+
+    # Keep direction checks explicit rather than inferring semantics from an
+    # arbitrary subgraph edge.  Symmetric relations are allowed from either
+    # side; all other supported relations have a single canonical direction.
+    supported_relations = {
+        "prerequisite",
+        "procedure_step",
+        "application",
+        "extends",
+        "confusable",
+        "co_occurs",
+    }
+    indexed_edges = [
+        *(incoming_edges.get(selected_id) or []),
+        *(outgoing_edges.get(selected_id) or []),
+    ]
+    seen_edges: set[tuple[str, str, str]] = set()
+    for edge in indexed_edges:
+        if not isinstance(edge, dict):
+            diagnostics["guidance_nonincident_edge_dropped"] += 1
+            continue
+        source_id = _text(edge.get("from"))
+        target_id = _text(edge.get("to"))
+        relation = _normalized_relation(edge.get("relation"))
+        edge_key = (source_id, target_id, relation)
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        if relation not in supported_relations:
+            continue
+        if source_id == selected_id and target_id == selected_id:
+            diagnostics["guidance_self_relation_dropped"] += 1
+            continue
+        if selected_id not in {source_id, target_id}:
+            diagnostics["guidance_nonincident_edge_dropped"] += 1
+            continue
+        other_id = target_id if source_id == selected_id else source_id
+        if not other_id or other_id == selected_id:
+            diagnostics["guidance_self_relation_dropped"] += 1
+            continue
+        other_topic = by_id.get(other_id)
+        if other_topic is None:
+            diagnostics["guidance_nonincident_edge_dropped"] += 1
+            continue
+
+        incoming = target_id == selected_id
+        if relation == "prerequisite":
+            if not incoming:
+                diagnostics["guidance_direction_mismatch_dropped"] += 1
+                continue
+            bucket = "prerequisites"
+        elif relation == "procedure_step":
+            if not incoming:
+                diagnostics["guidance_direction_mismatch_dropped"] += 1
+                continue
+            bucket = "procedure"
+        elif relation == "application":
+            if incoming:
+                diagnostics["guidance_direction_mismatch_dropped"] += 1
+                continue
+            bucket = "applications"
+        elif relation == "extends":
+            if incoming:
+                diagnostics["guidance_direction_mismatch_dropped"] += 1
+                continue
+            bucket = "extensions"
+        elif relation == "confusable":
+            bucket = "confusions"
+        else:  # co_occurs
+            bucket = "review_with"
+        relation_targets[bucket].append(
+            (other_id, _topic_label(other_topic, other_id))
+        )
+
+    def labels(items: list[tuple[str, str]], *, limit: int | None = None) -> list[str]:
+        # Labels are what the prompt contract consumes.  Deduping them preserves
+        # that contract while the topic-id sort makes output stable across index
+        # construction order.
+        ordered = sorted(items, key=lambda item: (item[1].casefold(), item[0]))
+        values: list[str] = []
+        seen_labels: set[str] = set()
+        for _related_topic_id, label in ordered:
+            normalized_label = _text(label)
+            if not normalized_label or normalized_label in seen_labels:
+                continue
+            seen_labels.add(normalized_label)
+            values.append(normalized_label)
+            if limit is not None and len(values) >= limit:
+                break
+        return values
+
+    for key in (
+        "prerequisites",
+        "procedure",
+        "confusions",
+        "applications",
+        "extensions",
+        "review_with",
+    ):
+        context[key] = labels(relation_targets[key])
+    context["practice_suggestions"] = labels(
+        [
+            *relation_targets["procedure"],
+            *relation_targets["applications"],
+        ],
+        limit=6,
+    )
+    context["summary"]["diagnostics"] = dict(diagnostics)
+    return context
+
+
+def _canonical_necessary_relations(
+    *, topics: list[dict[str, Any]], topic_id: str
+) -> dict[str, list[str]]:
+    """Rebuild semantic-validation evidence from server-side graph records."""
+    from .knowledge_graph_index import KnowledgeGraphIndex  # lazy import avoids a cycle
+
+    graph_index = KnowledgeGraphIndex(list(topics or []))
+    focused = _build_focused_model_context(
+        selected_id=topic_id,
+        by_id=graph_index.by_id,
+        incoming_edges=graph_index.incoming_edges,
+        outgoing_edges=graph_index.outgoing_edges,
+        relevant_subgraph={},
+    )
+    return {
+        key: list(focused.get(key) or [])
+        for key in ("prerequisites", "procedure", "confusions", "applications")
+        if focused.get(key)
+    }
+
+
 def build_knowledge_guidance_payload(
     *,
     topics: list[dict[str, Any]],
@@ -736,7 +944,6 @@ def build_knowledge_guidance_payload(
         KnowledgeGraphIndex,
         SubgraphBudget,
         build_relevant_subgraph,
-        compress_subgraph_payload,
     )
     graph_index = KnowledgeGraphIndex(topic_items)
 
@@ -798,9 +1005,6 @@ def build_knowledge_guidance_payload(
         summary["node_count"] = len(relevant_subgraph["nodes"])
         summary["edge_count"] = len(edges)
         relevant_subgraph["summary"] = summary
-    model_context = compress_subgraph_payload(relevant_subgraph, mode="guidance")
-    if normalized_response_mode != "problem_solving":
-        model_context["practice_suggestions"] = []
     by_id = graph_index.by_id
     edges = graph_index.edges
     incoming = graph_index.incoming_edges
@@ -809,6 +1013,15 @@ def build_knowledge_guidance_payload(
     matches = graph_index.match(topic_id=topic_id, query=query, limit=match_limit)
     selected_id = _text(matches[0]["id"]) if matches else _text(topic_id)
     selected_topic = by_id.get(selected_id)
+    model_context = _build_focused_model_context(
+        selected_id=selected_id,
+        by_id=by_id,
+        incoming_edges=incoming,
+        outgoing_edges=outgoing,
+        relevant_subgraph=relevant_subgraph,
+    )
+    if normalized_response_mode != "problem_solving":
+        model_context["practice_suggestions"] = []
     if not selected_topic:
         relation_groups = _build_relation_groups(
             learning_path=[],
