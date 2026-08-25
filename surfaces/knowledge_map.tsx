@@ -17,6 +17,8 @@ type KnowledgeNode = {
   chapter?: string;
   unit?: string;
   mastery?: number;
+  mastery_status?: string;
+  assessed?: boolean;
   level?: string;
   weak?: boolean;
   /** Included only to explain a selected graph range; not part of that range. */
@@ -102,14 +104,34 @@ function formatText(
   return fallback.replace(/\{([^}]+)\}/g, (_, name: string) => String(values[name] ?? ''));
 }
 
+function nodeIsAssessed(node: KnowledgeNode) {
+  if (node.assessed === false) return false;
+  const status = String(node.mastery_status || '').trim().toLowerCase();
+  if (['unassessed', 'insufficient_evidence', 'new'].includes(status)) return false;
+  if (status) return true;
+  if (node.assessed === true || node.weak) return true;
+  const level = String(node.level || '').trim().toLowerCase();
+  if (['weak', 'progress', 'good', 'mastered'].includes(level)) return true;
+  if (level === 'new') return false;
+  return typeof node.mastery === 'number' && Number.isFinite(node.mastery);
+}
+
 function nodeMasteryLevel(node: KnowledgeNode) {
-  if (node.weak) {
-    return 'weak';
-  }
+  if (!nodeIsAssessed(node)) return 'new';
+  const status = String(node.mastery_status || '').trim().toLowerCase();
+  const statusLevels: Record<string, string> = {
+    mastered: 'mastered',
+    good: 'good',
+    progressing: 'progress',
+    progress: 'progress',
+    weak: 'weak',
+  };
+  if (statusLevels[status]) return statusLevels[status];
+  if (node.weak) return 'weak';
+  const level = String(node.level || '').trim().toLowerCase();
+  if (['new', 'weak', 'progress', 'good', 'mastered'].includes(level)) return level;
   const mastery = Number(node.mastery);
-  if (!Number.isFinite(mastery)) {
-    return 'new';
-  }
+  if (!Number.isFinite(mastery)) return 'new';
   if (mastery >= 0.85) {
     return 'mastered';
   }
@@ -120,6 +142,26 @@ function nodeMasteryLevel(node: KnowledgeNode) {
     return 'progress';
   }
   return 'weak';
+}
+
+function nodeMasteryText(props: PluginSurfaceProps, node: KnowledgeNode) {
+  if (!nodeIsAssessed(node)) {
+    return ` ${text(props, 'ui.knowledge.mastery.unassessed', 'Unassessed')}`;
+  }
+  const mastery = typeof node.mastery === 'number' && Number.isFinite(node.mastery)
+    ? node.mastery
+    : null;
+  return mastery === null ? '' : ` ${Math.round(mastery * 100)}%`;
+}
+
+function nodeIsWeakTopic(node: KnowledgeNode) {
+  if (!nodeIsAssessed(node)) return false;
+  const hasStatus = String(node.mastery_status || '').trim() !== '';
+  const hasAssessed = typeof node.assessed === 'boolean';
+  // `weak` is a practice-priority flag, not always the visual mastery level:
+  // a progressing 0.40–0.59 node can still be weak.
+  if (hasStatus || hasAssessed) return node.weak === true;
+  return nodeMasteryLevel(node) === 'weak';
 }
 
 function nodeLabel(node?: Partial<KnowledgeNode>) {
@@ -617,13 +659,14 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const loadingSubjectText = text(props, 'ui.knowledge.loading_subject', 'Loading {subject} knowledge map...')
     .replace('{subject}', activeSubjectLabel);
   const emptyDetailItem = text(props, 'ui.knowledge.node_detail.empty', 'Keep studying this topic to unlock more graph context.');
+  const weakTopicCount = scopedNodes.filter((node) => nodeIsWeakTopic(node)).length;
 
   return (
     <div className="study-panel surface-shell">
       <header className="study-panel__header">
         <div>
           <h1>{text(props, 'ui.surface.knowledge_map', 'Knowledge Map')}</h1>
-          <span>{summary.topic_count || inScopeNodes.length} / {summary.weak_topic_count || 0}</span>
+          <span>{summary.topic_count || inScopeNodes.length} / {weakTopicCount}</span>
         </div>
       </header>
       {error ? <pre>{error}</pre> : null}
@@ -638,7 +681,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         </div>
         <div>
           <span>{text(props, 'ui.label.weak_topics', 'Weak Topics')}</span>
-          <strong>{scopedNodes.filter((node) => nodeMasteryLevel(node) === 'weak').length} / {summary.weak_topic_count || 0}</strong>
+          <strong>{weakTopicCount}</strong>
         </div>
         <div>
           <span>{text(props, 'ui.knowledge.module_label', 'Course module')}</span>
@@ -824,8 +867,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       ) : null}
       {!isLoading ? <div className="study-panel__actions">
         {visibleNodes.slice(0, 60).map((node) => {
-          const mastery = Number(node.mastery);
-          const masteryText = Number.isFinite(mastery) ? ` ${Math.round(mastery * 100)}%` : '';
+          const masteryText = nodeMasteryText(props, node);
           const boundary = isBoundaryNode(node);
           return (
             <button

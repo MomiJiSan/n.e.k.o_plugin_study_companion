@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "Тип практики",
     "ui.knowledge.node_detail.misconceptions":  "Частые заблуждения",
     "ui.knowledge.node_detail.empty":  "Продолжайте изучать эту тему, чтобы открыть больше контекста карты.",
+    "ui.knowledge.mastery.unassessed": "Не оценено",
     "ui.knowledge.scope_empty":  "В этом диапазоне карты пока нет тем. Переключитесь на все этапы или продолжайте учиться, чтобы накопить их.",
     "ui.knowledge.boundary_prerequisite": "Предварительное знание вне диапазона",
     "ui.knowledge.boundary_prerequisites": "Предварительные знания вне диапазона",

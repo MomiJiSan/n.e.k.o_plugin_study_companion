@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+
+from .knowledge_graph_edges import build_topic_edges
 from .store_common import (
     Any,
     Path,
@@ -8,149 +12,216 @@ from .store_common import (
     safe_int,
 )
 
+_KNOWLEDGE_SEED_PROTOCOL = 1
 
-def load_knowledge_seed(
-    self, path: Path | str | None = None, _visited: set[str] | None = None
-) -> int:
-    seed_path = Path(path) if path is not None else self.knowledge_seed_json_path
-    if seed_path is None or not seed_path.is_file():
-        return 0
-    visited = _visited if _visited is not None else set()
-    try:
-        normalized_seed_path = str(seed_path.resolve())
-    except OSError:
-        normalized_seed_path = str(seed_path.absolute())
-    if normalized_seed_path in visited:
-        return 0
-    visited.add(normalized_seed_path)
-    try:
-        payload = json.loads(seed_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError) as exc:
-        self._log_warning("study knowledge seed load failed: {}", exc)
-        return 0
-    seed_files = payload.get("files") if isinstance(payload, dict) else None
-    if isinstance(seed_files, list):
-        count = 0
-        for item in seed_files:
-            if isinstance(item, dict):
-                raw_path = item.get("path") or item.get("file")
-            else:
-                raw_path = item
-            child_name = str(raw_path or "").strip()
-            if not child_name:
-                continue
-            child_path = Path(child_name)
-            if not child_path.is_absolute():
-                child_path = seed_path.parent / child_path
-            count += self.load_knowledge_seed(child_path, visited)
-        return count
-    topics = payload.get("topics") if isinstance(payload, dict) else None
-    if not isinstance(topics, list):
-        return 0
-    default_subject = str(payload.get("subject") or "math")
-    default_stage = str(
+
+def _seed_stage(payload: dict[str, Any], fallback: str = "") -> str:
+    return str(
         payload.get("stage")
         or payload.get("grade_level")
         or payload.get("education_level")
         or payload.get("course_level")
-        or ""
+        or fallback
     ).strip()
-    count = 0
+
+
+def _normalize_seed_topic(item: object, defaults: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise ValueError("invalid_topic")
+    topic_id = str(item.get("id") or "").strip()
+    name = str(item.get("name") or "").strip()
+    subject = str(item.get("subject") or defaults["subject"]).strip()
+    chapter = str(item.get("chapter") or item.get("unit") or "general").strip()
+    unit = str(item.get("unit") or item.get("section") or item.get("module") or chapter).strip()
+    stage = _seed_stage(item, str(defaults["stage"]))
+    if not all((topic_id, name, subject, chapter, unit, stage)):
+        raise ValueError("invalid_topic")
+    return {
+        "id": topic_id,
+        "name": name,
+        "subject": subject,
+        "chapter": chapter,
+        "stage": stage,
+        "unit": unit,
+        "depth": safe_int(item.get("depth"), 1),
+        "difficulty": safe_float(item.get("difficulty"), 0.5),
+        "prerequisites": item.get("prerequisites") if isinstance(item.get("prerequisites"), list) else [],
+        "related": item.get("related") if isinstance(item.get("related"), list) else [],
+        "typical_misconceptions": item.get("typical_misconceptions") if isinstance(item.get("typical_misconceptions"), list) else [],
+        "skills": item.get("skills") if isinstance(item.get("skills"), list) else [],
+        "question_types": item.get("question_types") if isinstance(item.get("question_types"), list) else [],
+        "examples": item.get("examples") if isinstance(item.get("examples"), list) else item.get("typical_examples") if isinstance(item.get("typical_examples"), list) else [],
+        "course_family": str(item.get("course_family") or "").strip(),
+        "curriculum_version": item.get("curriculum_version") if isinstance(item.get("curriculum_version"), (str, list)) else [],
+        "exam_region": item.get("exam_region") if isinstance(item.get("exam_region"), (str, list)) else [],
+        "exam_type": item.get("exam_type") if isinstance(item.get("exam_type"), (str, list)) else [],
+        "aliases": item.get("aliases") if isinstance(item.get("aliases"), list) else [],
+        "source": "seed",
+    }
+
+
+def _read_seed_payload(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("invalid_manifest")
+    return payload
+
+
+def _read_knowledge_seed_bundle(
+    seed_path: Path,
+) -> tuple[str, int, str, str, list[dict[str, Any]], int | None]:
+    manifest = _read_seed_payload(seed_path)
+    protocol = manifest.get(
+        "seed_protocol_version",
+        manifest.get("seed_protocol", manifest.get("protocol", _KNOWLEDGE_SEED_PROTOCOL)),
+    )
+    if (
+        isinstance(protocol, bool)
+        or not isinstance(protocol, int)
+        or protocol != _KNOWLEDGE_SEED_PROTOCOL
+    ):
+        raise ValueError("unsupported_protocol")
+    raw_revision = manifest.get(
+        "content_revision", manifest.get("revision", manifest.get("version", "legacy"))
+    )
+    numeric_revision = raw_revision if isinstance(raw_revision, int) and not isinstance(raw_revision, bool) else None
+    if numeric_revision is not None and numeric_revision < 0:
+        raise ValueError("invalid_revision")
+    revision = str("legacy" if raw_revision is None else raw_revision).strip()
+    if not revision or len(revision) > 128:
+        raise ValueError("invalid_revision")
+    seed_key = str(manifest.get("seed_id") or "knowledge_seed").strip()
+    if not seed_key or len(seed_key) > 128:
+        raise ValueError("invalid_seed_key")
+    root = seed_path.parent.resolve()
+    source_payloads: list[dict[str, Any]] = []
+    files = manifest.get("files")
+    if files is None:
+        source_payloads.append(manifest)
+    elif isinstance(files, list):
+        for entry in files:
+            child_name = str((entry.get("path") or entry.get("file")) if isinstance(entry, dict) else entry or "").strip()
+            if not child_name:
+                raise ValueError("invalid_manifest")
+            child = (seed_path.parent / child_name).resolve()
+            try:
+                child.relative_to(root)
+            except ValueError as exc:
+                raise ValueError("invalid_manifest") from exc
+            child_payload = _read_seed_payload(child)
+            if not isinstance(child_payload.get("topics"), list):
+                raise ValueError("invalid_topics")
+            if isinstance(entry, dict) and isinstance(entry.get("topic_count"), int) and entry["topic_count"] != len(child_payload["topics"]):
+                raise ValueError("invalid_manifest")
+            source_payloads.append(child_payload)
+    else:
+        raise ValueError("invalid_manifest")
+    topics: list[dict[str, Any]] = []
+    for payload in source_payloads:
+        raw_topics = payload.get("topics")
+        if not isinstance(raw_topics, list):
+            raise ValueError("invalid_topics")
+        defaults = {"subject": str(payload.get("subject") or manifest.get("subject") or "math").strip(), "stage": _seed_stage(payload, _seed_stage(manifest))}
+        topics.extend(_normalize_seed_topic(item, defaults) for item in raw_topics)
+    if len({topic["id"] for topic in topics}) != len(topics):
+        raise ValueError("duplicate_topic_id")
+    expected_total = manifest.get("total_topics")
+    if isinstance(expected_total, int) and expected_total != len(topics):
+        raise ValueError("invalid_manifest")
+    topics.sort(key=lambda item: item["id"])
+    canonical = json.dumps({"protocol": protocol, "revision": revision, "topics": topics}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    declared_hash = manifest.get("manifest_sha256")
+    if declared_hash is not None and (
+        not isinstance(declared_hash, str)
+        or not hmac.compare_digest(declared_hash.lower(), content_hash)
+    ):
+        raise ValueError("manifest_hash_mismatch")
+    return seed_key, protocol, revision, content_hash, topics, numeric_revision
+
+
+def _seed_topic_hash(topic: dict[str, Any]) -> str:
+    canonical = json.dumps(topic, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def load_knowledge_seed(self, path: Path | str | None = None, _visited: set[str] | None = None) -> int:
+    del _visited  # Legacy caller compatibility: lifecycle loads one full manifest atomically.
+    seed_path = Path(path) if path is not None else self.knowledge_seed_json_path
+    if seed_path is None or not seed_path.is_file():
+        return 0
+    try:
+        seed_key, protocol, revision, content_hash, topics, numeric_revision = _read_knowledge_seed_bundle(seed_path)
+    except (OSError, ValueError, TypeError, UnicodeError):
+        self._log_warning("study knowledge seed rejected: invalid or unsupported manifest")
+        return 0
     with self._lock:
-        for item in topics:
-            if not isinstance(item, dict):
-                continue
-            topic_id = str(item.get("id") or "").strip()
-            name = str(item.get("name") or "").strip()
-            subject = str(item.get("subject") or default_subject).strip()
-            chapter = str(item.get("chapter") or item.get("unit") or "general").strip()
-            unit = str(
-                item.get("unit")
-                or item.get("section")
-                or item.get("module")
-                or chapter
-            ).strip()
-            stage = str(
-                item.get("stage")
-                or item.get("grade_level")
-                or item.get("education_level")
-                or item.get("course_level")
-                or default_stage
-            ).strip()
-            missing_fields = [
-                field
-                for field, value in (
-                    ("id", topic_id),
-                    ("name", name),
-                    ("subject", subject),
-                    ("chapter", chapter),
-                    ("stage", stage),
-                    ("unit", unit),
+        conn = self._require_conn()
+        nested_transaction = conn.in_transaction
+        savepoint_started = False
+        try:
+            if nested_transaction:
+                # Callers may deliberately batch a topic update with commit=False.
+                # Keep that transaction intact while making this seed upgrade atomic.
+                conn.execute("SAVEPOINT knowledge_seed_load")
+                savepoint_started = True
+            else:
+                conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute("SELECT protocol, revision, content_hash FROM knowledge_seed_state WHERE seed_key = ?", (seed_key,)).fetchone()
+            if existing is not None:
+                existing_protocol = int(existing["protocol"])
+                existing_revision = str(existing["revision"])
+                existing_hash = str(existing["content_hash"])
+                if existing_protocol == protocol and existing_revision == revision:
+                    if not hmac.compare_digest(existing_hash, content_hash):
+                        raise ValueError("revision_hash_conflict")
+                elif (
+                    existing_protocol == protocol
+                    and numeric_revision is not None
+                    and existing_revision.isdecimal()
+                    and numeric_revision < int(existing_revision)
+                ):
+                    raise ValueError("revision_downgrade")
+            if existing is None or existing_revision != revision:
+                for topic in topics:
+                    _upsert_topic_no_commit(self, topic)
+                conn.execute(
+                    """UPDATE knowledge_seed_membership
+                    SET active = 0, retired_at = COALESCE(retired_at, datetime('now')), updated_at = datetime('now')
+                    WHERE seed_key = ? AND active = 1""",
+                    (seed_key,),
                 )
-                if not value
-            ]
-            if missing_fields:
-                self._log_warning(
-                    "study knowledge seed skipped incomplete topic: id={} missing={}",
-                    topic_id or "<missing>",
-                    ",".join(missing_fields),
+                for topic in topics:
+                    conn.execute(
+                        """INSERT INTO knowledge_seed_membership (seed_key, topic_id, protocol, revision, content_hash, active, retired_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 1, NULL, datetime('now'))
+                        ON CONFLICT(seed_key, topic_id) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, active = 1, retired_at = NULL, updated_at = datetime('now')""",
+                        (seed_key, topic["id"], protocol, revision, _seed_topic_hash(topic)),
+                    )
+                edge_count = len(build_topic_edges(topics))
+                conn.execute(
+                    """INSERT INTO knowledge_seed_state (seed_key, protocol, revision, content_hash, topic_count, edge_count, applied_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    ON CONFLICT(seed_key) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, topic_count = excluded.topic_count, edge_count = excluded.edge_count, applied_at = datetime('now'), updated_at = datetime('now')""",
+                    (seed_key, protocol, revision, content_hash, len(topics), edge_count),
                 )
-                continue
-            self.upsert_topic(
-                {
-                    "id": topic_id,
-                    "name": name,
-                    "subject": subject,
-                    "chapter": chapter,
-                    "stage": stage,
-                    "unit": unit,
-                    "depth": safe_int(item.get("depth"), 1),
-                    "difficulty": safe_float(item.get("difficulty"), 0.5),
-                    "prerequisites": item.get("prerequisites")
-                    if isinstance(item.get("prerequisites"), list)
-                    else [],
-                    "related": item.get("related")
-                    if isinstance(item.get("related"), list)
-                    else [],
-                    "typical_misconceptions": item.get("typical_misconceptions")
-                    if isinstance(item.get("typical_misconceptions"), list)
-                    else [],
-                    "skills": item.get("skills")
-                    if isinstance(item.get("skills"), list)
-                    else [],
-                    "question_types": item.get("question_types")
-                    if isinstance(item.get("question_types"), list)
-                    else [],
-                    "examples": (
-                        item.get("examples")
-                        if isinstance(item.get("examples"), list)
-                        else item.get("typical_examples")
-                        if isinstance(item.get("typical_examples"), list)
-                        else []
-                    ),
-                    "course_family": str(item.get("course_family") or "").strip(),
-                    "curriculum_version": item.get("curriculum_version")
-                    if isinstance(item.get("curriculum_version"), (str, list))
-                    else [],
-                    "exam_region": item.get("exam_region")
-                    if isinstance(item.get("exam_region"), (str, list))
-                    else [],
-                    "exam_type": item.get("exam_type")
-                    if isinstance(item.get("exam_type"), (str, list))
-                    else [],
-                    "aliases": item.get("aliases")
-                    if isinstance(item.get("aliases"), list)
-                    else [],
-                    "source": "seed",
-                },
-                commit=False,
-            )
-            count += 1
-        self._require_conn().commit()
-    return count
+            if savepoint_started:
+                conn.execute("RELEASE SAVEPOINT knowledge_seed_load")
+            else:
+                conn.execute("COMMIT")
+        except Exception as exc:
+            if savepoint_started:
+                conn.execute("ROLLBACK TO SAVEPOINT knowledge_seed_load")
+                conn.execute("RELEASE SAVEPOINT knowledge_seed_load")
+            elif not nested_transaction and conn.in_transaction:
+                conn.execute("ROLLBACK")
+            self._log_warning("study knowledge seed transaction failed: %s", exc)
+            return 0
+    return len(topics)
 
 
-def upsert_topic(self, topic: dict[str, Any], *, commit: bool = True) -> None:
+def _upsert_topic_no_commit(self, topic: dict[str, Any]) -> None:
+    """Shared SQL upsert used by explicit commits and seed transactions."""
     topic_id = str(topic.get("id") or "").strip()
     name = str(topic.get("name") or topic_id).strip()
     if not topic_id or not name:
@@ -290,6 +361,13 @@ def upsert_topic(self, topic: dict[str, Any], *, commit: bool = True) -> None:
                 str(topic.get("source") or "runtime"),
             ),
         )
+
+
+def upsert_topic(self, topic: dict[str, Any], *, commit: bool = True) -> None:
+    """Public topic upsert preserving the existing optional commit behavior."""
+
+    with self._lock:
+        _upsert_topic_no_commit(self, topic)
         if commit:
             self._require_conn().commit()
 
@@ -350,6 +428,18 @@ def find_topic_by_name(self, name: str) -> dict[str, Any] | None:
     return self._topic_from_row(row)
 
 
+def _active_seed_membership_clause() -> str:
+    """Hide a seeded topic only after every seed that owns its ID retires it.
+
+    Membership intentionally spans seed keys: compatible seed bundles may share
+    an ID, and that topic remains available while at least one bundle is active.
+    """
+
+    return """(source != 'seed'
+        OR NOT EXISTS (SELECT 1 FROM knowledge_seed_membership retired WHERE retired.topic_id = topics.id)
+        OR EXISTS (SELECT 1 FROM knowledge_seed_membership active WHERE active.topic_id = topics.id AND active.active = 1))"""
+
+
 def list_topics(
     self,
     limit: int = 100,
@@ -381,6 +471,7 @@ def list_topics(
         else:
             clauses.append(f"{column} = ?")
             params.append(value)
+    clauses.append(_active_seed_membership_clause())
     where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     params.append(max(1, int(limit)))
     rows = (
@@ -402,7 +493,7 @@ def list_topics(
 def count_topics(self) -> int:
     row = (
         self._require_read_conn()
-        .execute("SELECT COUNT(*) AS count FROM topics")
+        .execute(f"SELECT COUNT(*) AS count FROM topics WHERE {_active_seed_membership_clause()}")
         .fetchone()
     )
     return int(row["count"] if row is not None else 0)

@@ -11,7 +11,12 @@ from .store_common import (
 )
 
 _SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_COLUMN_DEFINITION_ALLOWLIST = {"TEXT", "TEXT NOT NULL DEFAULT ''", "TEXT NOT NULL DEFAULT '[]'"}
+_COLUMN_DEFINITION_ALLOWLIST = {
+    "TEXT",
+    "TEXT NOT NULL DEFAULT ''",
+    "TEXT NOT NULL DEFAULT '[]'",
+    "INTEGER NOT NULL DEFAULT 0",
+}
 
 
 def _validate_sql_identifier(value: str, field: str) -> str:
@@ -158,6 +163,35 @@ def _init_db(self) -> None:
             attempts INTEGER DEFAULT 0,
             flags TEXT NOT NULL DEFAULT '[]',
             updated_at TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_seed_state (
+            seed_key TEXT PRIMARY KEY,
+            protocol INTEGER NOT NULL,
+            revision TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            topic_count INTEGER NOT NULL DEFAULT 0,
+            edge_count INTEGER NOT NULL DEFAULT 0,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_seed_membership (
+            seed_key TEXT NOT NULL,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            protocol INTEGER NOT NULL,
+            revision TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+            retired_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (seed_key, topic_id)
         )
         """
     )
@@ -379,6 +413,19 @@ def _init_db(self) -> None:
         )
     self._ensure_column(conn, "topics", "aliases", "TEXT NOT NULL DEFAULT '[]'")
     conn.execute("UPDATE topics SET aliases = '[]' WHERE aliases IS NULL OR aliases = ''")
+    self._ensure_column(
+        conn, "knowledge_seed_state", "topic_count", "INTEGER NOT NULL DEFAULT 0"
+    )
+    self._ensure_column(
+        conn, "knowledge_seed_state", "edge_count", "INTEGER NOT NULL DEFAULT 0"
+    )
+    self._ensure_column(
+        conn, "knowledge_seed_state", "applied_at", "TEXT NOT NULL DEFAULT ''"
+    )
+    conn.execute(
+        "UPDATE knowledge_seed_state SET applied_at = updated_at WHERE applied_at IS NULL OR applied_at = ''"
+    )
+    self._ensure_column(conn, "knowledge_seed_membership", "retired_at", "TEXT")
     self._ensure_column(conn, "candidate_knowledge_items", "dedupe_key", "TEXT")
     self._ensure_column(conn, "qa_records", "source_question_id", "TEXT")
     expected_idx_topics_stage = ["stage", "subject", "chapter", "unit", "depth", "id"]
@@ -390,6 +437,9 @@ def _init_db(self) -> None:
         conn.execute("DROP INDEX IF EXISTS idx_topics_stage")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_topics_stage ON topics(stage, subject, chapter, unit, depth, id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_seed_membership_topic_active ON knowledge_seed_membership(topic_id, active)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_mastery_topic_updated ON mastery_snapshots(topic_id, updated_at DESC, id DESC)"

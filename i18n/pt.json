@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "Tipo de prática",
     "ui.knowledge.node_detail.misconceptions":  "Equívocos comuns",
     "ui.knowledge.node_detail.empty":  "Continue estudando este tópico para desbloquear mais contexto do mapa.",
+    "ui.knowledge.mastery.unassessed": "Não avaliado",
     "ui.knowledge.scope_empty":  "Ainda não há tópicos neste intervalo do mapa. Mude para todas as etapas ou continue estudando para criá-lo.",
     "ui.knowledge.boundary_prerequisite": "Pré-requisito fora do intervalo",
     "ui.knowledge.boundary_prerequisites": "Pré-requisitos fora do intervalo",

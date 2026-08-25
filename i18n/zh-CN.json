@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "练习类型",
     "ui.knowledge.node_detail.misconceptions":  "常见误区",
     "ui.knowledge.node_detail.empty":  "继续学习这个知识点后，会解锁更多图谱上下文。",
+    "ui.knowledge.mastery.unassessed": "未评估",
     "ui.knowledge.scope_empty":  "这个图谱范围暂无知识点。可以切到全部阶段，或继续学习后自动积累。",
     "ui.knowledge.boundary_prerequisite": "范围外的前置知识",
     "ui.knowledge.boundary_prerequisites": "范围外的前置知识",

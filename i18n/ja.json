@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "練習タイプ",
     "ui.knowledge.node_detail.misconceptions":  "よくある誤解",
     "ui.knowledge.node_detail.empty":  "このトピックを学習すると、さらに多くのグラフ文脈が解放されます。",
+    "ui.knowledge.mastery.unassessed": "未評価",
     "ui.knowledge.scope_empty":  "このマップ範囲にはまだトピックがありません。すべての段階に切り替えるか、学習を続けて蓄積してください。",
     "ui.knowledge.boundary_prerequisite": "範囲外の前提知識",
     "ui.knowledge.boundary_prerequisites": "範囲外の前提知識",

@@ -794,8 +794,15 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
     item.type = 'button';
     item.dataset.mastery = masteryLevelForPanel(node);
     if (boundary) item.dataset.boundary = 'true';
-    const mastery = Number(node.mastery);
-    const masteryText = Number.isFinite(mastery) ? ` ${Math.round(mastery * 100)}%` : '';
+    const legacyMastery = node.mastery;
+    const masteryText = typeof masteryDisplayForPanel === 'function'
+      ? masteryDisplayForPanel(node)
+      : (
+        (typeof legacyMastery === 'number' && Number.isFinite(legacyMastery))
+        || (typeof legacyMastery === 'string' && legacyMastery.trim() !== '' && Number.isFinite(Number(legacyMastery)))
+      )
+        ? ` ${Math.round(Number(legacyMastery) * 100)}%`
+        : '';
     const label = `${node.label || node.name || node.topic_name || node.topic_id || node.id || '-'}${masteryText}`;
     item.appendChild(drawerElement('span', 'knowledge-node__label', label));
     if (boundary) item.appendChild(drawerElement('small', 'knowledge-node__boundary-label', t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')));
@@ -1116,7 +1123,11 @@ function renderKnowledgePanel(payload = null) {
   const topicCount = countFromSummary(summary, ['topic_count', 'topics', 'node_count', 'nodes']) || nodes.length;
   const edgeCount = countFromSummary(summary, ['edge_count', 'edges']) || edges.length;
   const boundaryCount = shownNodes.length - scopedNodes.length;
-  const weakTopics = scopedNodes.filter((node) => masteryLevelForPanel(node) === 'weak').length;
+  const weakTopics = scopedNodes.filter((node) => (
+    typeof weakTopicForPanel === 'function'
+      ? weakTopicForPanel(node)
+      : masteryLevelForPanel(node) === 'weak'
+  )).length;
   const root = surfacePanel('knowledge-map', `${scopedNodes.length}/${topicCount}`);
   setActiveKnowledgeMapScale(knowledgeMapZoomLevel());
   root.querySelector('.study-panel__header')?.appendChild(renderKnowledgeZoomControls());
