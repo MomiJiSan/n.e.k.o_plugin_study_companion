@@ -1679,20 +1679,62 @@ function renderDrawerActions(actions = []) {
   return row;
 }
 
+function masteryIsAssessedForPanel(item = {}) {
+  if (item.assessed === false) return false;
+  const status = String(item.mastery_status || '').trim().toLowerCase();
+  if (['unassessed', 'insufficient_evidence', 'new'].includes(status)) return false;
+  if (status) return true;
+  if (item.assessed === true || item.weak) return true;
+  const level = String(item.level || '').trim().toLowerCase();
+  if (['weak', 'progress', 'good', 'mastered'].includes(level)) return true;
+  if (level === 'new') return false;
+  const mastery = item.mastery;
+  return (typeof mastery === 'number' && Number.isFinite(mastery))
+    || (typeof mastery === 'string' && mastery.trim() !== '' && Number.isFinite(Number(mastery)));
+}
+
 function masteryLevelForPanel(item = {}) {
-  if (item.weak) {
-    return 'weak';
-  }
+  if (!masteryIsAssessedForPanel(item)) return 'new';
+  const status = String(item.mastery_status || '').trim().toLowerCase();
+  const statusLevels = {
+    mastered: 'mastered',
+    good: 'good',
+    progressing: 'progress',
+    progress: 'progress',
+    weak: 'weak',
+  };
+  if (statusLevels[status]) return statusLevels[status];
+  if (item.weak) return 'weak';
   const level = String(item.level || '').toLowerCase();
-  if (['new', 'weak', 'progress', 'good', 'mastered'].includes(level)) {
-    return level;
-  }
+  if (['new', 'weak', 'progress', 'good', 'mastered'].includes(level)) return level;
   const mastery = Number(item.mastery);
   if (!Number.isFinite(mastery)) return 'new';
   if (mastery >= 0.85) return 'mastered';
   if (mastery >= 0.6) return 'good';
   if (mastery >= 0.3) return 'progress';
   return 'weak';
+}
+
+function masteryDisplayForPanel(item = {}) {
+  if (!masteryIsAssessedForPanel(item)) {
+    return ` ${t('ui.knowledge.mastery.unassessed', 'Unassessed')}`;
+  }
+  const rawMastery = item.mastery;
+  const mastery = (typeof rawMastery === 'number' && Number.isFinite(rawMastery))
+    || (typeof rawMastery === 'string' && rawMastery.trim() !== '' && Number.isFinite(Number(rawMastery)))
+    ? Number(rawMastery)
+    : null;
+  return mastery === null ? '' : ` ${Math.round(mastery * 100)}%`;
+}
+
+function weakTopicForPanel(item = {}) {
+  if (!masteryIsAssessedForPanel(item)) return false;
+  const hasStatus = String(item.mastery_status || '').trim() !== '';
+  const hasAssessed = typeof item.assessed === 'boolean';
+  // The current payload deliberately carries weak independently of its visual
+  // level: 0.40–0.59 is `progress` but remains a weak practice priority.
+  if (hasStatus || hasAssessed) return item.weak === true;
+  return masteryLevelForPanel(item) === 'weak';
 }
 
 function stageValueFromNode(node = {}) {

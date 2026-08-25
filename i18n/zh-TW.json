@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "練習類型",
     "ui.knowledge.node_detail.misconceptions":  "常見誤區",
     "ui.knowledge.node_detail.empty":  "繼續學習這個知識點後，會解鎖更多圖譜脈絡。",
+    "ui.knowledge.mastery.unassessed": "未評估",
     "ui.knowledge.scope_empty":  "這個圖譜範圍暫無知識點。可以切到全部階段，或繼續學習後自動累積。",
     "ui.knowledge.boundary_prerequisite": "範圍外的前置知識",
     "ui.knowledge.boundary_prerequisites": "範圍外的前置知識",

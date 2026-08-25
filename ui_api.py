@@ -32,6 +32,34 @@ def _display_list(value: Any) -> list[str]:
     ]
 
 
+def _knowledge_map_mastery_state(
+    mastery: dict[str, Any] | None,
+    *,
+    listed_as_weak: bool = False,
+) -> tuple[bool, float | None, str, bool]:
+    """Return the UI contract for one topic without conflating no evidence with 0%."""
+    if not mastery:
+        return False, None, "unassessed", False
+
+    try:
+        value = float(mastery.get("mastery"))
+    except (TypeError, ValueError):
+        value = 0.0
+    value = max(0.0, min(1.0, value))
+    flags = mastery.get("flags")
+    false_mastery = isinstance(flags, list) and "false_mastery" in flags
+    weak = bool(listed_as_weak or value < 0.60 or false_mastery)
+    if false_mastery or value < 0.40:
+        status = "weak"
+    elif value < 0.60:
+        status = "progress"
+    elif value < 0.80:
+        status = "good"
+    else:
+        status = "mastered"
+    return True, value, status, weak
+
+
 def _knowledge_display_reason(*, raw_reason: str, relation: str) -> tuple[str, str]:
     reason = str(raw_reason or "").strip()
     if not reason:
@@ -234,8 +262,11 @@ def build_knowledge_map_payload(
             chapter_counts[chapter] = chapter_counts.get(chapter, 0) + 1
             unit_key = f"{subject}:{unit}" if subject else unit
             unit_counts[unit_key] = unit_counts.get(unit_key, 0) + 1
-        mastery = mastery_by_topic.get(topic_id) or {}
-        weak = topic_id in weak_topic_ids
+        mastery = mastery_by_topic.get(topic_id)
+        assessed, mastery_value, mastery_status, weak = _knowledge_map_mastery_state(
+            mastery,
+            listed_as_weak=topic_id in weak_topic_ids,
+        )
         if weak and in_scope:
             weak_node_count += 1
         nodes.append(
@@ -256,8 +287,10 @@ def build_knowledge_map_payload(
                     if isinstance(topic.get("typical_misconceptions"), list)
                     else topic.get("misconceptions") or []
                 ),
-                "mastery": float(mastery.get("mastery") or 0.0),
-                "level": str(mastery.get("level") or ""),
+                "assessed": assessed,
+                "mastery": mastery_value,
+                "mastery_status": mastery_status,
+                "level": str((mastery or {}).get("level") or ""),
                 "weak": weak,
                 "in_scope": in_scope,
                 "boundary": not in_scope,

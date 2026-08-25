@@ -153,9 +153,9 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in index
+    assert "./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825" in index
     assert "./local-models-controller.js?v=study-local-model-assets-20260825" in index
-    assert "./main.js?v=study-local-models-coming-soon-20260825" in index
+    assert "./main.js?v=study-knowledge-mastery-status-pr1-20260825" in index
 
 
 def test_local_model_controller_normalizes_transfer_states_and_uses_canceled() -> None:
@@ -185,3 +185,42 @@ def test_local_model_controller_polls_queued_transfers_without_parallel_refreshe
     assert "'queued', 'checking', 'downloading', 'paused', 'verifying', 'installing', 'cancelling'" in controller
     assert "callPlugin('study_local_models_status')" in controller
     assert "callPlugin(`study_local_model_${action}`, args)" in controller
+
+
+def test_knowledge_map_mastery_protocol_keeps_unassessed_out_of_weak_topics() -> None:
+    import json
+    import subprocess
+
+    main_path = json.dumps(str(ROOT / "static" / "main.js"))
+    script = f"""
+import fs from 'node:fs';
+import vm from 'node:vm';
+globalThis.t = (_key, fallback) => fallback;
+const source = fs.readFileSync({main_path}, 'utf8');
+const start = source.indexOf('function masteryIsAssessedForPanel');
+const end = source.indexOf('function stageValueFromNode', start);
+vm.runInThisContext(source.slice(start, end));
+const unassessed = {{ assessed: false, mastery_status: 'progress', mastery: 0, weak: true }};
+const legacyZero = {{ mastery: 0 }};
+const assessedProgressWeak = {{ assessed: true, mastery_status: 'progress', mastery: 0.45, weak: true }};
+const statusUnassessed = {{ mastery_status: 'unassessed', mastery: 0, weak: true }};
+if (masteryLevelForPanel(unassessed) !== 'new' || weakTopicForPanel(unassessed)) throw new Error('unassessed node became weak');
+if (masteryDisplayForPanel(unassessed).includes('0%')) throw new Error('unassessed node displayed zero percent');
+if (masteryLevelForPanel(legacyZero) !== 'weak' || !weakTopicForPanel(legacyZero)) throw new Error('legacy numeric zero was treated as missing');
+if (masteryLevelForPanel(assessedProgressWeak) !== 'progress' || !weakTopicForPanel(assessedProgressWeak)) throw new Error('progressing weak node was not retained as weak priority');
+if (masteryLevelForPanel(statusUnassessed) !== 'new' || weakTopicForPanel(statusUnassessed)) throw new Error('mastery status unassessed became weak');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+    assert "nodeIsWeakTopic(node)" in hosted
+    assert "masteryDisplayForPanel(node)" in static
+    assert "weakTopicForPanel(node)" in static

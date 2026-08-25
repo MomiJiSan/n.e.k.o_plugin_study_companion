@@ -274,6 +274,7 @@ def test_knowledge_map_i18n_keys_are_complete_for_all_locales() -> None:
         "ui.practice.attempt.wrong",
         "ui.practice.attempt.dont_know",
         "ui.practice.mastery.mastered",
+        "ui.knowledge.mastery.unassessed",
         "ui.error.question_validation_failed",
         "ui.error.evaluation_inconsistent",
     }
@@ -304,7 +305,7 @@ def test_both_knowledge_map_uis_localize_internal_edge_values() -> None:
     assert "activatePracticeScope('explicit_topic')" in hosted_source
     assert "practiceComingSoonOpen" not in hosted_source
     assert "./style.css?v=study-settings-dialog-20260824" in static_index
-    assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in static_index
+    assert "./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825" in static_index
 
 
 def test_release_versions_stay_in_sync() -> None:

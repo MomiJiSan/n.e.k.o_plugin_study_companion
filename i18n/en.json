@@ -249,6 +249,7 @@
     "ui.knowledge.node_detail.practice":  "Practice type",
     "ui.knowledge.node_detail.misconceptions":  "Common misconceptions",
     "ui.knowledge.node_detail.empty":  "Keep studying this topic to unlock more graph context.",
+    "ui.knowledge.mastery.unassessed": "Unassessed",
     "ui.knowledge.scope_empty":  "No topics in this graph range yet. Switch to all stages or keep studying to build it.",
     "ui.knowledge.boundary_prerequisite": "Out-of-scope prerequisite",
     "ui.knowledge.boundary_prerequisites": "Out-of-scope prerequisites",
