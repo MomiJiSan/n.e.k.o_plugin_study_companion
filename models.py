@@ -4,6 +4,7 @@ import logging
 import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from .constants import (
@@ -396,6 +397,9 @@ class StudyConfig:
     # Opt-in only.  When disabled, requests continue through the configured
     # N.E.K.O model gateway; enabling this setting must never download models.
     local_models_enabled: bool = False
+    # Empty means that the local asset manager chooses its application default.
+    # This field never selects a model, cache policy, or execution device.
+    local_models_directory: str = ""
     fsrs_retention_target: float = 0.90
     fsrs_auto_optimize_interval_days: int = 30
     knowledge_contribution_opt_in: bool = False
@@ -443,6 +447,9 @@ class StudyConfig:
             64, min(4096, self._coerce_int(self.llm_vision_max_image_px, 768))
         )
         self.local_models_enabled = bool(self.local_models_enabled)
+        self.local_models_directory = self._normalize_local_models_directory(
+            self.local_models_directory
+        )
         self.fsrs_retention_target = self._clamp_float(
             self.fsrs_retention_target, 0.1, 0.99, 0.90
         )
@@ -512,6 +519,27 @@ class StudyConfig:
         if not math.isfinite(number):
             number = default
         return max(minimum, min(maximum, number))
+
+    @staticmethod
+    def _normalize_local_models_directory(value: object) -> str:
+        """Keep an optional, safe-to-serialize asset directory value.
+
+        Directory creation and permission checks belong to the local asset
+        manager.  Configuration parsing must remain side-effect free so an
+        old or malformed config cannot start a runtime or touch the network.
+        """
+
+        if not isinstance(value, str):
+            return ""
+        directory = value.strip()
+        if not directory or "\x00" in directory or len(directory) > 4096:
+            return ""
+        try:
+            if not Path(directory).is_absolute():
+                return ""
+        except (OSError, ValueError):
+            return ""
+        return directory
 
 
 @dataclass(slots=True)
@@ -880,6 +908,14 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
         ),
         local_models_enabled=_bool(
             llm, "local_models_enabled", False, "local_models_enabled"
+        ),
+        local_models_directory=(
+            _raw(llm, "local_models_directory", "", "local_models_directory")
+            if isinstance(
+                _raw(llm, "local_models_directory", "", "local_models_directory"),
+                str,
+            )
+            else ""
         ),
         fsrs_retention_target=_clamp(
             _float(fsrs, "retention_target", 0.90, "fsrs_retention_target"),

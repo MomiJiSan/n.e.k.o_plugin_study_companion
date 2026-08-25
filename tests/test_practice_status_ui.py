@@ -154,4 +154,34 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-stage-and-humanities-20260824" in index
-    assert "./main.js?v=study-local-model-settings-20260825" in index
+    assert "./local-models-controller.js?v=study-local-model-assets-20260825" in index
+    assert "./main.js?v=study-local-model-assets-20260825" in index
+
+
+def test_local_model_controller_normalizes_transfer_states_and_uses_canceled() -> None:
+    controller = (ROOT / "static" / "local-models-controller.js").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "['checking', 'queued', 'downloading', 'verifying', 'installing', 'cancelling']"
+        in controller
+    )
+    assert "? 'installing'" in controller
+    assert "'canceled'" in controller
+    assert "'cancelled'" not in controller
+    assert "state === 'installed' ? 'ready'" in controller
+    assert "['failed', 'canceled'].includes" in controller
+    assert "stale_staging_count" in controller
+    assert "manual_or_invalid_package_count" in controller
+
+
+def test_local_model_controller_polls_queued_transfers_without_parallel_refreshes() -> None:
+    controller = (ROOT / "static" / "local-models-controller.js").read_text(
+        encoding="utf-8"
+    )
+    assert "const STATUS_POLL_MS = 750" in controller
+    assert "let statusRefreshInFlight = null" in controller
+    assert "if (statusRefreshInFlight) return statusRefreshInFlight" in controller
+    assert "'queued', 'checking', 'downloading', 'paused', 'verifying', 'installing', 'cancelling'" in controller
+    assert "callPlugin('study_local_models_status')" in controller
+    assert "callPlugin(`study_local_model_${action}`, args)" in controller

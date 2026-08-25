@@ -611,6 +611,21 @@
                     <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="stopped" data-i18n="ui.settings.local_models.status.not_started">Not started</p>
                     <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">No local models are installed yet. This setting does not download anything.</p>
                   </section>
+                  <section class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle">
+                    <h4 id="settingsLocalModelsAssetsTitle" data-i18n="ui.settings.local_models.assets.title">Local model files</h4>
+                    <label class="setting-field">
+                      <span data-i18n="ui.settings.local_models.directory.label">Model directory</span>
+                      <input id="settingsLocalModelsDirectory" type="text" autocomplete="off" aria-describedby="settingsLocalModelsDirectoryHelp" />
+                    </label>
+                    <p id="settingsLocalModelsDirectoryHelp" class="model-runtime__help" data-i18n="ui.settings.local_models.directory.help">Leave empty to use the app default directory. Applying a directory does not download or start models.</p>
+                    <div class="local-models-assets__actions">
+                      <button id="settingsLocalModelsDirectoryApply" class="button button-secondary" type="button" data-i18n="ui.button.apply_local_model_directory">Apply directory</button>
+                      <button id="settingsLocalModelsAssetsRefresh" class="button button-secondary" type="button" data-i18n="ui.button.refresh_local_models">Refresh local model files</button>
+                    </div>
+                    <p id="settingsLocalModelsAssetsSummary" class="settings-status" aria-live="polite" data-i18n="ui.settings.local_models.assets.status.not_started">Local model assets are not started.</p>
+                    <p id="settingsLocalModelsAssetsDisk" class="model-runtime__help" aria-live="polite" data-i18n="ui.settings.local_models.assets.disk">Disk: — used · — free</p>
+                    <div id="settingsLocalModelsCatalog" class="local-models-catalog" aria-live="polite"></div>
+                  </section>
                 </article>
                 <article class="settings-card">
                   <h3 data-i18n="ui.settings.communication.title">N.E.K.O proactive communication</h3>
@@ -765,8 +780,9 @@
     <script src="./quick-card-controller.js?v=study-quick-card-types-20260812"></script>
     <script src="./outcome-formatters.js?v=study-hotfix-20260812"></script>
     <script src="./model-runtime.js?v=study-provider-gateway-20260813"></script>
+    <script src="./local-models-controller.js?v=study-local-model-assets-20260825"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-local-model-settings-20260825"></script>
+    <script src="./main.js?v=study-local-model-assets-20260825"></script>
   </body>
 </html>

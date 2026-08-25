@@ -75,6 +75,7 @@ llm_call_timeout_seconds = 120
 llm_vision_enabled = false
 llm_vision_max_image_px = 768
 local_models_enabled = false
+local_models_directory = ""
 
 [ocr_reader]
 enabled = true
