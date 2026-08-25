@@ -23,7 +23,10 @@ def _load_entries(monkeypatch: pytest.MonkeyPatch):
     common.Ok = lambda payload: payload
     common.PublicGraphContributionBuilder = object
     common.StudyConfig = object
-    common._entry_exception_error = lambda *_args, **_kwargs: {"error": True}
+    def _raise_entry_exception(_owner, exc, **_kwargs):
+        raise exc
+
+    common._entry_exception_error = _raise_entry_exception
     common.asyncio = asyncio
     common.build_contribution_settings_payload = lambda **_kwargs: {}
     common.build_knowledge_map_payload = ui_api.build_knowledge_map_payload
