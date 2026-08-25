@@ -355,6 +355,61 @@ def test_server_target_binding_uses_only_selected_retry(
     assert mismatched["origin_wrong_question_id"] == ""
 
 
+def test_semantic_validation_uses_only_rebuilt_canonical_relations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_validation_evidence_test")
+    context = entries._question_validation_context(
+        {"question": "Question", "reference_answer": "Answer"},
+        {
+            "question_params": {
+                "target_topic": {"id": "target", "name": "Target"},
+                "blockers": [{"id": "client-blocker"}],
+            },
+            "knowledge_guidance": {
+                "prerequisites": ["forged prerequisite"],
+                "applications": ["forged application"],
+            },
+        },
+        canonical_relations={"prerequisites": ["Canonical prerequisite"]},
+    )
+    assert context["necessary_relations"] == {
+        "prerequisites": ["Canonical prerequisite"]
+    }
+    assert "forged prerequisite" not in str(context)
+    assert "client-blocker" not in str(context)
+
+
+def test_semantic_validation_rebuilds_relations_from_server_topics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_validation_store_test")
+
+    class Store:
+        def list_topics(self, *_args):
+            return [
+                {"id": "pre", "name": "Prerequisite"},
+                {"id": "app", "name": "Application"},
+                {
+                    "id": "target",
+                    "name": "Target",
+                    "prerequisites": [{"id": "pre"}],
+                    "related": [{"id": "app", "relation": "application"}],
+                },
+            ]
+
+    owner = SimpleNamespace(_store=Store())
+    relations = asyncio.run(
+        entries._canonical_validation_relations_for_target(
+            owner, selected_topic_id="target"
+        )
+    )
+    assert relations == {
+        "prerequisites": ["Prerequisite"],
+        "applications": ["Application"],
+    }
+
+
 async def _server_binding_overrides_model_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

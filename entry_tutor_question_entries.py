@@ -17,6 +17,7 @@ from .entry_common import (
     tr,
     ui,
 )
+from .knowledge_graph_guidance import _canonical_necessary_relations
 from .llm_prompts import ensure_targeted_prompt_context_fits
 from .models import public_current_question_payload
 from .practice_scope import (
@@ -190,7 +191,10 @@ def _targeted_model_context(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _question_validation_context(
-    payload: dict[str, Any], targeted_context: dict[str, Any]
+    payload: dict[str, Any],
+    targeted_context: dict[str, Any],
+    *,
+    canonical_relations: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     params = dict(targeted_context.get("question_params") or {})
     target_topic = dict(params.get("target_topic") or {})
@@ -212,25 +216,49 @@ def _question_validation_context(
         )
         if target_topic.get(key) not in (None, "", [], {})
     }
-    raw_guidance = targeted_context.get("knowledge_guidance") or {}
-    if isinstance(raw_guidance, dict):
-        guidance = {
-            key: raw_guidance.get(key)
-            for key in ("prerequisites", "procedure", "confusions", "applications")
-            if raw_guidance.get(key) not in (None, "", [], {})
-        }
-    else:
-        guidance = {}
-    if not guidance:
-        guidance = {"blockers": params.get("blockers") or []}
     return {
         "question": payload.get("question") or "",
         "reference_answer": payload.get("reference_answer")
         or payload.get("answer")
         or "",
         "target_topic": target_metadata,
-        "necessary_relations": guidance,
+        # Semantic validation must not inherit the generation prompt's graph
+        # summary (nor client-supplied blockers).  Its relation evidence is
+        # rebuilt from the server's canonical selected topic below.
+        "necessary_relations": dict(canonical_relations or {}),
     }
+
+
+async def _canonical_validation_relations_for_target(
+    owner: Any, *, selected_topic_id: str
+) -> dict[str, list[str]]:
+    """Load canonical records once and safely derive validation evidence.
+
+    A missing store/cache is deliberately non-fatal: the validator can still
+    judge a candidate against its private target metadata, but it receives no
+    unverified relation summary.
+    """
+    topic_id = str(selected_topic_id or "").strip()
+    if not topic_id:
+        return {}
+    try:
+        cache = getattr(owner, "_knowledge_guidance_topics_cache", None)
+        topics = cache.get("all:5000") if isinstance(cache, dict) else None
+        if topics is None:
+            store = getattr(owner, "_store", None)
+            list_topics = getattr(store, "list_topics", None)
+            if not callable(list_topics):
+                return {}
+            topics = await asyncio.to_thread(list_topics, 5000, None, None)
+            if not isinstance(cache, dict):
+                cache = {}
+                setattr(owner, "_knowledge_guidance_topics_cache", cache)
+            cache["all:5000"] = list(topics or [])
+        return _canonical_necessary_relations(
+            topics=list(topics or []), topic_id=topic_id
+        )
+    except Exception:
+        return {}
 
 
 class _TutorQuestionEntriesMixin:
@@ -630,6 +658,16 @@ class _TutorQuestionEntriesMixin:
         reply = None
         validation_failure = ""
         attempts = 2 if targeted_context else 1
+        canonical_relations = (
+            await _canonical_validation_relations_for_target(
+                self,
+                selected_topic_id=str(
+                    targeted_context.get("selected_topic_id") or ""
+                ),
+            )
+            if targeted_context
+            else {}
+        )
         for generation_attempt in range(attempts):
             generation_context = dict(tutor_context)
             if validation_failure:
@@ -671,13 +709,8 @@ class _TutorQuestionEntriesMixin:
             validation_reply = await self._agent.question_validate(
                 context=_question_validation_context(
                     candidate_payload,
-                    {
-                        **targeted_context,
-                        "knowledge_guidance": generation_context.get(
-                            "knowledge_guidance"
-                        )
-                        or {},
-                    },
+                    targeted_context,
+                    canonical_relations=canonical_relations,
                 )
             )
             if not semantic_validation_passed(

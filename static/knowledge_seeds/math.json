@@ -43158,6 +43158,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "导数基础",
+      "depth": 2,
+      "difficulty": 0.64,
       "prerequisites": [
         {
           "id": "college_continuity",
@@ -43404,6 +43406,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "导数基础",
+      "depth": 2,
+      "difficulty": 0.65,
       "prerequisites": [
         {
           "id": "college_derivative_definition",
@@ -43639,6 +43643,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "导数基础",
+      "depth": 2,
+      "difficulty": 0.68,
       "prerequisites": [
         {
           "id": "college_derivative_rules",
@@ -44217,6 +44223,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "导数应用",
+      "depth": 3,
+      "difficulty": 0.67,
       "prerequisites": [
         {
           "id": "college_derivative_calculation",
@@ -46265,6 +46273,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "导数应用",
+      "depth": 3,
+      "difficulty": 0.75,
       "prerequisites": [
         {
           "id": "college_second_derivative_test",
@@ -47363,6 +47373,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "不定积分",
+      "depth": 2,
+      "difficulty": 0.67,
       "prerequisites": [
         {
           "id": "college_derivative_calculation",
@@ -48140,6 +48152,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "不定积分",
+      "depth": 3,
+      "difficulty": 0.76,
       "prerequisites": [
         {
           "id": "college_indefinite_integral",
@@ -48551,6 +48565,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "定积分",
+      "depth": 3,
+      "difficulty": 0.72,
       "prerequisites": [
         {
           "id": "college_definite_integral",
@@ -48996,6 +49012,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "定积分应用",
+      "depth": 4,
+      "difficulty": 0.80,
       "prerequisites": [
         {
           "id": "college_integral_application",
@@ -49270,6 +49288,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "定积分应用",
+      "depth": 4,
+      "difficulty": 0.82,
       "prerequisites": [
         {
           "id": "college_integral_application",
@@ -49515,6 +49535,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "定积分应用",
+      "depth": 4,
+      "difficulty": 0.84,
       "prerequisites": [
         {
           "id": "college_integral_application",
@@ -51208,6 +51230,8 @@
       "stage": "college",
       "chapter": "线性代数",
       "unit": "矩阵与线性变换",
+      "depth": 2,
+      "difficulty": 0.62,
       "prerequisites": [
         {
           "id": "college_matrix_operations",
@@ -52902,6 +52926,8 @@
       "stage": "college",
       "chapter": "线性代数",
       "unit": "特征值与二次型",
+      "depth": 3,
+      "difficulty": 0.84,
       "prerequisites": [
         {
           "id": "college_matrix_operations",
@@ -52987,6 +53013,8 @@
       "stage": "college",
       "chapter": "线性代数",
       "unit": "向量空间",
+      "depth": 3,
+      "difficulty": 0.74,
       "prerequisites": [
         {
           "id": "college_vector_space",
@@ -53081,6 +53109,8 @@
       "stage": "college",
       "chapter": "线性代数",
       "unit": "特征值与二次型",
+      "depth": 3,
+      "difficulty": 0.72,
       "prerequisites": [
         {
           "id": "college_determinant",
@@ -53649,6 +53679,8 @@
       "stage": "college",
       "chapter": "线性代数",
       "unit": "特征值与二次型",
+      "depth": 3,
+      "difficulty": 0.80,
       "prerequisites": [
         {
           "id": "college_matrix_operations",
@@ -54459,6 +54491,8 @@
       "stage": "college",
       "chapter": "概率论与数理统计",
       "unit": "随机事件与概率",
+      "depth": 2,
+      "difficulty": 0.60,
       "prerequisites": [
         {
           "id": "college_random_event",
@@ -55553,6 +55587,8 @@
       "stage": "college",
       "chapter": "概率论与数理统计",
       "unit": "随机变量",
+      "depth": 3,
+      "difficulty": 0.70,
       "prerequisites": [
         {
           "id": "college_expectation_variance",
@@ -55632,6 +55668,8 @@
       "stage": "college",
       "chapter": "概率论与数理统计",
       "unit": "随机变量",
+      "depth": 3,
+      "difficulty": 0.72,
       "prerequisites": [
         {
           "id": "college_expectation_variance",
@@ -61951,6 +61989,8 @@
       "stage": "college",
       "chapter": "微积分",
       "unit": "一元积分学定理",
+      "depth": 3,
+      "difficulty": 0.72,
       "prerequisites": [
         {
           "id": "college_newton_leibniz",
@@ -63624,6 +63664,8 @@
       "stage": "college",
       "chapter": "概率论与数理统计",
       "unit": "常见分布",
+      "depth": 3,
+      "difficulty": 0.74,
       "prerequisites": [
         {
           "id": "college_common_distributions",
@@ -63738,6 +63780,8 @@
       "stage": "college",
       "chapter": "概率论与数理统计",
       "unit": "常见分布",
+      "depth": 3,
+      "difficulty": 0.76,
       "prerequisites": [
         {
           "id": "college_common_distributions",
