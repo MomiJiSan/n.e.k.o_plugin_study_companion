@@ -22,18 +22,15 @@ protocol = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_protocol")
 supervisor_module = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_supervisor")
 
 LocalRuntimeSupervisor = supervisor_module.LocalRuntimeSupervisor
-
-from _study_companion_local_runtime_test.local_runtime_protocol import (  # noqa: E402
-    LOCAL_MODELS_NOT_INSTALLED,
-    LOCAL_RUNTIME_AUTH_FAILED,
-    LOCAL_RUNTIME_PROTOCOL_MISMATCH,
-    LOCAL_RUNTIME_START_FAILED,
-    LOCAL_RUNTIME_UNAVAILABLE,
-    LocalRuntimeError,
-    LocalRuntimeState,
-    LocalRuntimeStatus,
-    PROTOCOL_VERSION,
-)
+LOCAL_MODELS_NOT_INSTALLED = protocol.LOCAL_MODELS_NOT_INSTALLED
+LOCAL_RUNTIME_AUTH_FAILED = protocol.LOCAL_RUNTIME_AUTH_FAILED
+LOCAL_RUNTIME_PROTOCOL_MISMATCH = protocol.LOCAL_RUNTIME_PROTOCOL_MISMATCH
+LOCAL_RUNTIME_START_FAILED = protocol.LOCAL_RUNTIME_START_FAILED
+LOCAL_RUNTIME_UNAVAILABLE = protocol.LOCAL_RUNTIME_UNAVAILABLE
+LocalRuntimeError = protocol.LocalRuntimeError
+LocalRuntimeState = protocol.LocalRuntimeState
+LocalRuntimeStatus = protocol.LocalRuntimeStatus
+PROTOCOL_VERSION = protocol.PROTOCOL_VERSION
 
 
 def test_status_payload_rejects_unknown_protocol_without_sensitive_data() -> None:

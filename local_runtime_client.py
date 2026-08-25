@@ -14,9 +14,9 @@ try:
         LOCAL_RUNTIME_AUTH_FAILED,
         LOCAL_RUNTIME_PROTOCOL_MISMATCH,
         LOCAL_RUNTIME_UNAVAILABLE,
+        TOKEN_HEADER,
         LocalRuntimeError,
         LocalRuntimeStatus,
-        TOKEN_HEADER,
     )
     from .local_runtime_supervisor import LocalRuntimeConnection, LocalRuntimeSupervisor
 except ImportError:  # Direct imports in isolated tests.
@@ -24,9 +24,9 @@ except ImportError:  # Direct imports in isolated tests.
         LOCAL_RUNTIME_AUTH_FAILED,
         LOCAL_RUNTIME_PROTOCOL_MISMATCH,
         LOCAL_RUNTIME_UNAVAILABLE,
+        TOKEN_HEADER,
         LocalRuntimeError,
         LocalRuntimeStatus,
-        TOKEN_HEADER,
     )
     from local_runtime_supervisor import (  # type: ignore[no-redef]
         LocalRuntimeConnection,

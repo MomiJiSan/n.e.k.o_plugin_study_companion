@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final
 
-
 PROTOCOL_VERSION: Final = 1
 RUNTIME_VERSION: Final = "0.1.0"
 TOKEN_HEADER: Final = "X-Local-Runtime-Token"

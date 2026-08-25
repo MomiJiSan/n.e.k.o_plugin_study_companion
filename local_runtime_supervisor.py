@@ -19,22 +19,22 @@ try:
         LOCAL_RUNTIME_CRASHED,
         LOCAL_RUNTIME_START_FAILED,
         LOCAL_RUNTIME_UNAVAILABLE,
+        PROTOCOL_VERSION,
+        TOKEN_HEADER,
         LocalRuntimeError,
         LocalRuntimeState,
         LocalRuntimeStatus,
-        PROTOCOL_VERSION,
-        TOKEN_HEADER,
     )
 except ImportError:  # Direct imports in isolated tests.
     from local_runtime_protocol import (  # type: ignore[no-redef]
         LOCAL_RUNTIME_CRASHED,
         LOCAL_RUNTIME_START_FAILED,
         LOCAL_RUNTIME_UNAVAILABLE,
+        PROTOCOL_VERSION,
+        TOKEN_HEADER,
         LocalRuntimeError,
         LocalRuntimeState,
         LocalRuntimeStatus,
-        PROTOCOL_VERSION,
-        TOKEN_HEADER,
     )
 
 
