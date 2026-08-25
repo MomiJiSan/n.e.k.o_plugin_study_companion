@@ -10,7 +10,7 @@
       "chapter": "力学",
       "depth": 2,
       "difficulty": 0.42,
-      "prerequisites": [{"id": "function_graph_reading","priority": "core","context": "practice","confidence": 0.91,"reason": "读 s-t、v-t 图像前，需要先会从函数图像读取斜率、截距、增减和区间信息。","use_cases": ["learning_path","hint_generation","practice_planning"],"metadata": {"source_subject": "physics","target_subject": "math","bridge_direction": "math_to_physics","bridge_focus": "函数图像->运动图像","physics_use": "从运动图像判断速度、路程和运动状态"}}],
+      "prerequisites": [{"id": "function_graph_reading","priority": "core","context": "practice","confidence": 0.91,"reason": "读 s-t、v-t 图像前，需要先会从函数图像读取斜率、截距、增减和区间信息。","use_cases": ["learning_path","hint_generation","practice_planning"],"metadata": {"source_subject": "physics","target_subject": "math","bridge_direction": "math_to_physics","bridge_focus": "函数图像->运动图像","physics_use": "从运动图像判断速度、路程和运动状态"}, "required_mastery": 0.55}],
       "related": [
         {
           "id": "physics_junior_force_balance",
@@ -158,7 +158,7 @@
             "target_subject": "physics",
             "chapter_focus": "力学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -314,7 +314,7 @@
             "target_subject": "physics",
             "chapter_focus": "力学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -473,7 +473,7 @@
             "target_subject": "physics",
             "chapter_focus": "力学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -682,7 +682,7 @@
             "target_subject": "math",
             "chapter_focus": "电学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -834,7 +834,7 @@
             "target_subject": "physics",
             "chapter_focus": "电学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -990,7 +990,7 @@
             "target_subject": "physics",
             "chapter_focus": "电学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -1126,7 +1126,7 @@
             "target_subject": "physics",
             "chapter_focus": "电学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -1411,7 +1411,7 @@
             "target_subject": "physics",
             "chapter_focus": "高中力学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -1744,7 +1744,7 @@
             "target_subject": "physics",
             "chapter_focus": "高中力学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -1911,7 +1911,7 @@
             "target_subject": "physics",
             "bridge_focus": "motion_experiment_data_foundation"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -2055,7 +2055,7 @@
             "target_subject": "physics",
             "chapter_focus": "电磁学"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -2222,7 +2222,7 @@
             "bridge_focus": "导数->速度/加速度",
             "physics_use": "用变化率解释图像切线斜率"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -2454,7 +2454,7 @@
             "bridge_focus": "向量->力分解",
             "physics_use": "建立沿斜面和垂直斜面的受力分量"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -2931,7 +2931,7 @@
             "bridge_direction": "physics_to_math",
             "bridge_focus": "projectile_velocity_decomposition"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -3259,7 +3259,7 @@
             "bridge_focus": "积分->位移/功",
             "physics_use": "用面积或累积量解释位移、功和能量变化"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -3975,7 +3975,7 @@
             "bridge_focus": "三角函数->简谐运动",
             "physics_use": "读取简谐运动的振幅、周期、相位和初始状态"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -4479,7 +4479,7 @@
             "bridge_direction": "physics_to_math",
             "bridge_focus": "potential_graph_information_reading"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -6970,7 +6970,7 @@
             "bridge_focus": "向量运算->物理矢量",
             "physics_use": "合成和分解位移、速度、加速度、力"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -9244,7 +9244,7 @@
             "bridge_direction": "physics_to_math",
             "bridge_focus": "field_superposition_vector_space"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -10510,7 +10510,7 @@
             "bridge_direction": "physics_to_math",
             "bridge_focus": "maxwell_partial_derivatives"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {

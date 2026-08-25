@@ -7,6 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+try:  # Support both package imports and the standalone validation command.
+    from .knowledge_graph_edges import (
+        ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+        SEMANTIC_RELATIONS,
+        SYMMETRIC_RELATIONS,
+    )
+except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
+    from knowledge_graph_edges import (
+        ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+        SEMANTIC_RELATIONS,
+        SYMMETRIC_RELATIONS,
+    )
+
 REQUIRED_SCALAR_FIELDS = ("id", "name", "subject", "stage", "chapter")
 REQUIRED_LIST_FIELDS = (
     "prerequisites",
@@ -26,28 +39,10 @@ QUALITY_LIST_FIELDS = (
 )
 RESERVED_CONTEXT_FIELDS = ("curriculum_version", "exam_region", "exam_type")
 TAXONOMY_FILE_NAME = "knowledge_seed_taxonomy.json"
-ALLOWED_EDGE_RELATIONS = {
-    "prerequisite",
-    "application",
-    "procedure_step",
-    "confusable",
-    "extends",
-    "analogy",
-    "co_occurs",
-    "supports",
-    "next",
-    "nearby",
-}
+ALLOWED_EDGE_RELATIONS = _ALLOWED_RELATIONS
 EDGE_RELATION_ALIASES = {"related", "similar", "compare"}
-SYMMETRIC_EDGE_RELATIONS = {"analogy", "co_occurs", "confusable"}
-SEMANTIC_EDGE_RELATIONS = {
-    "application",
-    "procedure_step",
-    "confusable",
-    "co_occurs",
-    "supports",
-    "analogy",
-}
+SYMMETRIC_EDGE_RELATIONS = SYMMETRIC_RELATIONS
+SEMANTIC_EDGE_RELATIONS = SEMANTIC_RELATIONS
 TYPED_EDGE_REQUIRED_FIELDS = ("id", "relation", "reason")
 ALLOWED_EDGE_USE_CASES = {
     "diagnosis",
@@ -738,6 +733,17 @@ def _validate_references(
                 continue
             for ref in refs:
                 _validate_typed_edge(field=field, ref=ref, topic=topic, issues=issues)
+                if field == "prerequisites" and (
+                    not isinstance(ref, dict) or ref.get("required_mastery") is None
+                ):
+                    issues.append(
+                        KnowledgeSeedIssue(
+                            "missing_required_mastery",
+                            "prerequisite edge must declare required_mastery",
+                            str(topic.path),
+                            source_id,
+                        )
+                    )
                 target_id = _ref_id(ref)
                 if not target_id:
                     issues.append(

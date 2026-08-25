@@ -19978,7 +19978,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "equation_application_problem_sequence"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -20515,7 +20515,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase1_high_yield_recommended"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -20663,7 +20663,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "equation_application_problem_sequence"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -20828,7 +20828,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase1_high_yield_recommended"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -21235,7 +21235,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "equation_application_problem_sequence"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -21411,7 +21411,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_project_parameter_estimation"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -21701,7 +21701,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_coordinate_fraction_conversion"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -21860,7 +21860,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_coordinate_fraction_conversion"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -22020,7 +22020,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_coordinate_fraction_conversion"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -22538,7 +22538,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_logic_area"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -22959,7 +22959,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_dynamic_models"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -23101,7 +23101,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_dynamic_models"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -23832,7 +23832,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_dynamic_models"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -24274,7 +24274,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_logic_area"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -24963,7 +24963,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_dynamic_models"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -26400,7 +26400,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_primary_statistics_probability"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -26548,7 +26548,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_primary_statistics_probability"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -26690,7 +26690,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_thinking_strategy_methods"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -27252,7 +27252,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_thinking_strategy_methods"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -27674,7 +27674,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_thinking_strategy_methods"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -27833,7 +27833,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_open_exploration_projects"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -27993,7 +27993,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_open_exploration_projects"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -28304,7 +28304,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_open_exploration_projects"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -28465,7 +28465,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_open_exploration_projects"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -28775,7 +28775,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_project_parameter_estimation"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -34004,7 +34004,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_project_parameter_estimation"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -34415,7 +34415,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_geometry_logic_area"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -38467,7 +38467,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_trig_analytic_geometry"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -42593,7 +42593,7 @@
             "learning_path",
             "hint_generation"
           ]
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -59452,7 +59452,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase4_trig_analytic_geometry"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -60463,7 +60463,7 @@
             "batch": "math_relation_gap_fill",
             "scope": "phase1_high_yield_recommended"
           }
-        }
+        , "required_mastery": 0.55}
       ],
       "related": [
         {
@@ -62473,7 +62473,7 @@
       "chapter": "微积分",
       "depth": 3,
       "difficulty": 0.8,
-      "prerequisites": [{"id": "college_definite_integral","reason": "Double-integral regions build on definite-integral bounds and area interpretation before extending interval setup to two variables.","priority": "core","context": "diagnosis","confidence": 0.9,"use_cases": ["diagnosis","learning_path","hint_generation"],"metadata": {"batch": "math_relation_gap_fill","scope": "phase3_phase4_statistics_solid_gap_fill"}}],
+      "prerequisites": [{"id": "college_definite_integral","reason": "Double-integral regions build on definite-integral bounds and area interpretation before extending interval setup to two variables.","priority": "core","context": "diagnosis","confidence": 0.9,"use_cases": ["diagnosis","learning_path","hint_generation"],"metadata": {"batch": "math_relation_gap_fill","scope": "phase3_phase4_statistics_solid_gap_fill"}, "required_mastery": 0.55}],
       "related": [
         {
           "id": "college_multiple_integral",

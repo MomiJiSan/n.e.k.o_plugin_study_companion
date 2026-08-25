@@ -224,7 +224,7 @@ def get_wrong_question(self, question_id: str) -> dict[str, Any] | None:
 def list_wrong_questions(
     self,
     *,
-    limit: int = 20,
+    limit: int | None = 20,
     topic_id: str | None = None,
     topic_ids: list[str] | set[str] | tuple[str, ...] | None = None,
     statuses: tuple[str, ...] = ("active", "retrying", "resolved"),
@@ -233,7 +233,7 @@ def list_wrong_questions(
     if not status_values:
         status_values = ("active", "retrying", "resolved")
     status_json = self._json_dumps(list(status_values))
-    safe_limit = max(1, int(limit))
+    safe_limit = max(1, int(limit)) if limit is not None else None
     topic_key = str(topic_id or "").strip()
     topic_keys = list(
         dict.fromkeys(str(item or "").strip() for item in (topic_ids or ()))
@@ -241,8 +241,9 @@ def list_wrong_questions(
     topic_keys = [item for item in topic_keys if item]
     if topic_ids is not None and not topic_key and not topic_keys:
         return []
+    limit_sql = " LIMIT ?" if safe_limit is not None else ""
     if topic_key:
-        query = """
+        query = f"""
             SELECT *
             FROM wrong_questions
             WHERE status IN (SELECT value FROM json_each(?))
@@ -252,11 +253,15 @@ def list_wrong_questions(
                 last_retry_at DESC,
                 created_at DESC,
                 id DESC
-            LIMIT ?
+            {limit_sql}
             """
-        params: tuple[Any, ...] = (status_json, topic_key, safe_limit)
+        params: tuple[Any, ...] = (
+            (status_json, topic_key, safe_limit)
+            if safe_limit is not None
+            else (status_json, topic_key)
+        )
     elif topic_ids is not None:
-        query = """
+        query = f"""
             SELECT *
             FROM wrong_questions
             WHERE status IN (SELECT value FROM json_each(?))
@@ -266,15 +271,13 @@ def list_wrong_questions(
                 last_retry_at DESC,
                 created_at DESC,
                 id DESC
-            LIMIT ?
+            {limit_sql}
             """
-        params = (
-            status_json,
-            self._json_dumps(topic_keys),
-            safe_limit,
-        )
+        params = (status_json, self._json_dumps(topic_keys))
+        if safe_limit is not None:
+            params = (*params, safe_limit)
     else:
-        query = """
+        query = f"""
             SELECT *
             FROM wrong_questions
             WHERE status IN (SELECT value FROM json_each(?))
@@ -283,9 +286,9 @@ def list_wrong_questions(
                 last_retry_at DESC,
                 created_at DESC,
                 id DESC
-            LIMIT ?
+            {limit_sql}
             """
-        params = (status_json, safe_limit)
+        params = (status_json, safe_limit) if safe_limit is not None else (status_json,)
     rows = self._require_read_conn().execute(query, params).fetchall()
     return [self._wrong_question_from_row(row) for row in rows]
 

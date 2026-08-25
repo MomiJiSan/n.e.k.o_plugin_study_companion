@@ -250,31 +250,43 @@ class _KnowledgeEntriesMixin:
             safe_limit = max(1, min(1000, int(limit or 200)))
             stage_key = str(stage or "").strip()
             subject_key = str(subject or "").strip()
-            topics, catalog_topics, mastery, weak_topics, wrong_questions = await asyncio.gather(
+            topics = await asyncio.to_thread(
+                self._store.list_topics,
+                safe_limit,
+                subject_key or None,
+                stage_key or None,
+            )
+            scope_topic_ids = {
+                str(topic.get("id") or "").strip()
+                for topic in topics
+                if str(topic.get("id") or "").strip()
+            }
+            catalog_topics, mastery, weak_topics, wrong_questions = await asyncio.gather(
+                asyncio.to_thread(self._store.list_topics, None),
                 asyncio.to_thread(
-                    self._store.list_topics,
-                    safe_limit,
-                    subject_key or None,
-                    stage_key or None,
+                    self._store.list_latest_mastery_for_topics, scope_topic_ids
                 ),
-                asyncio.to_thread(self._store.list_topics, 1000),
-                asyncio.to_thread(self._store.list_mastery_overview, safe_limit),
                 asyncio.to_thread(
-                    self._knowledge_tracker.get_weak_topics, limit=min(50, safe_limit)
+                    self._knowledge_tracker.get_weak_topics,
+                    limit=max(1, len(scope_topic_ids)),
+                    topic_ids=scope_topic_ids,
                 ),
                 asyncio.to_thread(
-                    self._store.list_wrong_questions, limit=min(50, safe_limit)
+                    self._store.list_wrong_questions,
+                    limit=None,
+                    topic_ids=scope_topic_ids,
+                    statuses=("active", "retrying"),
                 ),
             )
-            return Ok(
-                build_knowledge_map_payload(
-                    topics=catalog_topics,
-                    scope_topic_ids={str(topic.get("id") or "") for topic in topics},
-                    mastery_overview=mastery,
-                    weak_topics=weak_topics,
-                    wrong_questions=wrong_questions,
-                )
+            payload = await asyncio.to_thread(
+                build_knowledge_map_payload,
+                topics=catalog_topics,
+                scope_topic_ids=scope_topic_ids,
+                mastery_overview=mastery,
+                weak_topics=weak_topics,
+                wrong_questions=wrong_questions,
             )
+            return Ok(payload)
         except Exception as exc:
             return _entry_exception_error(self, exc, operation="study_knowledge_map")
 
@@ -336,14 +348,14 @@ class _KnowledgeEntriesMixin:
                     for topic in topics
                     if str(topic.get("course_family") or "").strip() == course_family_key
                 ]
-            return Ok(
-                build_knowledge_guidance_payload(
-                    topics=topics,
-                    topic_id=str(topic_id or ""),
-                    query=str(query or ""),
-                    max_depth=max(1, min(5, int(max_depth or 3))),
-                )
+            payload = await asyncio.to_thread(
+                build_knowledge_guidance_payload,
+                topics=topics,
+                topic_id=str(topic_id or ""),
+                query=str(query or ""),
+                max_depth=max(1, min(5, int(max_depth or 3))),
             )
+            return Ok(payload)
         except Exception as exc:
             return _entry_exception_error(self, exc, operation="study_knowledge_guidance")
 

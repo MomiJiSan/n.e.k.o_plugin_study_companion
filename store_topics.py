@@ -442,7 +442,7 @@ def _active_seed_membership_clause() -> str:
 
 def list_topics(
     self,
-    limit: int = 100,
+    limit: int | None = 100,
     subject: str | None = None,
     stage: str | None = None,
     *,
@@ -473,12 +473,15 @@ def list_topics(
             params.append(value)
     clauses.append(_active_seed_membership_clause())
     where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(max(1, int(limit)))
+    limit_sql = ""
+    if limit is not None:
+        params.append(max(1, int(limit)))
+        limit_sql = " LIMIT ?"
     rows = (
         self._require_read_conn()
         .execute(
             f"SELECT * FROM topics{where_sql} "
-            "ORDER BY stage, subject, course_family, chapter, unit, depth, id LIMIT ?",
+            f"ORDER BY stage, subject, course_family, chapter, unit, depth, id{limit_sql}",
             tuple(params),
         )
         .fetchall()

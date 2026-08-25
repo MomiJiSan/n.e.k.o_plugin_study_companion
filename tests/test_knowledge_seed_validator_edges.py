@@ -116,6 +116,18 @@ def test_validator_detects_canonical_prerequisite_cycles(tmp_path: Path) -> None
     assert "prerequisite_cycle" in {issue.code for issue in result.issues}
 
 
+def test_validator_requires_prerequisite_mastery_threshold(tmp_path: Path) -> None:
+    result = _validate(
+        tmp_path,
+        [
+            _topic("target", prerequisites=[{"id": "prerequisite"}]),
+            _topic("prerequisite"),
+        ],
+    )
+
+    assert "missing_required_mastery" in {issue.code for issue in result.issues}
+
+
 def test_validator_requires_sortable_depth_and_difficulty(tmp_path: Path) -> None:
     missing_depth_topic = _topic("missing-depth")
     missing_depth_topic.pop("depth")
@@ -165,10 +177,10 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     report = result.report
     assert report["root_topic_counts"] == 106
     assert report["depth_gt1_root_topic_counts"] == 100
-    assert report["missing_required_mastery_count"] == 105
+    assert report["missing_required_mastery_count"] == 0
     assert report["prerequisite_depth_reverse_count"] == 48
     assert report["prerequisite_difficulty_reverse_count"] == 80
-    assert sum(report["missing_required_mastery_by_subject"].values()) == 105
+    assert sum(report["missing_required_mastery_by_subject"].values()) == 0
     assert sum(report["subject_target_context_ready_counts"].values()) + sum(
         report["subject_target_context_gap_counts"].values()
     ) == report["topic_count"]

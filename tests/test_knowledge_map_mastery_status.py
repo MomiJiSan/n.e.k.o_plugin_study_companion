@@ -89,3 +89,23 @@ def test_knowledge_map_uses_weak_results_when_overview_is_bounded(
     assert node["mastery_status"] == "weak"
     assert node["weak"] is True
     assert payload["summary"]["weak_topic_count"] == 1
+
+
+def test_knowledge_map_active_wrong_question_blocks_mastered_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ui_api = _load_ui_api(monkeypatch)
+    payload = ui_api.build_knowledge_map_payload(
+        topics=[{"id": "topic", "name": "仍需订正"}],
+        mastery_overview=[
+            {"topic_id": "topic", "mastery": 0.9954, "flags": [], "attempts": 8}
+        ],
+        wrong_questions=[{"id": "wrong-1", "topic_id": "topic", "status": "retrying"}],
+    )
+
+    node = payload["nodes"][0]
+    assert node["assessed"] is True
+    assert node["mastery"] == 0.9954
+    assert node["mastery_status"] == "progress"
+    assert node["weak"] is True
+    assert payload["summary"]["wrong_question_count"] == 1

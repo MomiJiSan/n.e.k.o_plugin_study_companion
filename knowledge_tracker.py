@@ -30,6 +30,12 @@ from .models import json_copy
 _LOGGER = logging.getLogger(__name__)
 
 
+# Seed validation requires every prerequisite to declare this value.  Keep the
+# same fallback at runtime so an older imported seed cannot silently turn a
+# missing threshold into an always-ready prerequisite.
+DEFAULT_PREREQUISITE_REQUIRED_MASTERY = 0.55
+
+
 class _BatchAnswerWriteFailed(RuntimeError):
     def __init__(self, original: Exception) -> None:
         super().__init__(str(original))
@@ -326,13 +332,44 @@ class KnowledgeGraph:
                 return str(topic.get("id") or "")
         return ""
 
-    def get_ready_topics(self, mastered: set[str]) -> list[str]:
-        ready: list[str] = []
-        mastery_by_topic = {
-            item.get("topic_id"): float(item.get("mastery") or 0.0)
-            for item in self._store.list_mastery_overview(limit=1000)
+    @staticmethod
+    def _required_mastery(requirement: dict[str, Any]) -> float:
+        """Return a valid prerequisite threshold without treating 0 as missing."""
+        try:
+            threshold = float(requirement.get("required_mastery"))
+        except (TypeError, ValueError, OverflowError):
+            return DEFAULT_PREREQUISITE_REQUIRED_MASTERY
+        if not math.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+            return DEFAULT_PREREQUISITE_REQUIRED_MASTERY
+        return threshold
+
+    def _mastery_by_topic(self, topic_ids: set[str]) -> dict[str, float]:
+        """Read the latest mastery only for the topic IDs this decision needs."""
+        if not topic_ids:
+            return {}
+        list_for_topics = getattr(self._store, "list_latest_mastery_for_topics", None)
+        if callable(list_for_topics):
+            rows = list_for_topics(topic_ids)
+        else:
+            get_latest = getattr(self._store, "get_latest_mastery", None)
+            rows = [get_latest(topic_id) for topic_id in topic_ids] if callable(get_latest) else []
+        return {
+            str(item.get("topic_id") or ""): float(item.get("mastery") or 0.0)
+            for item in rows
+            if isinstance(item, dict) and str(item.get("topic_id") or "")
         }
-        for topic in self._store.list_topics(limit=1000):
+
+    def get_ready_topics(self, mastered: set[str]) -> list[str]:
+        topics = self._store.list_topics(None)
+        prerequisite_ids = {
+            str(requirement.get("id") or "").strip()
+            for topic in topics
+            for requirement in (topic.get("prerequisites") or [])
+            if isinstance(requirement, dict) and str(requirement.get("id") or "").strip()
+        }
+        mastery_by_topic = self._mastery_by_topic(prerequisite_ids)
+        ready: list[str] = []
+        for topic in topics:
             topic_id = str(topic.get("id") or "")
             if topic_id in mastered:
                 continue
@@ -343,7 +380,7 @@ class KnowledgeGraph:
             )
             if all(
                 mastery_by_topic.get(str(req.get("id") or ""), 0.0)
-                >= float(req.get("required_mastery") or 0.0)
+                >= self._required_mastery(req)
                 for req in prerequisites
                 if isinstance(req, dict)
             ):
@@ -354,18 +391,18 @@ class KnowledgeGraph:
         topic = self._store.get_topic(topic_id)
         if not topic:
             return []
-        mastery_by_topic = {
-            item.get("topic_id"): float(item.get("mastery") or 0.0)
-            for item in self._store.list_mastery_overview(limit=1000)
+        prerequisite_ids = {
+            str(requirement.get("id") or "").strip()
+            for requirement in (topic.get("prerequisites") or [])
+            if isinstance(requirement, dict) and str(requirement.get("id") or "").strip()
         }
+        mastery_by_topic = self._mastery_by_topic(prerequisite_ids)
         blockers: list[str] = []
         for req in topic.get("prerequisites") or []:
             if not isinstance(req, dict):
                 continue
             req_id = str(req.get("id") or "")
-            if mastery_by_topic.get(req_id, 0.0) < float(
-                req.get("required_mastery") or 0.0
-            ):
+            if mastery_by_topic.get(req_id, 0.0) < self._required_mastery(req):
                 blockers.append(req_id)
         return blockers
 
@@ -1037,7 +1074,6 @@ class KnowledgeTracker:
         self,
         topic_id: str = "",
         *,
-        record_prompt_usage: bool = True,
         candidate_topic_ids: list[str] | set[str] | tuple[str, ...] | None = None,
         candidate_limit: int = 5,
         candidate_topics_by_id: dict[str, dict[str, Any]] | None = None,
@@ -1066,10 +1102,6 @@ class KnowledgeTracker:
         candidate_evidence = self.quality.prompt_evidence_summary(
             topic_id=resolved, limit=5
         )
-        if record_prompt_usage:
-            self.record_prompt_usage_for_question_params(
-                {"target_topic_id": resolved, "candidate_evidence": candidate_evidence}
-            )
         return {
             "target_topic_id": resolved,
             "target_topic": topic or {},
@@ -1095,7 +1127,6 @@ class KnowledgeTracker:
     ) -> dict[str, Any]:
         return self.get_next_question_params(
             topic_id,
-            record_prompt_usage=False,
             candidate_topic_ids=candidate_topic_ids,
             candidate_limit=candidate_limit,
             candidate_topics_by_id=candidate_topics_by_id,
@@ -1652,7 +1683,10 @@ class KnowledgeTracker:
         if retry:
             return "Use a variant of the active wrong question and check whether the same error type reappears."
         if blockers:
-            return "Ask a prerequisite check before the target topic."
+            return (
+                "Directly assess the target topic, using the smallest prerequisite "
+                "step only to reveal the blocker."
+            )
         if mastery < 0.35:
             return "Use a direct recall or single-step question with a visible hint."
         if mastery < 0.65:
