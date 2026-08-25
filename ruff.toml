@@ -2,7 +2,13 @@
 # managed-template: plugin-market-actions-v1
 target-version = "py311"
 line-length = 120
-extend-exclude = ["vendor"]
+extend-exclude = [
+    "vendor",
+    ".codex-*",
+    ".codex_tmp",
+    ".gitnexus",
+    ".pytest-*",
+]
 respect-gitignore = false
 
 [lint]
