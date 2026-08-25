@@ -14,8 +14,14 @@ from ._graph_utils import (
 )
 from .knowledge_graph_edges import (
     ALLOWED_RELATIONS as _ALLOWED_RELATIONS,
+)
+from .knowledge_graph_edges import (
     FOCUSED_RELATION_DIRECTION as _FOCUSED_RELATION_DIRECTION,
+)
+from .knowledge_graph_edges import (
     SYMMETRIC_RELATIONS as _SYMMETRIC_RELATIONS,
+)
+from .knowledge_graph_edges import (
     build_topic_edges as _build_topic_edges,
 )
 from .knowledge_graph_edges import (
