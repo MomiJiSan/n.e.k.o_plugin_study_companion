@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import deque
 from typing import Any
 
@@ -70,6 +71,22 @@ GENERIC_QUERY_TERMS = {
     "\u7528\u6765",
     "\u4e00\u5b9a",
     "\u4e0d\u4e00\u5b9a",
+    "\u51fa\u9898",
+    "\u751f\u9898",
+    "\u7ec3\u4e60",
+    "\u9898\u76ee",
+    "\u4e00\u9053",
+    "\u4e00\u4e2a",
+    "\u5185\u5bb9",
+    "\u6839\u636e",
+    "\u5e2e\u6211",
+    "\u7ed9\u6211",
+    "\u8fd9\u6bb5",
+    "create",
+    "generate",
+    "question",
+    "practice",
+    "exercise",
 }
 SUBJECT_QUERY_HINTS = {
     "math": {
@@ -350,6 +367,24 @@ def _query_terms(query: str) -> list[str]:
     )
 
 
+def _has_meaningful_plain_query_term(query: str) -> bool:
+    normalized = _text(query).lower()
+    if any(
+        len(token) >= 2 and token not in GENERIC_QUERY_TERMS
+        for token in re.findall(r"[a-z0-9]+", normalized)
+    ):
+        return True
+    cjk = "".join(
+        char if "\u4e00" <= char <= "\u9fff" else " " for char in normalized
+    )
+    for stopword in sorted(GENERIC_QUERY_TERMS, key=len, reverse=True):
+        cjk = cjk.replace(stopword, " ")
+    cjk = cjk.replace("\u6709", " ")
+    for connector in ("\u548c", "\u4e0e", "\u8ddf", "\u53ca", "\u3001"):
+        cjk = cjk.replace(connector, " ")
+    return any(len(fragment) >= 2 for fragment in cjk.split())
+
+
 def _subject_hints(query: str) -> set[str]:
     normalized = _text(query).lower()
     if not normalized:
@@ -382,11 +417,16 @@ def match_topics(
             }
         ]
     query_text = query or topic_id
+    subject_scope = _text(subject).lower()
+    plain_query = not subject_scope
+    if plain_query and not _has_meaningful_plain_query_term(query_text):
+        return []
     terms = _query_terms(query_text)
+    if plain_query:
+        terms = [term for term in terms if len(term) >= 2]
     subject_hints = _subject_hints(query_text)
     if not terms:
         return []
-    subject_scope = _text(subject).lower()
     if subject_scope == "unknown":
         return []
     scored: list[dict[str, Any]] = []

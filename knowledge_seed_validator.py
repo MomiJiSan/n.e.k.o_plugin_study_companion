@@ -24,6 +24,17 @@ except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
         SYMMETRIC_RELATIONS,
     )
 
+try:  # Support both package imports and the standalone validation command.
+    from .knowledge_seed_semantics import (
+        STAGE_ORDER,
+        validate_normalized_knowledge_topics,
+    )
+except ImportError:  # pragma: no cover - ``python knowledge_seed_validator.py``
+    from knowledge_seed_semantics import (
+        STAGE_ORDER,
+        validate_normalized_knowledge_topics,
+    )
+
 REQUIRED_SCALAR_FIELDS = ("id", "name", "subject", "stage", "chapter")
 REQUIRED_LIST_FIELDS = (
     "prerequisites",
@@ -44,7 +55,6 @@ QUALITY_LIST_FIELDS = (
 RESERVED_CONTEXT_FIELDS = ("curriculum_version", "exam_region", "exam_type")
 TAXONOMY_FILE_NAME = "knowledge_seed_taxonomy.json"
 ALLOWED_EDGE_RELATIONS = _ALLOWED_RELATIONS
-EDGE_RELATION_ALIASES = {"related", "similar", "compare"}
 SYMMETRIC_EDGE_RELATIONS = SYMMETRIC_RELATIONS
 SEMANTIC_EDGE_RELATIONS = SEMANTIC_RELATIONS
 TYPED_EDGE_REQUIRED_FIELDS = ("id", "relation", "reason")
@@ -103,12 +113,6 @@ SUBJECT_MINIMUM_STANDARDS: dict[str, dict[str, tuple[str, ...]]] = {
 SUBJECT_MINIMUM_GAP_SAMPLE_LIMIT = 10
 QUALITY_ACTION_LIST_LIMIT = 12
 LEGACY_EDGE_SAMPLE_LIMIT = 20
-STAGE_ORDER = {
-    "primary": 0,
-    "junior_high": 1,
-    "senior_high": 2,
-    "college": 3,
-}
 
 
 @dataclass(frozen=True)
@@ -603,43 +607,6 @@ def _validate_typed_edge(
     if not isinstance(ref, dict):
         return
     source_id = str(topic.data.get("id") or "").strip()
-    relation = _edge_relation(field, ref)
-    if relation in EDGE_RELATION_ALIASES:
-        issues.append(
-            KnowledgeSeedIssue(
-                "edge_relation_alias",
-                f"{field} contains unsupported relation alias: {relation}",
-                str(topic.path),
-                source_id,
-            )
-        )
-    elif relation not in ALLOWED_EDGE_RELATIONS:
-        issues.append(
-            KnowledgeSeedIssue(
-                "unknown_edge_relation",
-                f"{field} contains unknown relation: {relation}",
-                str(topic.path),
-                source_id,
-            )
-        )
-    if field == "prerequisites" and relation != "prerequisite":
-        issues.append(
-            KnowledgeSeedIssue(
-                "invalid_edge_relation_placement",
-                "prerequisites may only contain prerequisite relations",
-                str(topic.path),
-                source_id,
-            )
-        )
-    if field == "related" and relation == "prerequisite":
-        issues.append(
-            KnowledgeSeedIssue(
-                "invalid_edge_relation_placement",
-                "related must not contain prerequisite relations",
-                str(topic.path),
-                source_id,
-            )
-        )
     if _is_typed_edge(ref):
         for required_field in TYPED_EDGE_REQUIRED_FIELDS:
             if required_field == "relation" and field == "prerequisites":
@@ -713,12 +680,19 @@ def _validate_typed_edge(
                     source_id,
                 )
             )
-    if ref.get("required_mastery") is not None:
+    # Prerequisite mastery is part of the shared graph contract below.  Keep
+    # validating the optional field on other typed edges for CLI compatibility.
+    if field != "prerequisites" and ref.get("required_mastery") is not None:
+        raw_mastery = ref.get("required_mastery")
         try:
-            required_mastery = float(ref.get("required_mastery"))
-        except (TypeError, ValueError):
-            required_mastery = -1.0
-        if not 0.0 <= required_mastery <= 1.0:
+            required_mastery = float(raw_mastery)
+        except (TypeError, ValueError, OverflowError):
+            required_mastery = math.nan
+        if (
+            isinstance(raw_mastery, bool)
+            or not math.isfinite(required_mastery)
+            or not 0.0 <= required_mastery <= 1.0
+        ):
             issues.append(
                 KnowledgeSeedIssue(
                     "invalid_required_mastery",
@@ -727,118 +701,36 @@ def _validate_typed_edge(
                     source_id,
                 )
             )
-
-
 def _validate_references(
     topics: Iterable[KnowledgeSeedTopic],
     topic_ids: set[str],
     issues: list[KnowledgeSeedIssue],
 ) -> None:
-    seen_edges: dict[tuple[str, str, str], str] = {}
-    for topic in topics:
-        source_id = str(topic.data.get("id") or "").strip()
+    del topic_ids  # The shared semantic validator derives ids from normalized topics.
+    topic_items = list(topics)
+    for topic in topic_items:
         for field in ("prerequisites", "related"):
             refs = topic.data.get(field)
             if not isinstance(refs, list):
                 continue
             for ref in refs:
                 _validate_typed_edge(field=field, ref=ref, topic=topic, issues=issues)
-                if field == "prerequisites" and (
-                    not isinstance(ref, dict) or ref.get("required_mastery") is None
-                ):
-                    issues.append(
-                        KnowledgeSeedIssue(
-                            "missing_required_mastery",
-                            "prerequisite edge must declare required_mastery",
-                            str(topic.path),
-                            source_id,
-                        )
-                    )
-                target_id = _ref_id(ref)
-                if not target_id:
-                    issues.append(
-                        KnowledgeSeedIssue(
-                            "invalid_reference",
-                            f"{field} contains an empty reference",
-                            str(topic.path),
-                            source_id,
-                        )
-                    )
-                    continue
-                relation = _edge_relation(field, ref)
-                if source_id == target_id:
-                    issues.append(
-                        KnowledgeSeedIssue(
-                            "self_reference",
-                            f"{field} must not reference its own topic",
-                            str(topic.path),
-                            source_id,
-                        )
-                    )
-                if relation in SYMMETRIC_EDGE_RELATIONS:
-                    edge_key = (*sorted((source_id, target_id)), relation)
-                else:
-                    edge_key = (source_id, target_id, relation)
-                previous_path = seen_edges.get(edge_key)
-                if previous_path is not None:
-                    issues.append(
-                        KnowledgeSeedIssue(
-                            "duplicate_edge",
-                            f"duplicate {relation} edge; first declared in {previous_path}",
-                            str(topic.path),
-                            source_id,
-                        )
-                    )
-                else:
-                    seen_edges[edge_key] = str(topic.path)
-                if target_id not in topic_ids:
-                    issues.append(
-                        KnowledgeSeedIssue(
-                            "missing_reference",
-                            f"{field} references missing topic: {target_id}",
-                            str(topic.path),
-                            source_id,
-                        )
-                    )
-
-
-def _validate_prerequisite_stage_order(
-    topics: Iterable[KnowledgeSeedTopic],
-    issues: list[KnowledgeSeedIssue],
-) -> None:
-    topic_by_id = {
-        str(topic.data.get("id") or "").strip(): topic
-        for topic in topics
+    path_by_id = {
+        str(topic.data.get("id") or "").strip(): str(topic.path)
+        for topic in topic_items
         if str(topic.data.get("id") or "").strip()
     }
-    for target_topic in topics:
-        target_id = str(target_topic.data.get("id") or "").strip()
-        target_rank = STAGE_ORDER.get(target_topic.stage)
-        refs = target_topic.data.get("prerequisites")
-        if target_rank is None or not isinstance(refs, list):
-            continue
-        for ref in refs:
-            if _edge_relation("prerequisites", ref) != "prerequisite":
-                continue
-            prerequisite_id = _ref_id(ref)
-            prerequisite_topic = topic_by_id.get(prerequisite_id)
-            if prerequisite_topic is None:
-                continue
-            prerequisite_rank = STAGE_ORDER.get(prerequisite_topic.stage)
-            if prerequisite_rank is None or prerequisite_rank <= target_rank:
-                continue
-            issues.append(
-                KnowledgeSeedIssue(
-                    "reverse_stage_prerequisite",
-                    (
-                        "prerequisite source stage must not be higher than target "
-                        f"stage: {prerequisite_id} ({prerequisite_topic.stage}) -> "
-                        f"{target_id} ({target_topic.stage})"
-                    ),
-                    str(target_topic.path),
-                    target_id,
-                )
+    for issue in validate_normalized_knowledge_topics(
+        topic.data for topic in topic_items
+    ):
+        issues.append(
+            KnowledgeSeedIssue(
+                issue.code,
+                issue.message,
+                path_by_id.get(issue.topic_id, ""),
+                issue.topic_id,
             )
+        )
 
 
 def _find_prerequisite_cycle_nodes(prerequisite_edges: dict[str, set[str]]) -> set[str]:
@@ -1442,7 +1334,6 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
             continue
         topic_ids.add(topic_id)
     _validate_references(topics, topic_ids, issues)
-    _validate_prerequisite_stage_order(topics, issues)
     _validate_taxonomy_coverage(topics, issues)
     _validate_stage_specific_context(topics, issues)
 
@@ -1471,7 +1362,6 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
 
     topic_tuple = tuple(topics)
     report = _build_quality_report(topic_tuple)
-    _validate_graph_quality(topic_tuple, report, issues)
     return KnowledgeSeedValidationResult(
         topic_tuple,
         tuple(issues),

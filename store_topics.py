@@ -4,6 +4,10 @@ import hashlib
 import hmac
 
 from .knowledge_graph_edges import build_topic_edges
+from .knowledge_seed_semantics import (
+    normalize_runtime_topic_relations,
+    validate_normalized_knowledge_topics,
+)
 from .store_common import (
     Any,
     Path,
@@ -116,20 +120,30 @@ def _read_knowledge_seed_bundle(
             source_payloads.append(child_payload)
     else:
         raise ValueError("invalid_manifest")
-    topics: list[dict[str, Any]] = []
+    hash_topics: list[dict[str, Any]] = []
     for payload in source_payloads:
         raw_topics = payload.get("topics")
         if not isinstance(raw_topics, list):
             raise ValueError("invalid_topics")
         defaults = {"subject": str(payload.get("subject") or manifest.get("subject") or "math").strip(), "stage": _seed_stage(payload, _seed_stage(manifest))}
-        topics.extend(_normalize_seed_topic(item, defaults) for item in raw_topics)
-    if len({topic["id"] for topic in topics}) != len(topics):
+        hash_topics.extend(_normalize_seed_topic(item, defaults) for item in raw_topics)
+    if len({topic["id"] for topic in hash_topics}) != len(hash_topics):
         raise ValueError("duplicate_topic_id")
+    topics = [normalize_runtime_topic_relations(topic) for topic in hash_topics]
+    semantic_issues = validate_normalized_knowledge_topics(topics)
+    if semantic_issues:
+        issue_codes = ",".join(sorted({issue.code for issue in semantic_issues}))
+        raise ValueError(f"invalid_topic_semantics:{issue_codes}")
     expected_total = manifest.get("total_topics")
     if isinstance(expected_total, int) and expected_total != len(topics):
         raise ValueError("invalid_manifest")
     topics.sort(key=lambda item: item["id"])
-    canonical = json.dumps({"protocol": protocol, "revision": revision, "topics": topics}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    hash_topics.sort(key=lambda item: item["id"])
+    # The content hash predates runtime relation upgrades.  Keep hashing the
+    # compatibility-normalized representation so an existing scalar-edge
+    # manifest remains idempotent across plugin upgrades; validate and persist
+    # the upgraded topics returned below.
+    canonical = json.dumps({"protocol": protocol, "revision": revision, "topics": hash_topics}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     declared_hash = manifest.get("manifest_sha256")
     if declared_hash is not None and (
