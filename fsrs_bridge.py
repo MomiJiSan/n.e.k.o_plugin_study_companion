@@ -215,7 +215,11 @@ def get_due_reviews(
         card = StudyFsrsCard.from_dict(raw) if isinstance(raw, dict) else raw
         due_at = _parse_dt(card.due, current)
         retention = retrievability(card, current)
-        is_due = due_at <= current or retention < target
+        # ``due`` is the scheduling contract persisted with the card.  Using a
+        # separate retention threshold here used to make a card enter the queue
+        # hours or days before the due timestamp returned to clients.  Retention
+        # still informs priority among cards that are already due.
+        is_due = due_at <= current
         if not is_due:
             continue
         overdue_days = max(0.0, (current - due_at).total_seconds() / 86400.0)

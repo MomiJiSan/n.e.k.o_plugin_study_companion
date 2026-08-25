@@ -326,7 +326,8 @@ class _TutorContextSupportMixin:
                     retrieval_concepts=(str(explicit_topic.get("label") or ""),),
                     confidence=1.0,
                 )
-                guidance = build_knowledge_guidance_payload(
+                guidance = await asyncio.to_thread(
+                    build_knowledge_guidance_payload,
                     topics=topic_items,
                     topic_id=topic_id,
                     query=query,
@@ -343,7 +344,8 @@ class _TutorContextSupportMixin:
                     response_mode=explicit_response_mode,
                 )
             if operation != LLM_OPERATION_CONCEPT_EXPLAIN:
-                guidance = build_knowledge_guidance_payload(
+                guidance = await asyncio.to_thread(
+                    build_knowledge_guidance_payload,
                     topics=topic_items,
                     query=query,
                     max_depth=3,
@@ -405,7 +407,8 @@ class _TutorContextSupportMixin:
                     semantics=semantics,
                     semantic_status="available",
                 )
-            guidance = build_knowledge_guidance_payload(
+            guidance = await asyncio.to_thread(
+                build_knowledge_guidance_payload,
                 # Match selection remains subject-scoped above.  Build the
                 # selected topic's graph from the complete server-side set so
                 # incident cross-subject edges retain both endpoints.
