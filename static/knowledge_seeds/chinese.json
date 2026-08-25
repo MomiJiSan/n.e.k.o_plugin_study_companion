@@ -892,7 +892,7 @@
       "chapter": "现代文阅读",
       "depth": 2,
       "difficulty": 0.6,
-      "prerequisites": [{"id": "chinese_senior_classical_function_words","reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.","priority": "core","context": "explanation","confidence": 0.88,"use_cases": ["learning_path","practice_planning","review"],"metadata": {"source_subject": "chinese","target_subject": "chinese","validation_batch": "chinese_ready_core_relations_2026_06_26"}, "required_mastery": 0.55}],
+      "prerequisites": [],
       "related": [
         {
           "id": "chinese_senior_classical_translation",
@@ -3186,6 +3186,25 @@
             "migrated_for": "chinese_edge_migration_2026_06_26",
             "chapter_focus": "高中语文文言文"
           }
+        },
+        {
+          "id": "chinese_junior_classical_function_words",
+          "relation": "prerequisite",
+          "reason": "Junior function-word usage prepares students for denser senior classical function-word analysis.",
+          "priority": "core",
+          "context": "explanation",
+          "confidence": 0.88,
+          "use_cases": [
+            "learning_path",
+            "practice_planning",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "chinese",
+            "target_subject": "chinese",
+            "validation_batch": "chinese_ready_core_relations_2026_06_26"
+          },
+          "required_mastery": 0.55
         }
       ],
       "related": [

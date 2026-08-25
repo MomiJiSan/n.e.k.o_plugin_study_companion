@@ -2203,26 +2203,7 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
-        },
-        {
-          "id": "college_derivative_definition",
-          "priority": "core",
-          "context": "explanation",
-          "confidence": 0.89,
-          "reason": "理解瞬时速度和瞬时加速度需要先理解导数作为瞬时变化率的定义。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "导数->速度/加速度",
-            "physics_use": "用变化率解释图像切线斜率"
-          }
-        , "required_mastery": 0.55}
+        }
       ],
       "related": [
         {
@@ -3240,26 +3221,7 @@
           "priority": "core",
           "context": "diagnosis",
           "confidence": 0.88
-        },
-        {
-          "id": "college_definite_integral",
-          "priority": "core",
-          "context": "practice",
-          "confidence": 0.9,
-          "reason": "变力做功和 v-t 图像位移都需要先理解定积分表示连续累积量。",
-          "use_cases": [
-            "learning_path",
-            "hint_generation",
-            "review"
-          ],
-          "metadata": {
-            "source_subject": "physics",
-            "target_subject": "math",
-            "bridge_direction": "math_to_physics",
-            "bridge_focus": "积分->位移/功",
-            "physics_use": "用面积或累积量解释位移、功和能量变化"
-          }
-        , "required_mastery": 0.55}
+        }
       ],
       "related": [
         {

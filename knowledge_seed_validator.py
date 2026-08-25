@@ -103,6 +103,12 @@ SUBJECT_MINIMUM_STANDARDS: dict[str, dict[str, tuple[str, ...]]] = {
 SUBJECT_MINIMUM_GAP_SAMPLE_LIMIT = 10
 QUALITY_ACTION_LIST_LIMIT = 12
 LEGACY_EDGE_SAMPLE_LIMIT = 20
+STAGE_ORDER = {
+    "primary": 0,
+    "junior_high": 1,
+    "senior_high": 2,
+    "college": 3,
+}
 
 
 @dataclass(frozen=True)
@@ -796,6 +802,45 @@ def _validate_references(
                     )
 
 
+def _validate_prerequisite_stage_order(
+    topics: Iterable[KnowledgeSeedTopic],
+    issues: list[KnowledgeSeedIssue],
+) -> None:
+    topic_by_id = {
+        str(topic.data.get("id") or "").strip(): topic
+        for topic in topics
+        if str(topic.data.get("id") or "").strip()
+    }
+    for target_topic in topics:
+        target_id = str(target_topic.data.get("id") or "").strip()
+        target_rank = STAGE_ORDER.get(target_topic.stage)
+        refs = target_topic.data.get("prerequisites")
+        if target_rank is None or not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if _edge_relation("prerequisites", ref) != "prerequisite":
+                continue
+            prerequisite_id = _ref_id(ref)
+            prerequisite_topic = topic_by_id.get(prerequisite_id)
+            if prerequisite_topic is None:
+                continue
+            prerequisite_rank = STAGE_ORDER.get(prerequisite_topic.stage)
+            if prerequisite_rank is None or prerequisite_rank <= target_rank:
+                continue
+            issues.append(
+                KnowledgeSeedIssue(
+                    "reverse_stage_prerequisite",
+                    (
+                        "prerequisite source stage must not be higher than target "
+                        f"stage: {prerequisite_id} ({prerequisite_topic.stage}) -> "
+                        f"{target_id} ({target_topic.stage})"
+                    ),
+                    str(target_topic.path),
+                    target_id,
+                )
+            )
+
+
 def _find_prerequisite_cycle_nodes(prerequisite_edges: dict[str, set[str]]) -> set[str]:
     cycle_nodes: set[str] = set()
     visiting: set[str] = set()
@@ -904,6 +949,7 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
     missing_required_mastery_by_subject: dict[str, int] = {}
     prerequisite_depth_reverse_count = 0
     prerequisite_difficulty_reverse_count = 0
+    prerequisite_stage_reverse_count = 0
 
     for topic in topics:
         source_id = str(topic.data.get("id") or "").strip()
@@ -995,6 +1041,16 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
                                 missing_required_mastery_by_subject.get(subject, 0) + 1
                             )
                         prerequisite_topic = topic_by_id[canonical_source_id]
+                        prerequisite_stage_rank = STAGE_ORDER.get(
+                            prerequisite_topic.stage
+                        )
+                        target_stage_rank = STAGE_ORDER.get(topic.stage)
+                        if (
+                            prerequisite_stage_rank is not None
+                            and target_stage_rank is not None
+                            and prerequisite_stage_rank > target_stage_rank
+                        ):
+                            prerequisite_stage_reverse_count += 1
                         prerequisite_depth = prerequisite_topic.data.get("depth")
                         target_depth = topic.data.get("depth")
                         if (
@@ -1286,6 +1342,7 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         ),
         "prerequisite_depth_reverse_count": prerequisite_depth_reverse_count,
         "prerequisite_difficulty_reverse_count": prerequisite_difficulty_reverse_count,
+        "prerequisite_stage_reverse_count": prerequisite_stage_reverse_count,
         "legacy_edge_samples": legacy_edge_samples,
         "recommended_next_batch": recommended_next_batch,
         "relation_counts": dict(sorted(edge_counts.items())),
@@ -1385,6 +1442,7 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
             continue
         topic_ids.add(topic_id)
     _validate_references(topics, topic_ids, issues)
+    _validate_prerequisite_stage_order(topics, issues)
     _validate_taxonomy_coverage(topics, issues)
     _validate_stage_specific_context(topics, issues)
 

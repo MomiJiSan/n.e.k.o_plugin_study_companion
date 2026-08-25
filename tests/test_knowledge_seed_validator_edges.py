@@ -128,6 +128,57 @@ def test_validator_requires_prerequisite_mastery_threshold(tmp_path: Path) -> No
     assert "missing_required_mastery" in {issue.code for issue in result.issues}
 
 
+def test_validator_rejects_prerequisite_from_higher_stage(tmp_path: Path) -> None:
+    result = _validate(
+        tmp_path,
+        [
+            _topic(
+                "primary-target",
+                stage="primary",
+                prerequisites=[
+                    {
+                        "id": "junior-prerequisite",
+                        "relation": "prerequisite",
+                        "reason": "wrong stage direction",
+                        "required_mastery": 0.55,
+                    }
+                ],
+            ),
+            _topic("junior-prerequisite", stage="junior_high"),
+        ],
+    )
+
+    assert "reverse_stage_prerequisite" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_validator_allows_prerequisite_from_lower_stage(tmp_path: Path) -> None:
+    result = _validate(
+        tmp_path,
+        [
+            _topic("primary-prerequisite", stage="primary"),
+            _topic(
+                "junior-target",
+                stage="junior_high",
+                prerequisites=[
+                    {
+                        "id": "primary-prerequisite",
+                        "relation": "prerequisite",
+                        "reason": "correct stage direction",
+                        "required_mastery": 0.55,
+                    }
+                ],
+            ),
+        ],
+    )
+
+    assert result.is_valid
+    assert "reverse_stage_prerequisite" not in {
+        issue.code for issue in result.issues
+    }
+
+
 def test_validator_requires_sortable_depth_and_difficulty(tmp_path: Path) -> None:
     missing_depth_topic = _topic("missing-depth")
     missing_depth_topic.pop("depth")
@@ -167,6 +218,14 @@ def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
     result = validate_knowledge_seed_manifest(manifest)
 
     assert result.is_valid
+    assert len(result.topics) == 892
+    assert result.report is not None
+    assert result.report["cycles_in_prerequisites"] == 0
+    assert result.report["isolated_nodes"] == 0
+    assert result.report["prerequisite_stage_reverse_count"] == 0
+    assert result.report["edge_count"] == 4790
+    assert result.report["relation_counts"]["prerequisite"] == 1019
+    assert result.report["relation_counts"]["supports"] == 13
 
 
 def test_bundled_seed_target_context_audit_baseline() -> None:
@@ -178,8 +237,8 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     assert report["root_topic_counts"] == 106
     assert report["depth_gt1_root_topic_counts"] == 100
     assert report["missing_required_mastery_count"] == 0
-    assert report["prerequisite_depth_reverse_count"] == 48
-    assert report["prerequisite_difficulty_reverse_count"] == 80
+    assert report["prerequisite_depth_reverse_count"] == 46
+    assert report["prerequisite_difficulty_reverse_count"] == 77
     assert sum(report["missing_required_mastery_by_subject"].values()) == 0
     assert sum(report["subject_target_context_ready_counts"].values()) + sum(
         report["subject_target_context_gap_counts"].values()
