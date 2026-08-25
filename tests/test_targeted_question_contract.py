@@ -562,12 +562,22 @@ def test_unscoped_selection_skips_cooling_retry_and_falls_back_to_due_review(
             return {
                 "target_topic_id": topic_id,
                 "target_topic": self.store.get_topic(topic_id),
+                "mastery": {"mastery": 0.5},
+                "blockers": [],
                 "retry_wrong_question": {
                     "id": "cooling-wrong",
                     "topic_id": topic_id,
                 },
+                "prompt_guidance": "Use a variant of the active wrong question.",
                 "suggested_difficulty": 3,
             }
+
+        @staticmethod
+        def _question_guidance(mastery, *, blockers, retry):
+            assert mastery == 0.5
+            assert blockers == []
+            assert retry is None
+            return "normal-due-review-guidance"
 
     class Subject(entries._TutorQuestionEntriesMixin):
         _knowledge_tracker = Tracker()
@@ -581,6 +591,9 @@ def test_unscoped_selection_skips_cooling_retry_and_falls_back_to_due_review(
     assert result["selection_reason"] == "due_review"
     assert result["selected_topic_id"] == "due-topic"
     assert result["question_params"]["retry_wrong_question"] == {}
+    assert result["question_params"]["prompt_guidance"] == (
+        "normal-due-review-guidance"
+    )
 
 
 def test_scoped_retry_cooldown_applies_to_broad_scope_but_not_explicit_topic(

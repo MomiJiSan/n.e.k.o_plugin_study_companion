@@ -600,6 +600,19 @@ class _TutorQuestionEntriesMixin:
             if str(selected_retry.get("topic_id") or "").strip() == selected_topic_id:
                 focused["retry_wrong_questions"] = [selected_retry]
                 focused["retry_wrong_question"] = selected_retry
+        else:
+            guidance_builder = getattr(
+                self._knowledge_tracker, "_question_guidance", None
+            )
+            if callable(guidance_builder):
+                mastery = dict(focused.get("mastery") or {})
+                focused["prompt_guidance"] = guidance_builder(
+                    float(mastery.get("mastery") or 0.0),
+                    blockers=list(focused.get("blockers") or []),
+                    retry=None,
+                )
+            else:
+                focused.pop("prompt_guidance", None)
         focused["target_topic_id"] = selected_topic_id
         focused["target_topic"] = (
             self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
