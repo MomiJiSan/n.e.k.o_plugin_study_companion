@@ -544,7 +544,7 @@ def test_unscoped_selection_refocuses_on_retry_with_complete_params(
     entries, _ = _load_entries(monkeypatch, "_targeted_focus_test")
 
     class Store:
-        def list_wrong_questions(self, **_kwargs):
+        def list_auto_retry_candidates(self, **_kwargs):
             return [{"id": "wrong-1", "topic_id": "target"}]
 
         def get_topic(self, topic_id):
@@ -561,7 +561,10 @@ def test_unscoped_selection_refocuses_on_retry_with_complete_params(
                 "target_topic": self.store.get_topic(topic_id),
                 "mastery": {"mastery": 0.41},
                 "blockers": [{"id": "pre"}],
-                "retry_wrong_question": {"id": "wrong-1", "topic_id": topic_id},
+                "retry_wrong_question": {
+                    "id": "newer-cooling-wrong",
+                    "topic_id": topic_id,
+                },
                 "suggested_difficulty": 3,
             }
 
@@ -579,6 +582,139 @@ def test_unscoped_selection_refocuses_on_retry_with_complete_params(
     assert result["question_params"]["mastery"]["mastery"] == 0.41
     assert result["question_params"]["blockers"] == [{"id": "pre"}]
     assert result["question_params"]["retry_wrong_question"]["id"] == "wrong-1"
+
+
+def test_unscoped_selection_skips_cooling_retry_and_falls_back_to_due_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_retry_cooldown_test")
+
+    class Store:
+        def list_auto_retry_candidates(self, **_kwargs):
+            return []
+
+        def get_topic(self, topic_id):
+            return {"id": topic_id, "name": "Due topic"}
+
+    class Tracker:
+        store = Store()
+
+        def preview_next_question_params(self, topic_id="", **_kwargs):
+            if not topic_id:
+                return {
+                    "retry_wrong_question": {
+                        "id": "cooling-wrong",
+                        "topic_id": "due-topic",
+                    },
+                    "due_reviews": [
+                        {
+                            "topic_id": "due-topic",
+                            "topic": {"id": "due-topic", "name": "Due topic"},
+                        }
+                    ],
+                    "weak_topics": [{"topic_id": "weak-topic"}],
+                }
+            return {
+                "target_topic_id": topic_id,
+                "target_topic": self.store.get_topic(topic_id),
+                "mastery": {"mastery": 0.5},
+                "blockers": [],
+                "retry_wrong_question": {
+                    "id": "cooling-wrong",
+                    "topic_id": topic_id,
+                },
+                "prompt_guidance": "Use a variant of the active wrong question.",
+                "suggested_difficulty": 3,
+            }
+
+        @staticmethod
+        def _question_guidance(mastery, *, blockers, retry):
+            assert mastery == 0.5
+            assert blockers == []
+            assert retry is None
+            return "normal-due-review-guidance"
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = Tracker()
+        _state = SimpleNamespace(practice_scope_revision=0)
+        _targeted_context_lock = None
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+    result = Subject()._build_targeted_question_context()
+    assert result["selection_reason"] == "due_review"
+    assert result["selected_topic_id"] == "due-topic"
+    assert result["question_params"]["retry_wrong_question"] == {}
+    assert result["question_params"]["prompt_guidance"] == (
+        "normal-due-review-guidance"
+    )
+
+
+def test_scoped_retry_cooldown_applies_to_broad_scope_but_not_explicit_topic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_scoped_retry_cooldown_test")
+    calls: list[str] = []
+
+    class Store:
+        def get_topic(self, topic_id):
+            return {"id": topic_id, "name": "Target"}
+
+        def list_topics(self, *_args, **_kwargs):
+            return [{"id": "target", "name": "Target"}]
+
+        def list_latest_mastery_for_topics(self, _eligible):
+            return []
+
+        def list_auto_retry_candidates(self, **_kwargs):
+            calls.append("auto")
+            return []
+
+        def list_wrong_questions(self, **_kwargs):
+            calls.append("display")
+            return [{"id": "cooling-wrong", "topic_id": "target"}]
+
+    class Tracker:
+        store = Store()
+
+        def preview_next_question_params(self, topic_id="", **_kwargs):
+            return {
+                "target_topic_id": topic_id,
+                "target_topic": self.store.get_topic(topic_id),
+                "retry_wrong_question": {
+                    "id": "cooling-wrong",
+                    "topic_id": "target",
+                },
+            }
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = Tracker()
+
+    broad_scope = SimpleNamespace(
+        mode="explicit_scope",
+        eligible_topic_ids=["target"],
+        topic_id="",
+        subject="math",
+        stage="junior_high",
+        chapter="",
+        unit="",
+        course_family="",
+    )
+    explicit_topic = SimpleNamespace(
+        **{**vars(broad_scope), "mode": "explicit_topic", "topic_id": "target"}
+    )
+    explicit_topic.to_public_dict = lambda: {
+        "mode": "explicit_topic",
+        "topic_id": "target",
+    }
+
+    broad = Subject()._scoped_question_params(broad_scope)
+    explicit = Subject()._scoped_question_params(explicit_topic)
+
+    assert broad["retry_wrong_question"] == {}
+    assert explicit["retry_wrong_question"]["id"] == "cooling-wrong"
+    assert calls == ["auto", "display"]
 
 
 def test_server_target_binding_uses_only_selected_retry(

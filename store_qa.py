@@ -293,6 +293,67 @@ def list_wrong_questions(
     return [self._wrong_question_from_row(row) for row in rows]
 
 
+def list_auto_retry_candidates(
+    self,
+    *,
+    limit: int | None = 20,
+    topic_ids: list[str] | set[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Return wrong questions currently eligible for automatic practice.
+
+    This is deliberately separate from ``list_wrong_questions``: the latter is
+    the user-facing history/list query and must keep showing cooling items.
+    """
+    safe_limit = max(1, int(limit)) if limit is not None else None
+    topic_keys = list(
+        dict.fromkeys(str(item or "").strip() for item in (topic_ids or ()))
+    )
+    topic_keys = [item for item in topic_keys if item]
+    if topic_ids is not None and not topic_keys:
+        return []
+
+    scope_sql = ""
+    params: tuple[Any, ...] = ()
+    if topic_ids is not None:
+        scope_sql = "AND topic_id IN (SELECT value FROM json_each(?))"
+        params = (self._json_dumps(topic_keys),)
+    limit_sql = " LIMIT ?" if safe_limit is not None else ""
+    if safe_limit is not None:
+        params = (*params, safe_limit)
+
+    rows = self._require_read_conn().execute(
+        f"""
+        SELECT *
+        FROM wrong_questions
+        WHERE (
+            (status = 'active' AND last_retry_at IS NULL)
+            OR (
+                status = 'retrying'
+                AND consecutive_correct = 0
+                AND (
+                    last_retry_at IS NULL
+                    OR (julianday('now') - julianday(last_retry_at)) >= (30.0 / 1440.0)
+                )
+            )
+            OR (
+                status = 'retrying'
+                AND consecutive_correct > 0
+                AND (julianday('now') - julianday(last_error_at)) >= 1.0
+            )
+        )
+        {scope_sql}
+        ORDER BY
+            CASE WHEN last_retry_at IS NULL THEN 0 ELSE 1 END,
+            last_retry_at ASC,
+            created_at ASC,
+            id ASC
+        {limit_sql}
+        """,
+        params,
+    ).fetchall()
+    return [self._wrong_question_from_row(row) for row in rows]
+
+
 def mark_wrong_question_resolved(self, question_id: str) -> None:
     with self._lock:
         self._require_conn().execute(

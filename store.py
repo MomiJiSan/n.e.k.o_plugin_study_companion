@@ -69,6 +69,7 @@ from .store_qa import (
     ensure_session,
     get_retry_wrong_question,
     get_wrong_question,
+    list_auto_retry_candidates,
     list_qa_records,
     list_qa_records_for_topic,
     list_sessions,
@@ -1632,6 +1633,7 @@ StudyStore.list_qa_records_for_topic = list_qa_records_for_topic  # type: ignore
 StudyStore.add_wrong_question = add_wrong_question  # type: ignore[method-assign]
 StudyStore.get_retry_wrong_question = get_retry_wrong_question  # type: ignore[method-assign]
 StudyStore.get_wrong_question = get_wrong_question  # type: ignore[method-assign]
+StudyStore.list_auto_retry_candidates = list_auto_retry_candidates  # type: ignore[method-assign]
 StudyStore.list_wrong_questions = list_wrong_questions  # type: ignore[method-assign]
 StudyStore.mark_wrong_question_resolved = mark_wrong_question_resolved  # type: ignore[method-assign]
 StudyStore.record_wrong_question_attempt = record_wrong_question_attempt  # type: ignore[method-assign]

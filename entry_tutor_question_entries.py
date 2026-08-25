@@ -526,13 +526,19 @@ class _TutorQuestionEntriesMixin:
             candidate_limit=5000,
             candidate_topics_by_id=topics_by_id,
         )
-        params["retry_wrong_questions"] = (
-            self._knowledge_tracker.store.list_wrong_questions(
+        if scope.mode == "explicit_topic":
+            retries = self._knowledge_tracker.store.list_wrong_questions(
                 limit=5000,
                 topic_ids=eligible,
                 statuses=("active", "retrying"),
             )
-        )
+        else:
+            retries = self._knowledge_tracker.store.list_auto_retry_candidates(
+                limit=5000,
+                topic_ids=eligible,
+            )
+        params["retry_wrong_questions"] = retries
+        params["retry_wrong_question"] = retries[0] if retries else {}
         params = filter_question_params_to_scope(params, eligible)
         if scope.mode == "explicit_topic":
             params["weak_topics"] = []
@@ -547,9 +553,8 @@ class _TutorQuestionEntriesMixin:
 
     def _unscoped_question_params(self) -> dict[str, Any]:
         params = self._knowledge_tracker.preview_next_question_params("")
-        retries = self._knowledge_tracker.store.list_wrong_questions(
+        retries = self._knowledge_tracker.store.list_auto_retry_candidates(
             limit=5000,
-            statuses=("active", "retrying"),
         )
         params["retry_wrong_questions"] = retries
         params["retry_wrong_question"] = retries[0] if retries else {}
@@ -572,6 +577,26 @@ class _TutorQuestionEntriesMixin:
         )
         if eligible is not None:
             focused = filter_question_params_to_scope(focused, eligible)
+        focused["retry_wrong_questions"] = []
+        focused["retry_wrong_question"] = {}
+        if selection.get("selection_reason") == "retry":
+            selected_retry = dict(initial_params.get("retry_wrong_question") or {})
+            if str(selected_retry.get("topic_id") or "").strip() == selected_topic_id:
+                focused["retry_wrong_questions"] = [selected_retry]
+                focused["retry_wrong_question"] = selected_retry
+        else:
+            guidance_builder = getattr(
+                self._knowledge_tracker, "_question_guidance", None
+            )
+            if callable(guidance_builder):
+                mastery = dict(focused.get("mastery") or {})
+                focused["prompt_guidance"] = guidance_builder(
+                    float(mastery.get("mastery") or 0.0),
+                    blockers=list(focused.get("blockers") or []),
+                    retry=None,
+                )
+            else:
+                focused.pop("prompt_guidance", None)
         focused["target_topic_id"] = selected_topic_id
         focused["target_topic"] = (
             self._knowledge_tracker.store.get_topic(selected_topic_id) or {}

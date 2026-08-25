@@ -187,6 +187,140 @@ def test_wrong_question_attempt_updates_only_bound_id_without_schema_change(
         store.close()
 
 
+def test_auto_retry_candidates_apply_cooldowns_and_oldest_retry_first(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, _, _ = _load_store_runtime(monkeypatch, "_auto_retry_candidates_runtime")
+    store = _make_store(tmp_path, Store)
+    try:
+        def add(label: str, *, topic_id: str = "topic-a") -> str:
+            return store.add_wrong_question(
+                topic_id=topic_id,
+                question={"question": label},
+                user_answer="bad",
+                expected_answer="good",
+                error_type="misconception",
+                verdict="wrong",
+            )
+
+        active = add("active")
+        cooling_wrong = add("cooling wrong")
+        oldest_ready = add("oldest ready")
+        newer_ready = add("newer ready")
+        cooling_correct = add("cooling correct")
+        day_old_correct = add("day-old correct")
+        outside_scope = add("outside scope", topic_id="topic-b")
+        with store._lock:
+            conn = store._require_conn()
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET status = 'retrying', last_retry_at = datetime('now', '-10 minutes')
+                WHERE id = ?
+                """,
+                (cooling_wrong,),
+            )
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET status = 'retrying', last_retry_at = datetime('now', '-90 minutes')
+                WHERE id = ?
+                """,
+                (oldest_ready,),
+            )
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET status = 'retrying', last_retry_at = datetime('now', '-31 minutes')
+                WHERE id = ?
+                """,
+                (newer_ready,),
+            )
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET status = 'retrying', consecutive_correct = 1,
+                    last_error_at = datetime('now', '-12 hours'),
+                    last_retry_at = datetime('now', '-2 hours')
+                WHERE id = ?
+                """,
+                (cooling_correct,),
+            )
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET status = 'retrying', consecutive_correct = 1,
+                    last_error_at = datetime('now', '-25 hours'),
+                    last_retry_at = datetime('now', '-1 minute')
+                WHERE id = ?
+                """,
+                (day_old_correct,),
+            )
+            conn.commit()
+
+        candidates = store.list_auto_retry_candidates(
+            limit=None, topic_ids={"topic-a"}
+        )
+        assert [item["id"] for item in candidates] == [
+            active,
+            oldest_ready,
+            newer_ready,
+            day_old_correct,
+        ]
+        assert cooling_wrong not in {item["id"] for item in candidates}
+        assert cooling_correct not in {item["id"] for item in candidates}
+        assert outside_scope not in {item["id"] for item in candidates}
+
+        visible = store.list_wrong_questions(
+            limit=None, topic_ids={"topic-a"}, statuses=("active", "retrying")
+        )
+        assert {item["id"] for item in visible} == {
+            active,
+            cooling_wrong,
+            oldest_ready,
+            newer_ready,
+            cooling_correct,
+            day_old_correct,
+        }
+    finally:
+        store.close()
+
+
+def test_correct_retry_reenters_automatic_candidates_one_day_after_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, _, _ = _load_store_runtime(monkeypatch, "_correct_retry_delay_runtime")
+    store = _make_store(tmp_path, Store)
+    try:
+        origin = store.add_wrong_question(
+            topic_id="topic-a",
+            question={"question": "original"},
+            user_answer="bad",
+            expected_answer="good",
+            error_type="misconception",
+            verdict="wrong",
+        )
+        _write_attempt(store, origin_id=origin, verdict="correct")
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 1
+        assert store.list_auto_retry_candidates(limit=None) == []
+
+        with store._lock:
+            store._require_conn().execute(
+                """
+                UPDATE wrong_questions
+                SET last_error_at = datetime('now', '-25 hours')
+                WHERE id = ?
+                """,
+                (origin,),
+            )
+            store._require_conn().commit()
+        assert [
+            item["id"] for item in store.list_auto_retry_candidates(limit=None)
+        ] == [origin]
+    finally:
+        store.close()
+
+
 def test_wrong_question_attempt_rolls_back_with_answer_batch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
