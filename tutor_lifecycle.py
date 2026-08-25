@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 
-
 _LOCK_ATTR = "_tutor_question_lifecycle_lock"
 _OPERATION_ATTR = "_tutor_question_lifecycle_operation"
 
