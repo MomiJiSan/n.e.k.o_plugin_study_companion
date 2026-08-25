@@ -19,7 +19,6 @@ from .study_model_gateway import (
     StudyModelRuntimeSnapshot,
 )
 
-
 # The local-runtime infrastructure remains in the plugin, but the user-facing
 # product is intentionally paused until a future model decision re-enables it.
 LOCAL_MODELS_PRODUCT_ENABLED: Final = False
