@@ -13,7 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_entries(monkeypatch: pytest.MonkeyPatch):
-    package_name = "_study_companion_knowledge_map_entry_test"
+    # pytest-randomly can run this loader after another dynamic-import test.
+    # A per-call package name prevents a stale submodule from retaining that
+    # test's mocked entry_common dependencies.
+    package_name = f"_study_companion_knowledge_map_entry_test_{id(monkeypatch)}"
     package = ModuleType(package_name)
     package.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, package_name, package)
