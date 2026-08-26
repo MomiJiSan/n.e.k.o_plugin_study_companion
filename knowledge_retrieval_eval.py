@@ -9,15 +9,28 @@ from types import ModuleType
 from typing import Any, Iterable
 
 try:
-    from .knowledge_graph_guidance import build_knowledge_guidance_payload
+    from .knowledge_graph_edges import build_topic_edges
+    from .knowledge_graph_guidance import (
+        _build_relationship_model_context,
+        build_knowledge_guidance_payload,
+    )
+    from .knowledge_relation_retrieval import resolve_relationship_evidence
 except ImportError:  # pragma: no cover - direct script execution
     package_name = "_study_companion_retrieval_eval"
     package = ModuleType(package_name)
     package.__path__ = [str(Path(__file__).resolve().parent)]  # type: ignore[attr-defined]
     sys.modules.setdefault(package_name, package)
-    build_knowledge_guidance_payload = importlib.import_module(
+    guidance_module = importlib.import_module(
         f"{package_name}.knowledge_graph_guidance"
-    ).build_knowledge_guidance_payload
+    )
+    edges_module = importlib.import_module(f"{package_name}.knowledge_graph_edges")
+    relation_module = importlib.import_module(
+        f"{package_name}.knowledge_relation_retrieval"
+    )
+    build_knowledge_guidance_payload = guidance_module.build_knowledge_guidance_payload
+    _build_relationship_model_context = guidance_module._build_relationship_model_context
+    build_topic_edges = edges_module.build_topic_edges
+    resolve_relationship_evidence = relation_module.resolve_relationship_evidence
 
 
 CORE_RELATIONS = ("prerequisite", "confusable", "procedure_step", "application")
@@ -171,15 +184,60 @@ def _expected_links(value: Any) -> list[dict[str, Any]]:
     return expected
 
 
+def _expected_paths(value: Any) -> list[dict[str, Any]]:
+    """Normalize bounded endpoint-to-endpoint path expectations.
+
+    Paths deliberately identify only endpoints and permitted persisted relation
+    kinds.  They do not prescribe a traversal direction: a relationship query
+    may name either endpoint first, while returned path edges retain their real
+    server-side direction.
+    """
+    if not isinstance(value, list):
+        return []
+    expected: list[dict[str, Any]] = []
+    for path in value:
+        if not isinstance(path, dict):
+            continue
+        from_id = _text(path.get("from"))
+        to_id = _text(path.get("to"))
+        try:
+            max_hops = int(path.get("max_hops") or 0)
+        except (TypeError, ValueError):
+            max_hops = 0
+        relations = _string_set(path.get("allowed_relations"))
+        if from_id and to_id and 1 <= max_hops <= 3 and relations:
+            expected.append(
+                {
+                    "from": from_id,
+                    "to": to_id,
+                    "max_hops": max_hops,
+                    "allowed_relations": sorted(relations),
+                }
+            )
+    return expected
+
+
+def _no_path_expectation(value: Any) -> dict[str, Any] | None:
+    """Normalize an explicit bounded gap in the canonical graph."""
+    if not isinstance(value, dict):
+        return None
+    paths = _expected_paths([value])
+    return paths[0] if paths else None
+
+
 def _expected_endpoint_ids(
     *,
     expected_topic_ids: set[str],
     expected_links: Iterable[dict[str, Any]],
+    expected_paths: Iterable[dict[str, Any]] = (),
 ) -> set[str]:
     endpoint_ids = set(expected_topic_ids)
     for link in expected_links:
         endpoint_ids.add(_text(link.get("from")))
         endpoint_ids.add(_text(link.get("to")))
+    for path in expected_paths:
+        endpoint_ids.add(_text(path.get("from")))
+        endpoint_ids.add(_text(path.get("to")))
     endpoint_ids.discard("")
     return endpoint_ids
 
@@ -200,6 +258,119 @@ def _expected_links_hit(
         )
         for expected in expected_links
     )
+
+
+def _path_exists(
+    *,
+    edges: Iterable[dict[str, Any]],
+    from_id: str,
+    to_id: str,
+    max_hops: int,
+    allowed_relations: set[str],
+) -> bool:
+    """Check a bounded, endpoint-focused path without an unbounded BFS."""
+    adjacency: dict[str, list[str]] = {}
+    for edge in edges:
+        edge_from = _text(edge.get("from") or edge.get("from_id"))
+        edge_to = _text(edge.get("to") or edge.get("to_id"))
+        relation = _text(edge.get("relation"))
+        if (
+            not edge_from
+            or not edge_to
+            or not relation
+            or relation not in allowed_relations
+        ):
+            continue
+        adjacency.setdefault(edge_from, []).append(edge_to)
+        adjacency.setdefault(edge_to, []).append(edge_from)
+    pending: list[tuple[str, int]] = [(from_id, 0)]
+    seen = {from_id}
+    while pending:
+        node_id, hops = pending.pop(0)
+        if node_id == to_id:
+            return True
+        if hops >= max_hops:
+            continue
+        for adjacent_id in adjacency.get(node_id, []):
+            if adjacent_id not in seen:
+                seen.add(adjacent_id)
+                pending.append((adjacent_id, hops + 1))
+    return False
+
+
+def _expected_paths_hit(
+    *,
+    expected_paths: list[dict[str, Any]],
+    edges: Iterable[dict[str, Any]],
+) -> bool | None:
+    if not expected_paths:
+        return None
+    return all(
+        _path_exists(
+            edges=edges,
+            from_id=path["from"],
+            to_id=path["to"],
+            max_hops=path["max_hops"],
+            allowed_relations=set(path["allowed_relations"]),
+        )
+        for path in expected_paths
+    )
+
+
+def _context_has_expected_paths(
+    *,
+    expected_paths: list[dict[str, Any]],
+    model_context: dict[str, Any],
+) -> bool | None:
+    """Verify the future V2 relationship block contains only the expected path."""
+    if not expected_paths:
+        return None
+    relationship = model_context.get("relationship")
+    if not isinstance(relationship, dict):
+        return False
+    endpoints = relationship.get("endpoints")
+    path_edges = relationship.get("path")
+    if not isinstance(endpoints, list) or not isinstance(path_edges, list):
+        return False
+    endpoint_ids = {
+        _text(endpoint.get("id"))
+        for endpoint in endpoints
+        if isinstance(endpoint, dict) and _text(endpoint.get("id"))
+    }
+    relationship_edges = [edge for edge in path_edges if isinstance(edge, dict)]
+    return all(
+        {path["from"], path["to"]}.issubset(endpoint_ids)
+        and _path_exists(
+            edges=relationship_edges,
+            from_id=path["from"],
+            to_id=path["to"],
+            max_hops=path["max_hops"],
+            allowed_relations=set(path["allowed_relations"]),
+        )
+        for path in expected_paths
+    )
+
+
+def _relationship_evidence_edges(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Adapt resolver edge keys to the common bounded-path evaluator."""
+    return [
+        {
+            "from": _text(edge.get("from_id") or edge.get("from")),
+            "to": _text(edge.get("to_id") or edge.get("to")),
+            "relation": _text(edge.get("relation")),
+            "reason": _text(edge.get("reason")),
+        }
+        for edge in evidence.get("path", [])
+        if isinstance(edge, dict)
+    ]
+
+
+def _relationship_endpoint_ids(evidence: dict[str, Any]) -> set[str]:
+    return {
+        _text(endpoint.get("id"))
+        for endpoint in evidence.get("endpoints", [])
+        if isinstance(endpoint, dict) and _text(endpoint.get("id"))
+    }
 
 
 def _context_has_expected_endpoint_cue(
@@ -271,6 +442,7 @@ def evaluate_knowledge_retrieval_queries(
     topics: list[dict[str, Any]],
     cases: Iterable[dict[str, Any]],
     min_active_core_groups: int = 2,
+    strict: bool = False,
 ) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     topic_subjects, topic_labels = _topic_maps(topics)
@@ -292,13 +464,41 @@ def evaluate_knowledge_retrieval_queries(
         "model_context_cue_required_count": 0,
         "model_context_cue_hit_count": 0,
         "unrelated_cross_edge_only_count": 0,
+        "relationship_case_count": 0,
+        "endpoint_pair_hit_count": 0,
+        "expected_direct_link_case_count": 0,
+        "expected_direct_link_hit_count": 0,
+        "expected_path_case_count": 0,
+        "expected_path_hit_count": 0,
+        "canonical_expected_path_hit_count": 0,
+        "canonical_expected_direct_link_hit_count": 0,
+        "canonical_relationship_explainable_count": 0,
+        "context_path_case_count": 0,
+        "context_path_hit_count": 0,
+        "relationship_unresolved_count": 0,
+        "known_no_path_case_count": 0,
+        "known_no_path_confirmed_count": 0,
+        "strict_passed_count": 0,
+        "strict_failed_count": 0,
     }
+    canonical_edges = build_topic_edges(topics)
 
     for case in cases:
         query = _text(case.get("query") if isinstance(case, dict) else "")
         topic_id = _text(case.get("topic_id") if isinstance(case, dict) else "")
         expected_topic_ids = _string_set(case.get("expected_topic_ids"))
         expected_links = _expected_links(case.get("expected_links"))
+        expected_paths = _expected_paths(case.get("expected_paths"))
+        query_mode = _text(case.get("query_mode"))
+        relationship_query = query_mode == "relationship"
+        retrieval_concepts = [
+            _text(concept)
+            for concept in case.get("retrieval_concepts", [])
+            if _text(concept)
+        ] if isinstance(case.get("retrieval_concepts"), list) else []
+        primary_subject = _text(case.get("primary_subject"))
+        no_path_expectation = _no_path_expectation(case.get("known_no_path"))
+        known_no_path = no_path_expectation is not None
         require_model_context_cue = bool(case.get("require_model_context_cue"))
         expect_cross_subject = bool(case.get("expect_cross_subject"))
         payload = build_knowledge_guidance_payload(
@@ -319,6 +519,21 @@ def evaluate_knowledge_retrieval_queries(
         relation_groups = payload.get("relation_groups") if isinstance(payload, dict) else {}
         if not isinstance(relation_groups, dict):
             relation_groups = {}
+        relationship_evidence = (
+            resolve_relationship_evidence(
+                topics=topics,
+                query=query,
+                retrieval_concepts=retrieval_concepts,
+                primary_subject=primary_subject,
+            )
+            if relationship_query
+            else {}
+        )
+        if not isinstance(relationship_evidence, dict):
+            relationship_evidence = {}
+        relationship_context = _build_relationship_model_context(
+            relationship_evidence
+        )
 
         cross_edges = _cross_subject_edges(
             subgraph,
@@ -330,7 +545,18 @@ def evaluate_knowledge_retrieval_queries(
         expected_endpoint_ids = _expected_endpoint_ids(
             expected_topic_ids=expected_topic_ids,
             expected_links=expected_links,
+            expected_paths=expected_paths,
         )
+        relationship_endpoint_ids = _expected_endpoint_ids(
+            expected_topic_ids=set(),
+            expected_links=expected_links,
+            expected_paths=expected_paths,
+        )
+        if no_path_expectation is not None:
+            relationship_endpoint_ids = {
+                no_path_expectation["from"],
+                no_path_expectation["to"],
+            }
         nodes = subgraph.get("nodes")
         if not isinstance(nodes, list):
             nodes = []
@@ -348,6 +574,29 @@ def evaluate_knowledge_retrieval_queries(
             expected_links=expected_links,
             subgraph_edges=subgraph_edges,
         )
+        canonical_expected_link_hit = _expected_links_hit(
+            expected_links=expected_links,
+            subgraph_edges=_subgraph_edge_tuples({"edges": canonical_edges}),
+        )
+        canonical_expected_path_hit = _expected_paths_hit(
+            expected_paths=expected_paths,
+            edges=canonical_edges,
+        )
+        evidence_edges = _relationship_evidence_edges(relationship_evidence)
+        evidence_endpoint_ids = _relationship_endpoint_ids(relationship_evidence)
+        v2_direct_link_hit = _expected_links_hit(
+            expected_links=expected_links,
+            subgraph_edges=_subgraph_edge_tuples({"edges": evidence_edges}),
+        )
+        v2_path_hit = _expected_paths_hit(
+            expected_paths=expected_paths,
+            edges=evidence_edges,
+        )
+        v2_context_path_hit = _context_has_expected_paths(
+            expected_paths=expected_paths,
+            model_context=relationship_context,
+        )
+        context_path_hit = v2_context_path_hit
         model_context_cue_hit = (
             _context_has_expected_endpoint_cue(
                 endpoint_ids=expected_endpoint_ids,
@@ -362,7 +611,7 @@ def evaluate_knowledge_retrieval_queries(
             or edge["to"] in expected_endpoint_ids
             for edge in cross_edges
         )
-        unrelated_cross_edge_only = bool(
+        legacy_unrelated_cross_edge_only = bool(
             expect_cross_subject
             and has_cross_edge
             and expected_endpoint_ids
@@ -379,13 +628,58 @@ def evaluate_knowledge_retrieval_queries(
         has_raw_seed = _has_raw_seed(model_context)
         focus_hit = not expected_topic_ids or focus_topic_id in expected_topic_ids
         bad_hub_absorbed = bool(expected_topic_ids) and not focus_hit
+        endpoint_pair_hit = (
+            relationship_endpoint_ids.issubset(evidence_endpoint_ids)
+            if relationship_endpoint_ids
+            else None
+        )
+        canonical_relationship_explainable = bool(
+            canonical_expected_link_hit is True
+            or canonical_expected_path_hit is True
+        )
+        relationship_unresolved = bool(
+            relationship_query
+            and relationship_evidence.get("relationship_unresolved", True)
+        )
+        unrelated_cross_edge_only = bool(
+            relationship_query
+            and bool(evidence_edges)
+            and bool(relationship_endpoint_ids)
+            and not relationship_endpoint_ids.issubset(evidence_endpoint_ids)
+        )
+        known_no_path_confirmed = bool(
+            no_path_expectation is not None
+            and not _path_exists(
+                edges=canonical_edges,
+                from_id=no_path_expectation["from"],
+                to_id=no_path_expectation["to"],
+                max_hops=no_path_expectation["max_hops"],
+                allowed_relations=set(no_path_expectation["allowed_relations"]),
+            )
+        )
         cross_subject_ok = not expect_cross_subject or has_cross_edge
         case_passed = focus_hit and cross_subject_ok
+        strict_relationship_ok = (
+            known_no_path_confirmed and relationship_unresolved
+            if known_no_path
+            else (
+                endpoint_pair_hit is True
+                and (v2_direct_link_hit is not False)
+                and (v2_path_hit is not False)
+            )
+        )
+        strict_passed = (
+            focus_hit and strict_relationship_ok
+            if relationship_query
+            else case_passed
+        )
         failure_reasons: list[str] = []
         if not focus_hit:
             failure_reasons.append("expected focus topic was not selected")
         if not cross_subject_ok:
             failure_reasons.append("expected cross-subject edge was not returned")
+        if strict and relationship_query and not strict_relationship_ok:
+            failure_reasons.append("expected relationship evidence was not returned")
 
         summary["case_count"] += 1
         summary["passed_count"] += int(case_passed)
@@ -409,24 +703,62 @@ def evaluate_knowledge_retrieval_queries(
             require_model_context_cue
         )
         summary["model_context_cue_hit_count"] += int(model_context_cue_hit is True)
-        summary["unrelated_cross_edge_only_count"] += int(
-            unrelated_cross_edge_only
+        summary["unrelated_cross_edge_only_count"] += int(unrelated_cross_edge_only)
+        summary["relationship_case_count"] += int(relationship_query)
+        summary["endpoint_pair_hit_count"] += int(endpoint_pair_hit is True)
+        summary["expected_direct_link_case_count"] += int(bool(expected_links))
+        summary["expected_direct_link_hit_count"] += int(v2_direct_link_hit is True)
+        summary["expected_path_case_count"] += int(bool(expected_paths))
+        summary["expected_path_hit_count"] += int(v2_path_hit is True)
+        summary["canonical_expected_path_hit_count"] += int(
+            canonical_expected_path_hit is True
         )
+        summary["canonical_expected_direct_link_hit_count"] += int(
+            canonical_expected_link_hit is True
+        )
+        summary["canonical_relationship_explainable_count"] += int(
+            canonical_relationship_explainable
+        )
+        summary["context_path_case_count"] += int(bool(expected_paths))
+        summary["context_path_hit_count"] += int(context_path_hit is True)
+        summary["relationship_unresolved_count"] += int(relationship_unresolved)
+        summary["known_no_path_case_count"] += int(known_no_path)
+        summary["known_no_path_confirmed_count"] += int(known_no_path_confirmed)
+        summary["strict_passed_count"] += int(strict_passed)
+        summary["strict_failed_count"] += int(not strict_passed)
 
         results.append(
             {
                 "query": query,
                 "expected_topic_ids": sorted(expected_topic_ids),
+                "query_mode": query_mode,
+                "retrieval_concepts": retrieval_concepts,
+                "primary_subject": primary_subject,
                 "expected_links": expected_links,
+                "expected_paths": expected_paths,
+                "known_no_path": known_no_path,
                 "require_model_context_cue": require_model_context_cue,
                 "expect_cross_subject": expect_cross_subject,
                 "focus_topic_id": focus_topic_id,
                 "focus_hit": focus_hit,
                 "expected_link_hit": expected_link_hit,
+                "expected_direct_link_hit": v2_direct_link_hit,
+                "expected_path_hit": v2_path_hit,
+                "canonical_expected_direct_link_hit": canonical_expected_link_hit,
+                "canonical_expected_path_hit": canonical_expected_path_hit,
+                "canonical_relationship_explainable": canonical_relationship_explainable,
+                "context_path_hit": context_path_hit,
+                "endpoint_pair_hit": endpoint_pair_hit,
+                "relationship_unresolved": relationship_unresolved,
+                "known_no_path_confirmed": known_no_path_confirmed,
                 "expected_endpoint_returned": expected_endpoint_returned,
                 "model_context_cue_hit": model_context_cue_hit,
                 "unrelated_cross_edge_only": unrelated_cross_edge_only,
+                "legacy_unrelated_cross_edge_only": legacy_unrelated_cross_edge_only,
+                "relationship_evidence": relationship_evidence,
+                "relationship_context": relationship_context,
                 "passed": case_passed,
+                "strict_passed": strict_passed,
                 "failure_reasons": failure_reasons,
                 "bad_hub_absorbed": bad_hub_absorbed,
                 "top_matches": _compact_matches(payload.get("matches")),
@@ -483,6 +815,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to knowledge_graph_seed.json or a single seed JSON file.",
     )
     parser.add_argument("--min-active-core-groups", type=int, default=2)
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Require relationship cases to return their declared endpoint pair "
+            "and direct link or bounded path. The default retains the legacy gate."
+        ),
+    )
     args = parser.parse_args(argv)
 
     cases_payload = json.loads(Path(args.cases).read_text(encoding="utf-8-sig"))
@@ -497,9 +837,11 @@ def main(argv: list[str] | None = None) -> int:
         topics=topics,
         cases=[case for case in cases if isinstance(case, dict)],
         min_active_core_groups=max(1, int(args.min_active_core_groups)),
+        strict=bool(args.strict),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if int(report["summary"].get("failed_count") or 0) == 0 else 1
+    failures_key = "strict_failed_count" if args.strict else "failed_count"
+    return 0 if int(report["summary"].get(failures_key) or 0) == 0 else 1
 
 
 if __name__ == "__main__":
