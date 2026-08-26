@@ -53,6 +53,18 @@ type KnowledgeEdge = {
   confidence?: number;
 };
 
+type KnowledgeMapPage = {
+  nodes?: KnowledgeNode[];
+  edges?: KnowledgeEdge[];
+  summary?: Record<string, number>;
+  catalog_revision?: string;
+  has_more?: boolean;
+  next_cursor?: string;
+  edge_truncated?: boolean;
+  boundary?: { truncated?: boolean; [key: string]: unknown };
+  [key: string]: unknown;
+};
+
 const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'chemistry', 'biology', 'history', 'geography', 'politics', 'computer_science', 'economics'];
 const LEARNING_PROFILE_STORAGE_KEY = 'study_companion.learning_profile.v1';
 const LEARNING_STAGE_OPTIONS = ['primary', 'junior_high', 'senior_high', 'college', 'cross_stage', 'postgraduate', 'custom'];
@@ -86,6 +98,146 @@ function writeDefaultLearningStage(stage: string) {
     return '';
   }
   return normalized;
+}
+
+function knowledgeMapScope(stage: string) {
+  return {
+    stage: stage === 'all' ? '' : normalizeLearningStage(stage),
+    subject: '',
+    chapter: '',
+    unit: '',
+  };
+}
+
+function knowledgeMapErrorCode(error: unknown) {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return String((error as { code?: unknown }).code || '').trim().toUpperCase();
+  }
+  return '';
+}
+
+function knowledgeMapErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message || '');
+  }
+  return String(error || '');
+}
+
+function isKnowledgeMapCursorStale(error: unknown) {
+  return knowledgeMapErrorCode(error) === 'KNOWLEDGE_MAP_CURSOR_STALE'
+    || /knowledge_map_cursor_stale/i.test(knowledgeMapErrorMessage(error));
+}
+
+function isKnowledgeMapV2Unavailable(error: unknown) {
+  const code = knowledgeMapErrorCode(error);
+  if (['ENTRY_NOT_FOUND', 'UNKNOWN_ENTRY', 'NOT_IMPLEMENTED', 'UNSUPPORTED_ENTRY'].includes(code)) {
+    return true;
+  }
+  return /study_query_knowledge_map.*(?:not found|unknown|unavailable|not implemented)/i
+    .test(knowledgeMapErrorMessage(error));
+}
+
+function uniqueKnowledgeNodes(nodes: KnowledgeNode[]) {
+  const byId = new Map<string, KnowledgeNode>();
+  nodes.forEach((node) => {
+    const id = String(node?.id || '').trim();
+    if (id && !byId.has(id)) byId.set(id, node);
+  });
+  return Array.from(byId.values());
+}
+
+function uniqueKnowledgeEdges(edges: KnowledgeEdge[]) {
+  const byKey = new Map<string, KnowledgeEdge>();
+  edges.forEach((edge) => {
+    const from = String(edge?.from || '').trim();
+    const to = String(edge?.to || '').trim();
+    const relation = String(edge?.relation || '').trim();
+    if (from && to) byKey.set(`${from}\u0000${to}\u0000${relation}`, edge);
+  });
+  return Array.from(byKey.values());
+}
+
+async function loadCompleteKnowledgeMap(api: PluginSurfaceProps['api'], stage: string): Promise<KnowledgeMapPage> {
+  let retriedAfterStaleCursor = false;
+  while (true) {
+    const collectedNodes: KnowledgeNode[] = [];
+    const collectedEdges: KnowledgeEdge[] = [];
+    const seenCursors = new Set<string>(['']);
+    let cursor = '';
+    let pageCount = 0;
+    let catalogRevision: string | null = null;
+    let firstPage: KnowledgeMapPage | null = null;
+    let relationshipsIncomplete = false;
+
+    try {
+      while (true) {
+        if (pageCount >= 20) {
+          throw new Error('Knowledge map pagination stopped after 20 pages.');
+        }
+        let page: KnowledgeMapPage;
+        try {
+          page = await callPlugin(api, 'study_query_knowledge_map', {
+            scope: knowledgeMapScope(stage),
+            page_size: 100,
+            cursor,
+            include_boundary: true,
+          }) as KnowledgeMapPage;
+        } catch (error) {
+          // The legacy contract may be used only when V2 cannot serve page one.
+          if (pageCount === 0 && isKnowledgeMapV2Unavailable(error)) {
+            return await callPlugin(api, 'study_knowledge_map', { limit: 1000 }) as KnowledgeMapPage;
+          }
+          throw error;
+        }
+        if (page?.error && typeof page.error === 'object') {
+          if (pageCount === 0 && isKnowledgeMapV2Unavailable(page.error)) {
+            return await callPlugin(api, 'study_knowledge_map', { limit: 1000 }) as KnowledgeMapPage;
+          }
+          throw page.error;
+        }
+
+        const pageRevision = String(page?.catalog_revision || '');
+        if (catalogRevision === null) {
+          catalogRevision = pageRevision;
+        } else if (catalogRevision !== pageRevision) {
+          throw new Error('Knowledge map catalog revision changed while loading.');
+        }
+        if (!firstPage) firstPage = page;
+        collectedNodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
+        collectedEdges.push(...(Array.isArray(page?.edges) ? page.edges : []));
+        relationshipsIncomplete = relationshipsIncomplete
+          || page?.edge_truncated === true
+          || page?.boundary?.truncated === true;
+        pageCount += 1;
+
+        if (page?.has_more !== true) break;
+        const nextCursor = String(page?.next_cursor || '').trim();
+        if (!nextCursor || seenCursors.has(nextCursor)) {
+          throw new Error('Knowledge map pagination returned a repeated cursor.');
+        }
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+      }
+    } catch (error) {
+      if (!retriedAfterStaleCursor && isKnowledgeMapCursorStale(error)) {
+        retriedAfterStaleCursor = true;
+        continue;
+      }
+      throw error;
+    }
+
+    const base = firstPage || {};
+    return {
+      ...base,
+      catalog_revision: catalogRevision || undefined,
+      nodes: uniqueKnowledgeNodes(collectedNodes),
+      edges: uniqueKnowledgeEdges(collectedEdges),
+      has_more: false,
+      next_cursor: '',
+      relationships_incomplete: relationshipsIncomplete,
+    };
+  }
 }
 
 function text(props: PluginSurfaceProps, key: string, fallback: string) {
@@ -396,11 +548,13 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [scopeRecoveryFailed, setScopeRecoveryFailed] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
   const [summary, setSummary] = useState<Record<string, number>>({});
+  const [relationshipsIncomplete, setRelationshipsIncomplete] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const nodeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mapLoadRequestRef = useRef(0);
 
   function closeNodeDetail() {
     setSelectedNode(null);
@@ -412,24 +566,20 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   useEffect(() => {
     ensureBrandCSS();
     let mounted = true;
+    const requestId = mapLoadRequestRef.current += 1;
     setIsLoading(true);
-    callPlugin(props.api, 'study_query_knowledge_map', {
-      scope: { stage: '', subject: '', chapter: '', unit: '' },
-      page_size: 100,
-      include_boundary: true,
-    })
-      .catch((error) => {
-        if (!mounted) throw error;
-        return callPlugin(props.api, 'study_knowledge_map', { limit: 1000 });
-      })
+    loadCompleteKnowledgeMap(props.api, selectedStage)
       .then((payload: any) => {
-        if (!mounted) {
+        if (!mounted || requestId !== mapLoadRequestRef.current) {
           return;
         }
         const nextNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
         const nextEdges = Array.isArray(payload.edges) ? payload.edges : [];
         setNodes(nextNodes);
         setEdges(nextEdges);
+        setRelationshipsIncomplete(payload.relationships_incomplete === true
+          || payload.edge_truncated === true
+          || payload.boundary?.truncated === true);
         setSummary(payload.summary || {
           topic_count: Number(payload.scope_total_count || payload.scope_returned_count || nextNodes.length),
           edge_count: nextEdges.length,
@@ -437,8 +587,21 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         setSelectedNode(null);
         setError('');
       })
-      .catch((err) => mounted && setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => mounted && setIsLoading(false));
+      .catch((err) => {
+        if (!mounted || requestId !== mapLoadRequestRef.current) return;
+        setRelationshipsIncomplete(false);
+        setError(knowledgeMapErrorMessage(err));
+      })
+      .finally(() => {
+        if (mounted && requestId === mapLoadRequestRef.current) setIsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [props.api, selectedStage]);
+
+  useEffect(() => {
+    let mounted = true;
     callPlugin(props.api, 'study_get_practice_scope')
       .then((scopePayload: any) => {
         if (!mounted) return;
@@ -597,7 +760,10 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   if (subjectCounts.has('')) {
     subjects.push('');
   }
-  const stages = uniqueValues(inScopeNodes, 'stage');
+  // The server now returns one stage at a time. Keep all selectable stages in
+  // the control so a user can request another range even when it is not in the
+  // current response.
+  const stages = LEARNING_STAGE_OPTIONS.filter((stage) => stage !== 'custom');
   const activeStage = selectedStage !== 'all' && stages.includes(selectedStage)
     ? selectedStage
     : 'all';
@@ -682,6 +848,9 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
         </div>
       </header>
       {error ? <pre>{error}</pre> : null}
+      {relationshipsIncomplete ? <p className="knowledge-map-incomplete" role="status">
+        {text(props, 'ui.knowledge.relationships_incomplete', 'Some relationships could not be loaded completely.')}
+      </p> : null}
       <section className="study-panel__state">
         <div>
           <span>{text(props, 'ui.label.topics', 'Topics')}</span>

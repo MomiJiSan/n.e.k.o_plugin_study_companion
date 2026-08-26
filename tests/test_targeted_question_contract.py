@@ -76,13 +76,16 @@ def test_target_topic_evidence_projection_is_the_single_seed_field_contract(
         "question_types",
         "examples",
     )
-    assert not {
-        "description",
-        "definition",
-        "common_mistakes",
-        "internal_private_payload",
-        "empty",
-    } & projected.keys()
+    assert (
+        not {
+            "description",
+            "definition",
+            "common_mistakes",
+            "internal_private_payload",
+            "empty",
+        }
+        & projected.keys()
+    )
 
 
 def test_targeted_question_contract_rejects_answer_hint_and_copied_retry(
@@ -105,9 +108,7 @@ def test_targeted_question_contract_rejects_answer_hint_and_copied_retry(
         target_topic_name="Target topic",
         origin_wrong_question={"question": {"question": "Original question"}},
     )
-    assert {"hint_leaks_answer", "retry_copies_original_question"} <= set(
-        invalid.errors
-    )
+    assert {"hint_leaks_answer", "retry_copies_original_question"} <= set(invalid.errors)
 
 
 def test_targeted_question_contract_rejects_conflicting_answer_fields(
@@ -180,9 +181,7 @@ def test_targeted_question_contract_rejects_multiple_choice(
     assert "unsupported_question_type" in invalid.errors
 
 
-def _load_question_and_evaluation_normalizers(
-    monkeypatch: pytest.MonkeyPatch, package: str
-):
+def _load_question_and_evaluation_normalizers(monkeypatch: pytest.MonkeyPatch, package: str):
     _package(monkeypatch, package)
     common = ModuleType(f"{package}.tutor_llm_agent_common")
 
@@ -200,13 +199,9 @@ def _load_question_and_evaluation_normalizers(
     common._ANSWER_VERDICTS = frozenset({"correct", "partial", "wrong", "dont_know"})
     common._as_dict = lambda value: dict(value or {}) if isinstance(value, dict) else {}
     common._as_list = lambda value: list(value or []) if isinstance(value, list) else []
-    common._as_str = lambda value, default="": str(
-        default if value is None else value
-    )
+    common._as_str = lambda value, default="": str(default if value is None else value)
     common._clamp_int = lambda value, minimum, maximum, default: (
-        value
-        if isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
-        else default
+        value if isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum else default
     )
     common.normalize_mode = lambda value: str(value or "companion")
     monkeypatch.setitem(sys.modules, f"{package}.tutor_llm_agent_common", common)
@@ -219,9 +214,7 @@ def _load_question_and_evaluation_normalizers(
 def test_question_normalizer_syncs_canonical_answer_and_preserves_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    question_generate, _ = _load_question_and_evaluation_normalizers(
-        monkeypatch, "_canonical_question_normalizer_test"
-    )
+    question_generate, _ = _load_question_and_evaluation_normalizers(monkeypatch, "_canonical_question_normalizer_test")
 
     class Owner:
         _guess_topic = staticmethod(lambda _context: "Fallback")
@@ -262,9 +255,7 @@ def test_question_normalizer_syncs_canonical_answer_and_preserves_conflict(
 def test_evaluation_normalizer_keeps_server_expected_answer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, answer_evaluate = _load_question_and_evaluation_normalizers(
-        monkeypatch, "_canonical_evaluation_normalizer_test"
-    )
+    _, answer_evaluate = _load_question_and_evaluation_normalizers(monkeypatch, "_canonical_evaluation_normalizer_test")
 
     class Owner:
         _screen_type_from_context = staticmethod(lambda _context: "")
@@ -395,9 +386,7 @@ def test_targeted_prompt_budget_keeps_required_contract(
     assert prompts.count_tokens(rendered) <= 4500
 
     required, _optional = prompts._targeted_context_parts(context)
-    compact_examples = required["knowledge_question_params"]["target_topic"][
-        "examples"
-    ]
+    compact_examples = required["knowledge_question_params"]["target_topic"]["examples"]
     assert len(compact_examples) == 3
     assert all("...[truncated " in example for example in compact_examples)
 
@@ -462,9 +451,7 @@ def test_targeted_prompt_rejects_oversized_required_context(
             "target_topic": {"id": "target-id", "name": "x" * 20000},
         },
     }
-    with pytest.raises(
-        ValueError, match="required context exceeds prompt token budget"
-    ):
+    with pytest.raises(ValueError, match="required context exceeds prompt token budget"):
         prompts.ensure_targeted_prompt_context_fits(context)
 
 
@@ -646,9 +633,7 @@ def test_unscoped_selection_skips_cooling_retry_and_falls_back_to_due_review(
     assert result["selection_reason"] == "due_review"
     assert result["selected_topic_id"] == "due-topic"
     assert result["question_params"]["retry_wrong_question"] == {}
-    assert result["question_params"]["prompt_guidance"] == (
-        "normal-due-review-guidance"
-    )
+    assert result["question_params"]["prompt_guidance"] == ("normal-due-review-guidance")
 
 
 def test_scoped_retry_cooldown_applies_to_broad_scope_but_not_explicit_topic(
@@ -701,9 +686,7 @@ def test_scoped_retry_cooldown_applies_to_broad_scope_but_not_explicit_topic(
         unit="",
         course_family="",
     )
-    explicit_topic = SimpleNamespace(
-        **{**vars(broad_scope), "mode": "explicit_topic", "topic_id": "target"}
-    )
+    explicit_topic = SimpleNamespace(**{**vars(broad_scope), "mode": "explicit_topic", "topic_id": "target"})
     explicit_topic.to_public_dict = lambda: {
         "mode": "explicit_topic",
         "topic_id": "target",
@@ -715,6 +698,159 @@ def test_scoped_retry_cooldown_applies_to_broad_scope_but_not_explicit_topic(
     assert broad["retry_wrong_question"] == {}
     assert explicit["retry_wrong_question"]["id"] == "cooling-wrong"
     assert calls == ["auto", "display"]
+
+
+def test_scoped_readiness_only_filters_automatic_recommendations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_scoped_readiness_test")
+
+    class Store:
+        topics = [
+            {"id": "blocked", "name": "Blocked"},
+            {"id": "ready", "name": "Ready"},
+        ]
+
+        def get_topic(self, topic_id):
+            return next((topic for topic in self.topics if topic["id"] == topic_id), {})
+
+        def list_topics(self, *_args, **_kwargs):
+            return list(self.topics)
+
+        def list_latest_mastery_for_topics(self, _eligible):
+            return []
+
+        def list_auto_retry_candidates(self, **_kwargs):
+            return []
+
+    class Graph:
+        @staticmethod
+        def readiness_in_scope(_eligible):
+            return {"ready"}, {"blocked": [{"id": "pre", "name": "Prerequisite", "required_mastery": 0.8}]}
+
+    class Tracker:
+        store = Store()
+        graph = Graph()
+
+        def preview_next_question_params(self, topic_id="", **_kwargs):
+            return {
+                "target_topic_id": topic_id,
+                "target_topic": self.store.get_topic(topic_id),
+                "candidate_evidence": [
+                    {"payload": {"topic_id": "blocked", "name": "Blocked"}},
+                    {"payload": {"topic_id": "ready", "name": "Ready"}},
+                ],
+                "weak_topics": [],
+                "due_reviews": [],
+            }
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = Tracker()
+        _cfg = SimpleNamespace(adaptive_practice_readiness_enabled=True)
+
+    scope = SimpleNamespace(
+        mode="explicit_scope",
+        eligible_topic_ids=["blocked", "ready"],
+        topic_id="",
+        subject="math",
+        stage="junior_high",
+        chapter="",
+        unit="",
+        course_family="",
+    )
+
+    params = Subject()._scoped_question_params(scope)
+
+    assert params["target_topic_id"] == "ready"
+    assert [item["payload"]["topic_id"] for item in params["candidate_evidence"]] == ["ready"]
+    assert "blocked_diagnostic" not in params
+
+
+def test_scoped_readiness_returns_diagnostic_only_after_priority_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_blocked_diagnostic_test")
+
+    class Store:
+        def get_topic(self, topic_id):
+            return {"id": topic_id, "name": "Blocked"}
+
+        def list_topics(self, *_args, **_kwargs):
+            return [{"id": "blocked", "name": "Blocked"}]
+
+        def list_latest_mastery_for_topics(self, _eligible):
+            return []
+
+        def list_auto_retry_candidates(self, **_kwargs):
+            return []
+
+    class Graph:
+        @staticmethod
+        def readiness_in_scope(_eligible):
+            return set(), {"blocked": [{"id": "pre", "name": "Prerequisite", "required_mastery": 0.8}]}
+
+    class Tracker:
+        store = Store()
+        graph = Graph()
+
+        def preview_next_question_params(self, topic_id="", **_kwargs):
+            return {
+                "target_topic_id": topic_id,
+                "target_topic": self.store.get_topic(topic_id),
+                "candidate_evidence": [{"payload": {"topic_id": "blocked"}}],
+                "weak_topics": [],
+                "due_reviews": [],
+            }
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = Tracker()
+        _cfg = SimpleNamespace(adaptive_practice_readiness_enabled=True)
+
+    scope = SimpleNamespace(
+        mode="explicit_scope",
+        eligible_topic_ids=["blocked"],
+        topic_id="",
+        subject="math",
+        stage="junior_high",
+        chapter="",
+        unit="",
+        course_family="",
+    )
+    params = Subject()._scoped_question_params(scope)
+    selection = Subject()._selection_from_question_params(params)
+
+    assert params["candidate_evidence"] == []
+    assert params["blocked_diagnostic"]["blockers"][0]["id"] == "pre"
+    assert selection["selection_reason"] == "blocked_diagnostic"
+    assert selection["selected_topic_id"] == "blocked"
+
+
+def test_blocked_diagnostic_never_overrides_retry_due_or_weak_priority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_priority_before_readiness_test")
+
+    class Store:
+        @staticmethod
+        def get_topic(topic_id):
+            return {"id": topic_id, "name": topic_id}
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+    base = {
+        "target_topic_id": "blocked",
+        "blocked_diagnostic": {"target_topic_id": "blocked", "blockers": []},
+        "retry_wrong_question": {"id": "wrong-1", "topic_id": "retry"},
+        "due_reviews": [{"topic_id": "due", "topic": {"id": "due", "name": "due"}}],
+        "weak_topics": [{"topic_id": "weak", "name": "weak"}],
+    }
+
+    assert Subject()._selection_from_question_params(base)["selection_reason"] == "retry"
+    without_retry = {**base, "retry_wrong_question": {}}
+    assert Subject()._selection_from_question_params(without_retry)["selection_reason"] == "due_review"
+    without_due = {**without_retry, "due_reviews": []}
+    assert Subject()._selection_from_question_params(without_due)["selection_reason"] == "weak_topic"
 
 
 def test_server_target_binding_uses_only_selected_retry(
@@ -784,9 +920,7 @@ def test_semantic_validation_uses_only_rebuilt_canonical_relations(
         },
         canonical_relations={"prerequisites": ["Canonical prerequisite"]},
     )
-    assert context["necessary_relations"] == {
-        "prerequisites": ["Canonical prerequisite"]
-    }
+    assert context["necessary_relations"] == {"prerequisites": ["Canonical prerequisite"]}
     assert "forged prerequisite" not in str(context)
     assert "client-blocker" not in str(context)
     for sentinel in (
@@ -815,11 +949,7 @@ def test_relationless_seed_topics_keep_semantic_validation_evidence(
     }
     topics: dict[str, dict[str, Any]] = {}
     for filename in ("english.json", "history.json", "geography.json"):
-        payload = json.loads(
-            (ROOT / "static" / "knowledge_seeds" / filename).read_text(
-                encoding="utf-8"
-            )
-        )
+        payload = json.loads((ROOT / "static" / "knowledge_seeds" / filename).read_text(encoding="utf-8"))
         topics.update(
             {
                 str(topic.get("id")): topic
@@ -861,11 +991,7 @@ def test_semantic_validation_rebuilds_relations_from_server_topics(
             ]
 
     owner = SimpleNamespace(_store=Store())
-    relations = asyncio.run(
-        entries._canonical_validation_relations_for_target(
-            owner, selected_topic_id="target"
-        )
-    )
+    relations = asyncio.run(entries._canonical_validation_relations_for_target(owner, selected_topic_id="target"))
     assert relations == {
         "prerequisites": ["Prerequisite"],
         "applications": ["Application"],

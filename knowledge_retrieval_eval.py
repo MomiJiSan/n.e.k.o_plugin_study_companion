@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
 from typing import Any, Iterable
+from types import ModuleType
 
 try:
     from .knowledge_graph_guidance import build_knowledge_guidance_payload
 except ImportError:  # pragma: no cover - direct script execution
-    sys.path.append(str(Path(__file__).resolve().parents[3]))
-    from plugin.plugins.study_companion.knowledge_graph_guidance import (
-        build_knowledge_guidance_payload,
-    )
+    package_name = "_study_companion_retrieval_eval"
+    package = ModuleType(package_name)
+    package.__path__ = [str(Path(__file__).resolve().parent)]  # type: ignore[attr-defined]
+    sys.modules.setdefault(package_name, package)
+    build_knowledge_guidance_payload = importlib.import_module(
+        f"{package_name}.knowledge_graph_guidance"
+    ).build_knowledge_guidance_payload
 
 
 CORE_RELATIONS = ("prerequisite", "confusable", "procedure_step", "application")
@@ -128,6 +133,89 @@ def _cross_subject_edges(
     return result
 
 
+def _subgraph_edge_tuples(subgraph: dict[str, Any]) -> set[tuple[str, str, str]]:
+    edges = subgraph.get("edges") if isinstance(subgraph, dict) else []
+    if not isinstance(edges, list):
+        return set()
+    return {
+        (
+            _text(edge.get("from")),
+            _text(edge.get("to")),
+            _text(edge.get("relation")),
+        )
+        for edge in edges
+        if isinstance(edge, dict)
+        and _text(edge.get("from"))
+        and _text(edge.get("to"))
+    }
+
+
+def _expected_links(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    expected: list[dict[str, Any]] = []
+    for link in value:
+        if not isinstance(link, dict):
+            continue
+        from_id = _text(link.get("from"))
+        to_id = _text(link.get("to"))
+        relations = _string_set(link.get("relations"))
+        if from_id and to_id and relations:
+            expected.append(
+                {
+                    "from": from_id,
+                    "to": to_id,
+                    "relations": sorted(relations),
+                }
+            )
+    return expected
+
+
+def _expected_endpoint_ids(
+    *,
+    expected_topic_ids: set[str],
+    expected_links: Iterable[dict[str, Any]],
+) -> set[str]:
+    endpoint_ids = set(expected_topic_ids)
+    for link in expected_links:
+        endpoint_ids.add(_text(link.get("from")))
+        endpoint_ids.add(_text(link.get("to")))
+    endpoint_ids.discard("")
+    return endpoint_ids
+
+
+def _expected_links_hit(
+    *,
+    expected_links: list[dict[str, Any]],
+    subgraph_edges: set[tuple[str, str, str]],
+) -> bool | None:
+    if not expected_links:
+        return None
+    return all(
+        any(
+            actual_from == expected["from"]
+            and actual_to == expected["to"]
+            and actual_relation in set(expected["relations"])
+            for actual_from, actual_to, actual_relation in subgraph_edges
+        )
+        for expected in expected_links
+    )
+
+
+def _context_has_expected_endpoint_cue(
+    *,
+    endpoint_ids: set[str],
+    topic_labels: dict[str, str],
+    model_context: dict[str, Any],
+) -> bool:
+    compact_text = _compact_context_text(model_context)
+    return bool(compact_text) and any(
+        label and label in compact_text
+        for topic_id in endpoint_ids
+        if (label := _text(topic_labels.get(topic_id)))
+    )
+
+
 def _context_has_cross_subject_cue(
     *,
     cross_subject_edges: list[dict[str, Any]],
@@ -197,12 +285,21 @@ def evaluate_knowledge_retrieval_queries(
         "thin_relation_group_count": 0,
         "raw_seed_included_count": 0,
         "bad_hub_absorption_count": 0,
+        "expected_link_case_count": 0,
+        "expected_link_hit_count": 0,
+        "expected_endpoint_case_count": 0,
+        "expected_endpoint_returned_count": 0,
+        "model_context_cue_required_count": 0,
+        "model_context_cue_hit_count": 0,
+        "unrelated_cross_edge_only_count": 0,
     }
 
     for case in cases:
         query = _text(case.get("query") if isinstance(case, dict) else "")
         topic_id = _text(case.get("topic_id") if isinstance(case, dict) else "")
         expected_topic_ids = _string_set(case.get("expected_topic_ids"))
+        expected_links = _expected_links(case.get("expected_links"))
+        require_model_context_cue = bool(case.get("require_model_context_cue"))
         expect_cross_subject = bool(case.get("expect_cross_subject"))
         payload = build_knowledge_guidance_payload(
             topics=topics,
@@ -229,6 +326,48 @@ def evaluate_knowledge_retrieval_queries(
             topic_labels=topic_labels,
         )
         has_cross_edge = bool(cross_edges)
+        subgraph_edges = _subgraph_edge_tuples(subgraph)
+        expected_endpoint_ids = _expected_endpoint_ids(
+            expected_topic_ids=expected_topic_ids,
+            expected_links=expected_links,
+        )
+        nodes = subgraph.get("nodes")
+        if not isinstance(nodes, list):
+            nodes = []
+        returned_node_ids = {
+            _text(node.get("id"))
+            for node in nodes
+            if isinstance(node, dict) and _text(node.get("id"))
+        }
+        expected_endpoint_returned = (
+            expected_endpoint_ids.issubset(returned_node_ids)
+            if expected_endpoint_ids
+            else None
+        )
+        expected_link_hit = _expected_links_hit(
+            expected_links=expected_links,
+            subgraph_edges=subgraph_edges,
+        )
+        model_context_cue_hit = (
+            _context_has_expected_endpoint_cue(
+                endpoint_ids=expected_endpoint_ids,
+                topic_labels=topic_labels,
+                model_context=model_context,
+            )
+            if require_model_context_cue
+            else None
+        )
+        cross_edge_incident_to_expected_endpoint = any(
+            edge["from"] in expected_endpoint_ids
+            or edge["to"] in expected_endpoint_ids
+            for edge in cross_edges
+        )
+        unrelated_cross_edge_only = bool(
+            expect_cross_subject
+            and has_cross_edge
+            and expected_endpoint_ids
+            and not cross_edge_incident_to_expected_endpoint
+        )
         has_cross_cue = _context_has_cross_subject_cue(
             cross_subject_edges=cross_edges,
             model_context=model_context,
@@ -260,17 +399,33 @@ def evaluate_knowledge_retrieval_queries(
         summary["thin_relation_group_count"] += int(bool(thin_groups))
         summary["raw_seed_included_count"] += int(has_raw_seed)
         summary["bad_hub_absorption_count"] += int(bad_hub_absorbed)
+        summary["expected_link_case_count"] += int(bool(expected_links))
+        summary["expected_link_hit_count"] += int(expected_link_hit is True)
+        summary["expected_endpoint_case_count"] += int(bool(expected_endpoint_ids))
+        summary["expected_endpoint_returned_count"] += int(
+            expected_endpoint_returned is True
+        )
+        summary["model_context_cue_required_count"] += int(
+            require_model_context_cue
+        )
+        summary["model_context_cue_hit_count"] += int(model_context_cue_hit is True)
+        summary["unrelated_cross_edge_only_count"] += int(
+            unrelated_cross_edge_only
+        )
 
-        nodes = subgraph.get("nodes")
-        if not isinstance(nodes, list):
-            nodes = []
         results.append(
             {
                 "query": query,
                 "expected_topic_ids": sorted(expected_topic_ids),
+                "expected_links": expected_links,
+                "require_model_context_cue": require_model_context_cue,
                 "expect_cross_subject": expect_cross_subject,
                 "focus_topic_id": focus_topic_id,
                 "focus_hit": focus_hit,
+                "expected_link_hit": expected_link_hit,
+                "expected_endpoint_returned": expected_endpoint_returned,
+                "model_context_cue_hit": model_context_cue_hit,
+                "unrelated_cross_edge_only": unrelated_cross_edge_only,
                 "passed": case_passed,
                 "failure_reasons": failure_reasons,
                 "bad_hub_absorbed": bad_hub_absorbed,

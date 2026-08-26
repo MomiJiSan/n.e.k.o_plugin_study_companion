@@ -205,6 +205,7 @@ def _init_db(self) -> None:
             projection_key TEXT PRIMARY KEY,
             active_revision TEXT NOT NULL,
             edge_count INTEGER NOT NULL DEFAULT 0,
+            dirty INTEGER NOT NULL DEFAULT 0 CHECK(dirty IN (0, 1)),
             built_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
@@ -533,6 +534,12 @@ def _init_db(self) -> None:
         "UPDATE knowledge_seed_state SET applied_at = updated_at WHERE applied_at IS NULL OR applied_at = ''"
     )
     self._ensure_column(conn, "knowledge_seed_membership", "retired_at", "TEXT")
+    self._ensure_column(
+        conn,
+        "knowledge_edge_projection_state",
+        "dirty",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
     self._ensure_column(conn, "candidate_knowledge_items", "dedupe_key", "TEXT")
     self._ensure_column(conn, "qa_records", "source_question_id", "TEXT")
     self._ensure_column(

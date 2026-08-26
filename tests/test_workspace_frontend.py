@@ -251,6 +251,8 @@ window.eval(`
 window.__knowledgeLoadHarness = (() => {
   let mapRequestId = 0;
   let lastKnowledgeMapPayload = null;
+  let knowledgeMapStage = '';
+  let learningProfile = { stage: '' };
   let active = true;
   const renders = [];
   const states = [];
@@ -259,6 +261,7 @@ window.__knowledgeLoadHarness = (() => {
     rerender: (payload) => renders.push(payload),
   };
   function studyKnowledgeMap() { return knowledgeMap; }
+  function normalizeLearningStage(value) { return String(value || '').trim(); }
   function setKnowledgeMapLoadState(state, error = '') { states.push({ state, error }); }
   function syncKnowledgeMapContent() { states.push({ state: 'sync' }); }
   ${loadFunction}
@@ -320,7 +323,7 @@ harness.setRequestId(6);
 harness.setActive(true);
 const currentFailure = harness.load(6);
 await Promise.resolve();
-requests[4].reject(new Error('plugin_call_timeout'));
+requests[4].reject({ code: 'ENTRY_NOT_FOUND', message: 'study_query_knowledge_map not found' });
 await new Promise((resolve) => setTimeout(resolve, 0));
 if (requests[5]?.entryId !== 'study_knowledge_map' || requests[5]?.args?.limit !== 1000) {
   throw new Error('knowledge loader did not fall back to the V1 map entry');
@@ -334,6 +337,64 @@ if (currentError?.error !== 'Localized plugin timeout') {
 if (harness.states.at(-1)?.state !== 'sync') {
   throw new Error('current knowledge failure did not synchronize the error content');
 }
+
+const pagedRequests = [];
+window.callPlugin = async (entryId, args) => await new Promise((resolve, reject) => {
+  pagedRequests.push({ entryId, args, resolve, reject });
+});
+window.eval(`
+window.__knowledgePaginationHarness = (() => {
+  let mapRequestId = 1;
+  let lastKnowledgeMapPayload = null;
+  let knowledgeMapStage = '';
+  let learningProfile = { stage: 'junior_high' };
+  const renders = [];
+  const states = [];
+  const knowledgeMap = { isActive: () => true, rerender: (payload) => renders.push(payload) };
+  function studyKnowledgeMap() { return knowledgeMap; }
+  function normalizeLearningStage(value) { return String(value || '').trim(); }
+  function setKnowledgeMapLoadState(state, error = '') { states.push({ state, error }); }
+  function syncKnowledgeMapContent() { states.push({ state: 'sync' }); }
+  ${loadFunction}
+  return { load: loadKnowledgeMap, getPayload: () => lastKnowledgeMapPayload, renders, states };
+})();`);
+const paged = window.__knowledgePaginationHarness;
+const loadPaged = paged.load(1);
+await Promise.resolve();
+if (pagedRequests[0]?.args?.page_size !== 100 || pagedRequests[0]?.args?.scope?.stage !== 'junior_high') {
+  throw new Error('the initial profile stage was not used as the V2 map scope');
+}
+pagedRequests[0].resolve({
+  catalog_revision: 'revision-1', has_more: true, next_cursor: 'cursor-1', edge_truncated: true,
+  nodes: [{ id: 'a' }, { id: 'a' }],
+  edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }],
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+if (pagedRequests[1]?.args?.cursor !== 'cursor-1') throw new Error('the loader did not consume the next cursor');
+pagedRequests[1].resolve({
+  catalog_revision: 'revision-1', has_more: false, next_cursor: '', boundary: { truncated: true },
+  nodes: [{ id: 'b' }, { id: 'a' }],
+  edges: [
+    { from: 'a', to: 'b', relation: 'prerequisite' },
+    { from: 'b', to: 'c', relation: 'application' },
+  ],
+});
+await loadPaged;
+const pagedPayload = paged.getPayload();
+if (pagedPayload.nodes.length !== 2 || pagedPayload.edges.length !== 2 || pagedPayload.relationships_incomplete !== true) {
+  throw new Error(`paged graph was not deduplicated or marked incomplete: ${JSON.stringify(pagedPayload)}`);
+}
+
+const restartPaged = paged.load(1);
+await Promise.resolve();
+pagedRequests[2].resolve({ catalog_revision: 'revision-2', has_more: true, next_cursor: 'stale-cursor', nodes: [], edges: [] });
+await new Promise((resolve) => setTimeout(resolve, 0));
+pagedRequests[3].reject({ code: 'KNOWLEDGE_MAP_CURSOR_STALE', message: 'knowledge_map_cursor_stale' });
+await new Promise((resolve) => setTimeout(resolve, 0));
+if (pagedRequests[4]?.args?.cursor !== '') throw new Error('a stale cursor did not restart once from page one');
+pagedRequests[4].resolve({ catalog_revision: 'revision-2', has_more: false, next_cursor: '', nodes: [{ id: 'restarted' }], edges: [] });
+await restartPaged;
+if (paged.getPayload()?.nodes?.[0]?.id !== 'restarted') throw new Error('the stale-cursor restart was not committed');
 """
     _run_frontend_script(script)
 

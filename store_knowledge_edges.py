@@ -145,12 +145,45 @@ def _cursor_key(row: Any) -> list[Any]:
 
 def get_knowledge_edge_revision(self) -> dict[str, Any]:
     row = self._require_read_conn().execute(
-        """SELECT active_revision, edge_count, built_at
+        """SELECT active_revision, edge_count, dirty, built_at
         FROM knowledge_edge_projection_state
         WHERE projection_key = ?""",
         (_PROJECTION_STATE_KEY,),
     ).fetchone()
     return _state_from_row(row)
+
+
+def mark_knowledge_edge_projection_dirty(self, *, conn: Any | None = None) -> None:
+    """Mark the read projection stale inside the caller's topic transaction."""
+    target = conn if conn is not None else self._require_conn()
+    target.execute(
+        """INSERT INTO knowledge_edge_projection_state (
+                projection_key, active_revision, edge_count, dirty, built_at
+            ) VALUES (?, '', 0, 1, datetime('now'))
+            ON CONFLICT(projection_key) DO UPDATE SET dirty = 1""",
+        (_PROJECTION_STATE_KEY,),
+    )
+
+
+def _rebuild_dirty_knowledge_edge_projection(self) -> dict[str, Any]:
+    """Synchronize a dirty projection before a V2 map read.
+
+    Readers must not combine current topic rows with a prior edge revision.
+    Preserve that revision on a failed rebuild, but fail the read explicitly so
+    callers never mistake the partial view for a complete graph.
+    """
+    with self._lock:
+        state = self._require_conn().execute(
+            """SELECT active_revision, edge_count, dirty, built_at
+            FROM knowledge_edge_projection_state WHERE projection_key = ?""",
+            (_PROJECTION_STATE_KEY,),
+        ).fetchone()
+        if state is None or not bool(int(state["dirty"] or 0)):
+            return _state_from_row(state)
+    try:
+        return self.rebuild_knowledge_edge_projection()
+    except Exception as exc:
+        raise ValueError("knowledge_edge_projection_rebuild_failed") from exc
 
 
 def _edges_from_rows(rows: list[Any]) -> list[dict[str, Any]]:
@@ -248,7 +281,9 @@ def query_knowledge_map_page(
     one-hop boundary topics are queried; no full catalog graph is rebuilt in
     this read path.
     """
-    revision_state = self.get_knowledge_edge_revision()
+    # This must run before decoding the cursor: a successful rebuild changes
+    # the revision, making every cursor from the prior projection stale.
+    revision_state = _rebuild_dirty_knowledge_edge_projection(self)
     revision = str(revision_state["catalog_revision"] or "")
     filters = _scope_filters(
         stage=stage,
@@ -438,18 +473,26 @@ def rebuild_knowledge_edge_projection(
     revision untouched.  Stale revisions are retained intentionally: they are
     a safe fallback until a later maintenance policy explicitly prunes them.
     """
-    topics = self.list_topics(limit=None)
-    revision = _catalog_revision(topics)
-    edges = build_topic_edges(topics)
     with self._lock:
         conn = self._require_conn()
+        # Hold the write lock while taking the topic snapshot and constructing
+        # its edge set, so a concurrent in-process topic write cannot be
+        # acknowledged between this snapshot and the active-revision switch.
+        topics = self.list_topics(limit=None)
+        revision = _catalog_revision(topics)
+        edges = build_topic_edges(topics)
         active = conn.execute(
-            """SELECT active_revision, edge_count, built_at
+            """SELECT active_revision, edge_count, dirty, built_at
             FROM knowledge_edge_projection_state
             WHERE projection_key = ?""",
             (_PROJECTION_STATE_KEY,),
         ).fetchone()
-        if active is not None and str(active["active_revision"] or "") == revision and not force:
+        if (
+            active is not None
+            and str(active["active_revision"] or "") == revision
+            and not bool(int(active["dirty"] or 0))
+            and not force
+        ):
             persisted_count = conn.execute(
                 "SELECT COUNT(*) AS count FROM knowledge_edges WHERE catalog_revision = ?",
                 (revision,),
@@ -504,11 +547,12 @@ def rebuild_knowledge_edge_projection(
             )
             conn.execute(
                 """INSERT INTO knowledge_edge_projection_state (
-                    projection_key, active_revision, edge_count, built_at
-                ) VALUES (?, ?, ?, datetime('now'))
+                    projection_key, active_revision, edge_count, dirty, built_at
+                ) VALUES (?, ?, ?, 0, datetime('now'))
                 ON CONFLICT(projection_key) DO UPDATE SET
                     active_revision = excluded.active_revision,
                     edge_count = excluded.edge_count,
+                    dirty = 0,
                     built_at = excluded.built_at""",
                 (_PROJECTION_STATE_KEY, revision, edge_count),
             )

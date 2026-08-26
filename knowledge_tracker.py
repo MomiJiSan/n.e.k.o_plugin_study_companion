@@ -82,15 +82,8 @@ def _difficulty_to_float(value: object, default: float = 0.5) -> float:
     is_level_value = number.is_integer() and 1.0 <= number <= 5.0
     is_integer_level = isinstance(value, int)
     is_float_integer_level = isinstance(value, float) and is_level_value
-    is_string_integer_level = (
-        bool(re.fullmatch(r"[1-5](?:\.0+)?", text)) and is_level_value
-    )
-    if (
-        number > 1.0
-        or is_integer_level
-        or is_float_integer_level
-        or is_string_integer_level
-    ):
+    is_string_integer_level = bool(re.fullmatch(r"[1-5](?:\.0+)?", text)) and is_level_value
+    if number > 1.0 or is_integer_level or is_float_integer_level or is_string_integer_level:
         number = number / 5.0
     return _clamp(number, 0.1, 1.0)
 
@@ -202,10 +195,7 @@ class MasteryTracker:
         recent_results: list[dict[str, Any]] | None = None,
     ) -> MasterySnapshot:
         results = list(recent_results or [])[-9:] + [dict(result or {})]
-        scores = [
-            _verdict_score(str(item.get("verdict") or ""), item.get("score"))
-            for item in results
-        ]
+        scores = [_verdict_score(str(item.get("verdict") or ""), item.get("score")) for item in results]
         attempts = len(scores)
         accuracy = sum(scores) / max(1, attempts)
         variance = sum((score - accuracy) ** 2 for score in scores) / max(1, attempts)
@@ -217,9 +207,7 @@ class MasteryTracker:
         raw_mastery = accuracy * recency * (0.6 + 0.4 * consistency) * difficulty_bonus
         mastery = _clamp(raw_mastery * (0.55 + 0.45 * confidence))
         flags: list[str] = []
-        if self.detect_false_mastery_from_values(
-            accuracy=accuracy, consistency=consistency
-        ):
+        if self.detect_false_mastery_from_values(accuracy=accuracy, consistency=consistency):
             flags.append("false_mastery")
         if attempts < 3:
             flags.append("low_confidence")
@@ -235,26 +223,17 @@ class MasteryTracker:
             flags=flags,
         )
 
-    def detect_false_mastery(
-        self, topic_id: str, recent_results: list[dict[str, Any]]
-    ) -> bool:
-        scores = [
-            _verdict_score(str(item.get("verdict") or ""), item.get("score"))
-            for item in recent_results
-        ]
+    def detect_false_mastery(self, topic_id: str, recent_results: list[dict[str, Any]]) -> bool:
+        scores = [_verdict_score(str(item.get("verdict") or ""), item.get("score")) for item in recent_results]
         if not scores:
             return False
         accuracy = sum(scores) / len(scores)
         variance = sum((score - accuracy) ** 2 for score in scores) / len(scores)
         consistency = _clamp(1.0 - math.sqrt(variance) * 2.0)
-        return self.detect_false_mastery_from_values(
-            accuracy=accuracy, consistency=consistency
-        )
+        return self.detect_false_mastery_from_values(accuracy=accuracy, consistency=consistency)
 
     @staticmethod
-    def detect_false_mastery_from_values(
-        *, accuracy: float, consistency: float
-    ) -> bool:
+    def detect_false_mastery_from_values(*, accuracy: float, consistency: float) -> bool:
         return accuracy > 0.6 and consistency < 0.5
 
 
@@ -382,19 +361,65 @@ class KnowledgeGraph:
             topic_id = str(topic.get("id") or "")
             if topic_id in mastered:
                 continue
-            prerequisites = (
-                topic.get("prerequisites")
-                if isinstance(topic.get("prerequisites"), list)
-                else []
-            )
+            prerequisites = topic.get("prerequisites") if isinstance(topic.get("prerequisites"), list) else []
             if all(
-                mastery_by_topic.get(str(req.get("id") or ""), 0.0)
-                >= self._required_mastery(req)
+                mastery_by_topic.get(str(req.get("id") or ""), 0.0) >= self._required_mastery(req)
                 for req in prerequisites
                 if isinstance(req, dict)
             ):
                 ready.append(topic_id)
         return ready
+
+    def readiness_in_scope(self, topic_ids: set[str]) -> tuple[set[str], dict[str, list[dict[str, Any]]]]:
+        """Return ready scoped topics and unmet prerequisite diagnostics.
+
+        Prerequisites are evaluated against their stored mastery even when the
+        prerequisite itself is outside the practice scope.  The caller keeps
+        selection inside ``topic_ids``; this method only explains why a scoped
+        candidate is not ready.
+        """
+        eligible = {str(topic_id or "").strip() for topic_id in topic_ids}
+        eligible.discard("")
+        if not eligible:
+            return set(), {}
+        all_topics = self._store.list_topics(None)
+        topics_by_id = {str(topic.get("id") or ""): topic for topic in all_topics if str(topic.get("id") or "")}
+        scoped_topics = [topics_by_id[topic_id] for topic_id in eligible if topic_id in topics_by_id]
+        prerequisite_ids = {
+            str(requirement.get("id") or "").strip()
+            for topic in scoped_topics
+            for requirement in (topic.get("prerequisites") or [])
+            if isinstance(requirement, dict) and str(requirement.get("id") or "").strip()
+        }
+        mastery_by_topic = self._mastery_by_topic(prerequisite_ids)
+        ready: set[str] = set()
+        blockers_by_topic: dict[str, list[dict[str, Any]]] = {}
+        for topic in scoped_topics:
+            topic_id = str(topic.get("id") or "").strip()
+            blockers: list[dict[str, Any]] = []
+            for requirement in topic.get("prerequisites") or []:
+                if not isinstance(requirement, dict):
+                    continue
+                requirement_id = str(requirement.get("id") or "").strip()
+                if not requirement_id:
+                    continue
+                required_mastery = self._required_mastery(requirement)
+                mastery = mastery_by_topic.get(requirement_id, 0.0)
+                if mastery < required_mastery:
+                    prerequisite = topics_by_id.get(requirement_id) or {}
+                    blockers.append(
+                        {
+                            "id": requirement_id,
+                            "name": str(requirement.get("name") or prerequisite.get("name") or requirement_id),
+                            "required_mastery": required_mastery,
+                            "mastery": mastery,
+                        }
+                    )
+            if blockers:
+                blockers_by_topic[topic_id] = blockers
+            else:
+                ready.add(topic_id)
+        return ready, blockers_by_topic
 
     def find_blocker(self, topic_id: str) -> list[str]:
         topic = self._store.get_topic(topic_id)
@@ -415,9 +440,7 @@ class KnowledgeGraph:
                 blockers.append(req_id)
         return blockers
 
-    def discover_candidate(
-        self, text: str, context: dict[str, Any] | None = None
-    ) -> str | None:
+    def discover_candidate(self, text: str, context: dict[str, Any] | None = None) -> str | None:
         self._ensure_index()
         topic = str((context or {}).get("topic") or "").strip()
         if topic:
@@ -443,9 +466,7 @@ class KnowledgeGraph:
             known_id = self._resolve_store_topic(normalized)
             if known_id:
                 return known_id
-            first = next(
-                (line.strip() for line in normalized.splitlines() if line.strip()), ""
-            )
+            first = next((line.strip() for line in normalized.splitlines() if line.strip()), "")
             if first and first != normalized:
                 known_id = self._resolve_store_topic(first)
                 if known_id:
@@ -454,9 +475,7 @@ class KnowledgeGraph:
         for name, topic_id in self._topic_name_index.items():
             if name and name in normalized:
                 return topic_id
-        first = next(
-            (line.strip() for line in normalized.splitlines() if line.strip()), ""
-        )
+        first = next((line.strip() for line in normalized.splitlines() if line.strip()), "")
         if not first:
             return None
         if self._index_truncated:
@@ -525,15 +544,9 @@ class KnowledgeTracker:
     ) -> None:
         self.store = store
         self.mastery = MasteryTracker()
-        shadow_enabled = _mastery_config_value(
-            mastery_config, "v2_shadow_enabled", False
-        ) is True
-        requested_read_model = str(
-            _mastery_config_value(mastery_config, "read_model", "v1") or "v1"
-        ).strip().lower()
-        effective_read_model = (
-            "v2" if shadow_enabled and requested_read_model == "v2" else "v1"
-        )
+        shadow_enabled = _mastery_config_value(mastery_config, "v2_shadow_enabled", False) is True
+        requested_read_model = str(_mastery_config_value(mastery_config, "read_model", "v1") or "v1").strip().lower()
+        effective_read_model = "v2" if shadow_enabled and requested_read_model == "v2" else "v1"
         model_version = str(
             _mastery_config_value(
                 mastery_config,
@@ -557,9 +570,7 @@ class KnowledgeTracker:
         self._memory_deck_summary_provider: Callable[..., dict[str, Any]] | None = None
         self._quality_warning_failures = 0
 
-    def set_memory_deck_summary_provider(
-        self, provider: Callable[..., dict[str, Any]] | None
-    ) -> None:
+    def set_memory_deck_summary_provider(self, provider: Callable[..., dict[str, Any]] | None) -> None:
         self._memory_deck_summary_provider = provider
 
     def get_mastery(self, topic_id: str) -> float:
@@ -605,9 +616,7 @@ class KnowledgeTracker:
             "has_more": False,
         }
         for _ in range(100):
-            result = self._mastery_v2_projector.process_pending(
-                limit=batch_size
-            ).to_dict()
+            result = self._mastery_v2_projector.process_pending(limit=batch_size).to_dict()
             totals["batches"] += 1
             for key in ("claimed", "completed", "failed", "skipped"):
                 totals[key] += int(result.get(key) or 0)
@@ -618,9 +627,7 @@ class KnowledgeTracker:
             totals["has_more"] = True
         return totals
 
-    def rebuild_mastery_v2(
-        self, topic_ids: list[str] | set[str] | tuple[str, ...] | None = None
-    ) -> dict[str, Any]:
+    def rebuild_mastery_v2(self, topic_ids: list[str] | set[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
         result = (
             self._mastery_v2_projector.rebuild_topics(topic_ids)
             if topic_ids is not None
@@ -729,9 +736,7 @@ class KnowledgeTracker:
     ) -> dict[str, Any]:
         question_payload = dict(question or {})
         question_payload.pop("target_binding", None)
-        source_question_id = str(
-            question_payload.get("source_question_id") or ""
-        ).strip()
+        source_question_id = str(question_payload.get("source_question_id") or "").strip()
         qa_result = dict(eval_result or {})
         qa_result["knowledge_tracking_status"] = "qa_only"
         self.store.ensure_session(session_id=session_id, mode=mode)
@@ -772,15 +777,11 @@ class KnowledgeTracker:
             topic_existed,
             topic_upsert_data,
             topic_candidate_data,
-        ) = self._prepare_answer_topic_data(
-            topic_id, question=question, eval_result=eval_result
-        )
+        ) = self._prepare_answer_topic_data(topic_id, question=question, eval_result=eval_result)
         question_payload = dict(question or {})
         if attempt_id:
             question_payload["attempt_id"] = str(attempt_id)
-        source_question_id = str(
-            question_payload.get("source_question_id") or ""
-        ).strip()
+        source_question_id = str(question_payload.get("source_question_id") or "").strip()
         question_payload.setdefault("topic", topic_id)
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
@@ -795,9 +796,7 @@ class KnowledgeTracker:
             "difficulty": difficulty,
             "response_time_ms": response_time_ms,
         }
-        snapshot = self.mastery.update(
-            topic_id, mastery_result, recent_results=recent_results
-        )
+        snapshot = self.mastery.update(topic_id, mastery_result, recent_results=recent_results)
 
         wrong_question_data: dict[str, Any] | None = None
         wrong_question_attempt_data: dict[str, Any] | None = None
@@ -817,11 +816,7 @@ class KnowledgeTracker:
                     "topic_id": topic_id,
                     "question": question_payload,
                     "user_answer": user_answer,
-                    "expected_answer": str(
-                        question_payload.get("answer")
-                        or eval_result.get("expected_answer")
-                        or ""
-                    ),
+                    "expected_answer": str(question_payload.get("answer") or eval_result.get("expected_answer") or ""),
                     "error_type": error_type,
                     "verdict": verdict,
                 }
@@ -833,9 +828,7 @@ class KnowledgeTracker:
                 verdict=verdict,
             )
         elif verdict == "correct":
-            positive_candidate = self._build_positive_candidate_data(
-                topic_id=topic_id, question=question_payload
-            )
+            positive_candidate = self._build_positive_candidate_data(topic_id=topic_id, question=question_payload)
 
         card = card_row.get("card") if card_row else create_card(topic_id).to_dict()
         rating = self._rating_from_eval(eval_result)
@@ -882,17 +875,13 @@ class KnowledgeTracker:
                 "wrong_question_attempt": {},
                 "fsrs": {},
                 "knowledge_tracking_status": "duplicate_attempt",
-                "existing_eval_result": dict(
-                    batch_result.get("existing_eval_result") or {}
-                ),
+                "existing_eval_result": dict(batch_result.get("existing_eval_result") or {}),
             }
         return {
             "topic_id": topic_id,
             "mastery": snapshot.to_dict(),
             "wrong_question_id": str(batch_result.get("wrong_question_id") or ""),
-            "wrong_question_attempt": dict(
-                batch_result.get("wrong_question_attempt") or {}
-            ),
+            "wrong_question_attempt": dict(batch_result.get("wrong_question_attempt") or {}),
             "fsrs": schedule,
         }
 
@@ -920,14 +909,10 @@ class KnowledgeTracker:
         response_time_ms: int | None = None,
         origin_wrong_question_id: str = "",
     ) -> dict[str, Any]:
-        topic_id = self._ensure_topic(
-            topic_id, question=question, eval_result=eval_result
-        )
+        topic_id = self._ensure_topic(topic_id, question=question, eval_result=eval_result)
         question_payload = dict(question or {})
         question_payload.setdefault("topic", topic_id)
-        source_question_id = str(
-            question_payload.get("source_question_id") or ""
-        ).strip()
+        source_question_id = str(question_payload.get("source_question_id") or "").strip()
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
         error_type = str(eval_result.get("error_type") or "").strip() or "unknown"
@@ -945,11 +930,7 @@ class KnowledgeTracker:
             source_question_id=source_question_id or None,
         )
 
-        recent = (
-            self.store.list_qa_records_for_topic(topic_id, limit=10)
-            if qa_topic_id
-            else []
-        )
+        recent = self.store.list_qa_records_for_topic(topic_id, limit=10) if qa_topic_id else []
         if not is_known_topic:
             if verdict in {"wrong", "partial", "dont_know"}:
                 self._record_error_candidates(
@@ -960,9 +941,7 @@ class KnowledgeTracker:
                     verdict=verdict,
                 )
             elif verdict == "correct":
-                self._record_positive_question_type(
-                    topic_id=topic_id, question=question_payload
-                )
+                self._record_positive_question_type(topic_id=topic_id, question=question_payload)
             return {
                 "topic_id": topic_id,
                 "mastery": {},
@@ -976,9 +955,7 @@ class KnowledgeTracker:
             "difficulty": difficulty,
             "response_time_ms": response_time_ms,
         }
-        snapshot = self.mastery.update(
-            topic_id, mastery_result, recent_results=recent_results
-        )
+        snapshot = self.mastery.update(topic_id, mastery_result, recent_results=recent_results)
         self.store.append_mastery_snapshot(snapshot.to_dict())
 
         wrong_question_id = ""
@@ -999,19 +976,13 @@ class KnowledgeTracker:
                     verdict=verdict,
                 )
             elif verdict == "correct":
-                self._record_positive_question_type(
-                    topic_id=topic_id, question=question_payload
-                )
+                self._record_positive_question_type(topic_id=topic_id, question=question_payload)
         elif verdict in {"wrong", "partial", "dont_know"}:
             wrong_question_id = self.wrong_store.add(
                 topic_id=topic_id,
                 question=question_payload,
                 user_answer=user_answer,
-                expected_answer=str(
-                    question_payload.get("answer")
-                    or eval_result.get("expected_answer")
-                    or ""
-                ),
+                expected_answer=str(question_payload.get("answer") or eval_result.get("expected_answer") or ""),
                 error_type=error_type,
                 verdict=verdict,
             )
@@ -1023,17 +994,13 @@ class KnowledgeTracker:
                 verdict=verdict,
             )
         elif verdict == "correct":
-            self._record_positive_question_type(
-                topic_id=topic_id, question=question_payload
-            )
+            self._record_positive_question_type(topic_id=topic_id, question=question_payload)
 
         card_row = self.store.get_fsrs_card(topic_id)
         card = card_row.get("card") if card_row else create_card(topic_id).to_dict()
         rating = self._rating_from_eval(eval_result)
         updated_card, schedule = rate_answer(card, rating)
-        self.store.upsert_fsrs_card(
-            topic_id=topic_id, card=updated_card.to_dict(), last_rating=int(rating)
-        )
+        self.store.upsert_fsrs_card(topic_id=topic_id, card=updated_card.to_dict(), last_rating=int(rating))
         self.store.append_review_log(
             topic_id=topic_id,
             card_id=int((card_row or {}).get("id") or 0) or None,
@@ -1063,9 +1030,7 @@ class KnowledgeTracker:
                 "id": resolved,
                 "name": topic_name or resolved,
                 "subject": str(question.get("subject") or "math"),
-                "chapter": str(
-                    question.get("chapter") or question.get("topic") or "runtime"
-                ),
+                "chapter": str(question.get("chapter") or question.get("topic") or "runtime"),
                 "depth": 2,
                 "difficulty": _difficulty_to_float(question.get("difficulty"), 0.5),
                 "prerequisites": [],
@@ -1124,9 +1089,7 @@ class KnowledgeTracker:
             ),
         ]
 
-    def _build_positive_candidate_data(
-        self, *, topic_id: str, question: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _build_positive_candidate_data(self, *, topic_id: str, question: dict[str, Any]) -> dict[str, Any]:
         candidate = self._build_candidate_write_data(
             item_type=KnowledgeCandidateType.QUESTION_TYPE.value,
             payload={
@@ -1203,9 +1166,7 @@ class KnowledgeTracker:
             difficulty = 4
         blockers = self.graph.find_blocker(resolved) if resolved else []
         retry = self.wrong_store.get_retry(resolved) if resolved else None
-        candidate_evidence = self.quality.prompt_evidence_summary(
-            topic_id=resolved, limit=5
-        )
+        candidate_evidence = self.quality.prompt_evidence_summary(topic_id=resolved, limit=5)
         return {
             "target_topic_id": resolved,
             "target_topic": topic or {},
@@ -1216,9 +1177,7 @@ class KnowledgeTracker:
             "blockers": blockers,
             "retry_wrong_question": retry or {},
             "candidate_evidence": candidate_evidence,
-            "prompt_guidance": self._question_guidance(
-                mastery_value, blockers=blockers, retry=retry
-            ),
+            "prompt_guidance": self._question_guidance(mastery_value, blockers=blockers, retry=retry),
         }
 
     def preview_next_question_params(
@@ -1236,9 +1195,7 @@ class KnowledgeTracker:
             candidate_topics_by_id=candidate_topics_by_id,
         )
 
-    def record_prompt_usage_for_question_params(
-        self, params: dict[str, Any] | None
-    ) -> int:
+    def record_prompt_usage_for_question_params(self, params: dict[str, Any] | None) -> int:
         payload = dict(params or {})
         topic_id = str(payload.get("target_topic_id") or "").strip()
         recorded = 0
@@ -1257,9 +1214,7 @@ class KnowledgeTracker:
                 )
                 recorded += 1
             except Exception as exc:
-                self._log_quality_warning(
-                    "record prompt candidate evidence failed: {}", exc
-                )
+                self._log_quality_warning("record prompt candidate evidence failed: {}", exc)
         return recorded
 
     def get_session_summary(self) -> dict[str, Any]:
@@ -1268,9 +1223,7 @@ class KnowledgeTracker:
             "weak_topics": self.get_weak_topics(limit=8),
             "review_queue": self.get_review_queue(limit=8),
             "memory_deck": self.get_memory_deck_status(limit=8),
-            "wrong_questions": self.store.list_wrong_questions(
-                limit=8, statuses=("active", "retrying")
-            ),
+            "wrong_questions": self.store.list_wrong_questions(limit=8, statuses=("active", "retrying")),
             "candidate_evidence": self.quality.prompt_evidence_summary(limit=8),
         }
 
@@ -1305,9 +1258,7 @@ class KnowledgeTracker:
         )
 
         existing = self.store.get_fsrs_card(resolved)
-        base = StudyFsrsCard.from_dict(
-            existing.get("card") if existing else create_card(resolved).to_dict()
-        )
+        base = StudyFsrsCard.from_dict(existing.get("card") if existing else create_card(resolved).to_dict())
         card = StudyFsrsCard.from_dict(
             {
                 **base.to_dict(),
@@ -1353,9 +1304,7 @@ class KnowledgeTracker:
             ordered_rows = rows
         safe_limit = max(1, int(limit or 50))
         return [
-            self._memory_card_payload(
-                row, due_item=due_by_topic.get(str(row.get("topic_id") or ""))
-            )
+            self._memory_card_payload(row, due_item=due_by_topic.get(str(row.get("topic_id") or "")))
             for row in ordered_rows[:safe_limit]
         ]
 
@@ -1364,9 +1313,7 @@ class KnowledgeTracker:
             try:
                 return self._memory_deck_summary_provider(limit=limit)
             except Exception as exc:
-                self._log_quality_warning(
-                    "Memory deck summary provider failed: %s", exc
-                )
+                self._log_quality_warning("Memory deck summary provider failed: %s", exc)
         rows = self._memory_card_rows(include_topic_cards=False)
         due_count = len(self.fsrs.get_due_reviews([row["card"] for row in rows]))
         return {
@@ -1393,9 +1340,7 @@ class KnowledgeTracker:
         was_due_before = bool(self.fsrs.get_due_reviews([card_row["card"]]))
         updated_card, schedule = rate_answer(card_row["card"], selected)
         is_due_after = bool(self.fsrs.get_due_reviews([updated_card]))
-        self.store.upsert_fsrs_card(
-            topic_id=resolved, card=updated_card.to_dict(), last_rating=int(selected)
-        )
+        self.store.upsert_fsrs_card(topic_id=resolved, card=updated_card.to_dict(), last_rating=int(selected))
         self.store.append_review_log(
             topic_id=resolved,
             card_id=int(card_row.get("id") or 0) or None,
@@ -1451,16 +1396,11 @@ class KnowledgeTracker:
         *,
         topic_ids: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> list[dict[str, Any]]:
-        overview = (
-            self.list_mastery(topic_ids)
-            if topic_ids is not None
-            else self.list_mastery_overview(limit=1000)
-        )
+        overview = self.list_mastery(topic_ids) if topic_ids is not None else self.list_mastery_overview(limit=1000)
         weak = [
             item
             for item in overview
-            if float(item.get("mastery") or 0.0) < 0.60
-            or "false_mastery" in (item.get("flags") or [])
+            if float(item.get("mastery") or 0.0) < 0.60 or "false_mastery" in (item.get("flags") or [])
         ]
         weak.sort(
             key=lambda item: (
@@ -1475,8 +1415,7 @@ class KnowledgeTracker:
         return sum(
             1
             for item in overview
-            if float(item.get("mastery") or 0.0) < 0.60
-            or "false_mastery" in (item.get("flags") or [])
+            if float(item.get("mastery") or 0.0) < 0.60 or "false_mastery" in (item.get("flags") or [])
         )
 
     def get_status_summary(self, *, limit: int = 8) -> dict[str, Any]:
@@ -1488,9 +1427,7 @@ class KnowledgeTracker:
             "average_mastery": round(self.learner_state.average_mastery(), 4),
             "weak_topic_count": self.count_weak_topics(),
             "due_review_count": self.count_due_reviews(),
-            "memory_card_count": int(
-                memory_deck.get("card_count") or memory_deck.get("item_count") or 0
-            ),
+            "memory_card_count": int(memory_deck.get("card_count") or memory_deck.get("item_count") or 0),
             "last_updated_at": overview[0].get("updated_at") if overview else "",
             "candidate_quality": self.quality.status_summary(limit=limit),
         }
@@ -1499,15 +1436,9 @@ class KnowledgeTracker:
         rows = self.store.list_fsrs_cards(limit=None)
         if include_topic_cards:
             return rows
-        return [
-            row
-            for row in rows
-            if str((row.get("card") or {}).get("card_type") or "topic") == "memory"
-        ]
+        return [row for row in rows if str((row.get("card") or {}).get("card_type") or "topic") == "memory"]
 
-    def _memory_card_payload(
-        self, row: dict[str, Any], *, due_item: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def _memory_card_payload(self, row: dict[str, Any], *, due_item: dict[str, Any] | None = None) -> dict[str, Any]:
         card = StudyFsrsCard.from_dict(row.get("card") or {})
         topic_id = str(row.get("topic_id") or card.topic_id or "")
         topic = self.store.get_topic(topic_id) or {}
@@ -1515,11 +1446,7 @@ class KnowledgeTracker:
         if resolved_due_item is None:
             due_reviews = self.fsrs.get_due_reviews([card])
             resolved_due_item = due_reviews[0] if due_reviews else None
-        retrieval = (
-            float(resolved_due_item.get("retrievability"))
-            if resolved_due_item
-            else retrievability(card)
-        )
+        retrieval = float(resolved_due_item.get("retrievability")) if resolved_due_item else retrievability(card)
         return {
             "id": int(row.get("id") or 0),
             "topic_id": topic_id,
@@ -1560,9 +1487,7 @@ class KnowledgeTracker:
             "tags": list(card.tags),
         }
 
-    def _ensure_topic(
-        self, topic_id: str, *, question: dict[str, Any], eval_result: dict[str, Any]
-    ) -> str:
+    def _ensure_topic(self, topic_id: str, *, question: dict[str, Any], eval_result: dict[str, Any]) -> str:
         resolved, topic_name, topic_existed = self._resolve_and_identify_topic(
             topic_id, question=question, eval_result=eval_result
         )
@@ -1592,13 +1517,9 @@ class KnowledgeTracker:
     def _resolve_and_identify_topic(
         self, topic_id: str, *, question: dict[str, Any], eval_result: dict[str, Any]
     ) -> tuple[str, str, bool]:
-        raw_topic = str(
-            topic_id or question.get("topic") or eval_result.get("topic") or ""
-        ).strip()
+        raw_topic = str(topic_id or question.get("topic") or eval_result.get("topic") or "").strip()
         resolved = self._resolve_topic_id(raw_topic)
-        topic_name = str(
-            question.get("topic") or eval_result.get("topic") or resolved or "general"
-        ).strip()
+        topic_name = str(question.get("topic") or eval_result.get("topic") or resolved or "general").strip()
         if not resolved:
             resolved = _slug(topic_name)
         return resolved, topic_name, bool(self.store.get_topic(resolved))
@@ -1657,9 +1578,7 @@ class KnowledgeTracker:
         except Exception as exc:
             self._log_quality_warning("record question type candidate failed: {}", exc)
 
-    def _record_positive_question_type(
-        self, *, topic_id: str, question: dict[str, Any]
-    ) -> None:
+    def _record_positive_question_type(self, *, topic_id: str, question: dict[str, Any]) -> None:
         try:
             candidate = self.quality.upsert_candidate(
                 KnowledgeCandidateType.QUESTION_TYPE.value,
@@ -1679,15 +1598,11 @@ class KnowledgeTracker:
                 {"source": "answer_evaluation", "topic_id": topic_id},
             )
         except Exception as exc:
-            self._log_quality_warning(
-                "record positive question type candidate failed: {}", exc
-            )
+            self._log_quality_warning("record positive question type candidate failed: {}", exc)
 
     @staticmethod
     def _question_type_key(question: dict[str, Any]) -> str:
-        explicit = str(
-            question.get("question_type") or question.get("type") or ""
-        ).strip()
+        explicit = str(question.get("question_type") or question.get("type") or "").strip()
         if explicit:
             return _slug(explicit)
         difficulty = question.get("difficulty")
@@ -1781,16 +1696,11 @@ class KnowledgeTracker:
         return StudyFsrsRating.Good
 
     @staticmethod
-    def _question_guidance(
-        mastery: float, *, blockers: list[str], retry: dict[str, Any] | None
-    ) -> str:
+    def _question_guidance(mastery: float, *, blockers: list[str], retry: dict[str, Any] | None) -> str:
         if retry:
             return "Use a variant of the active wrong question and check whether the same error type reappears."
         if blockers:
-            return (
-                "Directly assess the target topic, using the smallest prerequisite "
-                "step only to reveal the blocker."
-            )
+            return "Directly assess the target topic, using the smallest prerequisite step only to reveal the blocker."
         if mastery < 0.35:
             return "Use a direct recall or single-step question with a visible hint."
         if mastery < 0.65:

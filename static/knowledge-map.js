@@ -554,7 +554,11 @@ function renderKnowledgeStageSelector(nodes = []) {
       knowledgeMapCourseFamily = '';
       knowledgeMapChapter = '';
       knowledgeMapUnit = '';
-      rerenderKnowledgeMap();
+      if (typeof reloadKnowledgeMapForStage === 'function') {
+        reloadKnowledgeMapForStage(stage);
+      } else {
+        rerenderKnowledgeMap();
+      }
     });
     actions.appendChild(button);
   });
@@ -585,7 +589,11 @@ function renderKnowledgeStageSelector(nodes = []) {
     knowledgeMapCourseFamily = '';
     knowledgeMapChapter = '';
     knowledgeMapUnit = '';
-    rerenderKnowledgeMap();
+    if (typeof reloadKnowledgeMapForStage === 'function') {
+      reloadKnowledgeMapForStage(defaultStage);
+    } else {
+      rerenderKnowledgeMap();
+    }
   });
   quickActions.appendChild(returnDefault);
   root.appendChild(quickActions);
@@ -1141,6 +1149,13 @@ function renderKnowledgePanel(payload = null) {
   appendPanelState(state, t('ui.label.weak_topics', 'Weak Topics'), String(weakTopics));
   if (boundaryCount) appendPanelState(state, t('ui.knowledge.boundary_prerequisites', 'Out-of-scope prerequisites'), String(boundaryCount));
   root.appendChild(state);
+  if (data.relationships_incomplete === true || data.edge_truncated === true || data.boundary?.truncated === true) {
+    root.appendChild(drawerElement(
+      'p',
+      'knowledge-map-incomplete',
+      t('ui.knowledge.relationships_incomplete', 'Some relationships could not be loaded completely.'),
+    ));
+  }
   root.appendChild(renderKnowledgeStageSelector(nodes));
   root.appendChild(renderKnowledgeSubjectSelector(nodes, activeStage));
   root.appendChild(renderKnowledgeHierarchyScopePicker(nodes));
