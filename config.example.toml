@@ -1,3 +1,10 @@
 [plugin_runtime]
 enabled = true
 auto_start = false
+
+# Opt-in deterministic assessment routes.  Keep every route disabled until
+# compatibility monitoring has approved a scoped rollout.
+[assessment]
+exact_short_answer_enabled = false
+numeric_tolerance_enabled = false
+math_expression_enabled = false

@@ -758,6 +758,90 @@ def test_successful_semantic_repair_finalizes_exactly_once(
     asyncio.run(_run_successful_repair_entry_test(monkeypatch))
 
 
+async def _run_deterministic_short_answer_entry_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, Ok = _load_answer_entries(
+        monkeypatch, "_evaluation_entry_deterministic_short_answer"
+    )
+
+    class Agent:
+        calls = 0
+
+        async def answer_evaluate(self, **_kwargs):
+            self.calls += 1
+            raise AssertionError("a deterministic exact match must not call the LLM")
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        _agent = Agent()
+        _lock = asyncio.Lock()
+        _cfg = SimpleNamespace(
+            assessment=SimpleNamespace(
+                exact_short_answer_enabled=True,
+                numeric_tolerance_enabled=False,
+                math_expression_enabled=False,
+            )
+        )
+        _state = SimpleNamespace(
+            current_question={
+                "question": "What is the capital of France?",
+                "answer": "Paris",
+                "accepted_answers": ["Paris", "Paris, France"],
+                "question_type": "short_answer",
+                "question_id": "q-deterministic",
+                "attempt_id": "a-deterministic",
+            },
+            active_mode="companion",
+        )
+        finalized = 0
+        persisted = 0
+        logger = _Logger()
+
+        def _resolve_study_target_lanlan(self, _kwargs):
+            return None
+
+        def _resolve_current_run_id(self, _kwargs):
+            return "run"
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text}
+
+        async def _finalize_tutor_call(self, _operation, reply, **_kwargs):
+            self.finalized += 1
+            return dict(reply.payload)
+
+        async def _persist_state(self):
+            self.persisted += 1
+
+        async def _emit_answer_evaluated_event(self, **_kwargs):
+            return None
+
+    subject = Subject()
+    result = await subject.study_evaluate_answer(
+        answer=" PARIS ",
+        question_id="q-deterministic",
+        attempt_id="a-deterministic",
+    )
+
+    assert isinstance(result, Ok)
+    assert result.value["verdict"] == "correct"
+    assert result.value["evaluator_type"] == "exact_short_answer"
+    assert result.value["evaluator_version"] == "exact-short-answer-v1"
+    assert result.value["confidence"] == 1.0
+    assert result.value["fallback_reason"] == ""
+    assert "accepted_answers" not in result.value
+    assert "answer" not in result.value
+    assert subject._agent.calls == 0
+    assert subject.finalized == 1
+    assert subject.persisted == 1
+
+
+def test_deterministic_short_answer_skips_llm_and_keeps_private_answer_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_run_deterministic_short_answer_entry_test(monkeypatch))
+
+
 async def _run_persistence_failure_entry_test(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

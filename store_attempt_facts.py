@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from .store_common import Any, sqlite3
 
 
@@ -19,6 +21,31 @@ def _optional_int(value: object) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def _optional_confidence(value: object) -> float | None:
+    """Return a finite evaluator confidence without changing evaluation JSON."""
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(confidence):
+        return None
+    return max(0.0, min(1.0, confidence))
+
+
+def _evaluation_metadata(eval_result: dict[str, Any] | None) -> tuple[str, str, float | None, str]:
+    """Extract additive storage metadata with conservative legacy defaults."""
+    payload = dict(eval_result or {})
+    evaluator_type = str(payload.get("evaluator_type") or "llm_rubric").strip()
+    evaluator_version = str(payload.get("evaluator_version") or "legacy-v1").strip()
+    fallback_reason = str(payload.get("fallback_reason") or "")
+    return (
+        evaluator_type or "llm_rubric",
+        evaluator_version or "legacy-v1",
+        _optional_confidence(payload.get("confidence")),
+        fallback_reason,
+    )
 
 
 def write_attempt_facts(
@@ -86,10 +113,22 @@ def write_attempt_facts(
             int(response_time_ms) if response_time_ms is not None else None,
         ),
     )
+    evaluator_type, evaluator_version, confidence, fallback_reason = _evaluation_metadata(
+        eval_result
+    )
     conn.execute(
-        """INSERT INTO evaluations (attempt_id, evaluation_json, created_at)
-        VALUES (?, ?, datetime('now'))""",
-        (attempt_key, self._json_dumps(dict(eval_result or {}))),
+        """INSERT INTO evaluations (
+            attempt_id, evaluation_json, evaluator_type, evaluator_version,
+            confidence, fallback_reason, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))""",
+        (
+            attempt_key,
+            self._json_dumps(dict(eval_result or {})),
+            evaluator_type,
+            evaluator_version,
+            confidence,
+            fallback_reason,
+        ),
     )
     return True
 
@@ -102,7 +141,9 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
     row = self._require_read_conn().execute(
         """SELECT a.attempt_id, a.question_id, a.session_id, a.topic_id,
                   a.user_answer, a.mode, a.response_time_ms, a.submitted_at,
-                  q.source_question_id, q.question_json, e.evaluation_json
+                  q.source_question_id, q.question_json, e.evaluation_json,
+                  e.evaluator_type, e.evaluator_version, e.confidence,
+                  e.fallback_reason
            FROM attempts a
            JOIN question_instances q ON q.question_id = a.question_id
            LEFT JOIN evaluations e ON e.attempt_id = a.attempt_id
@@ -119,6 +160,12 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
             "question": self._json_loads(row["question_json"], {}),
             "user_answer": str(row["user_answer"] or ""),
             "eval_result": self._json_loads(row["evaluation_json"], {}),
+            "evaluation_metadata": {
+                "evaluator_type": str(row["evaluator_type"] or "llm_rubric"),
+                "evaluator_version": str(row["evaluator_version"] or "legacy-v1"),
+                "confidence": _optional_confidence(row["confidence"]),
+                "fallback_reason": str(row["fallback_reason"] or ""),
+            },
             "mode": str(row["mode"] or ""),
             "response_time_ms": int(row["response_time_ms"] or 0),
             "submitted_at": str(row["submitted_at"] or ""),
@@ -149,6 +196,12 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
         "question": question,
         "user_answer": str(legacy.get("user_answer") or ""),
         "eval_result": dict(legacy.get("eval_result") or {}),
+        "evaluation_metadata": {
+            "evaluator_type": "llm_rubric",
+            "evaluator_version": "legacy-v1",
+            "confidence": None,
+            "fallback_reason": "",
+        },
         "mode": str(legacy.get("mode") or ""),
         "response_time_ms": int(legacy.get("response_time_ms") or 0),
         "submitted_at": str(legacy.get("created_at") or ""),

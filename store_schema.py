@@ -15,7 +15,10 @@ _COLUMN_DEFINITION_ALLOWLIST = {
     "TEXT",
     "TEXT NOT NULL DEFAULT ''",
     "TEXT NOT NULL DEFAULT '[]'",
+    "TEXT NOT NULL DEFAULT 'LLM_RUBRIC'",
+    "TEXT NOT NULL DEFAULT 'LEGACY-V1'",
     "INTEGER NOT NULL DEFAULT 0",
+    "REAL",
 }
 
 
@@ -46,10 +49,10 @@ def _validate_sql_order_by(value: str) -> str:
 
 
 def _validate_column_definition(value: str) -> str:
-    text = str(value or "").strip().upper()
-    if text not in _COLUMN_DEFINITION_ALLOWLIST:
+    definition = str(value or "").strip()
+    if definition.upper() not in _COLUMN_DEFINITION_ALLOWLIST:
         raise ValueError(f"invalid SQL column definition: {value!r}")
-    return text
+    return definition
 
 
 def _init_notes_fts(self, conn: sqlite3.Connection) -> None:
@@ -375,6 +378,10 @@ def _init_db(self) -> None:
         CREATE TABLE IF NOT EXISTS evaluations (
             attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
             evaluation_json TEXT NOT NULL,
+            evaluator_type TEXT NOT NULL DEFAULT 'llm_rubric',
+            evaluator_version TEXT NOT NULL DEFAULT 'legacy-v1',
+            confidence REAL,
+            fallback_reason TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
@@ -493,6 +500,25 @@ def _init_db(self) -> None:
     self._ensure_column(conn, "knowledge_seed_membership", "retired_at", "TEXT")
     self._ensure_column(conn, "candidate_knowledge_items", "dedupe_key", "TEXT")
     self._ensure_column(conn, "qa_records", "source_question_id", "TEXT")
+    # PR-8 adds evaluator provenance without replacing the evaluation JSON.
+    # Defaults make records created before this migration read as the legacy
+    # LLM rubric path while keeping the original JSON untouched.
+    self._ensure_column(
+        conn,
+        "evaluations",
+        "evaluator_type",
+        "TEXT NOT NULL DEFAULT 'llm_rubric'",
+    )
+    self._ensure_column(
+        conn,
+        "evaluations",
+        "evaluator_version",
+        "TEXT NOT NULL DEFAULT 'legacy-v1'",
+    )
+    self._ensure_column(conn, "evaluations", "confidence", "REAL")
+    self._ensure_column(
+        conn, "evaluations", "fallback_reason", "TEXT NOT NULL DEFAULT ''"
+    )
     expected_idx_topics_stage = ["stage", "subject", "chapter", "unit", "depth", "id"]
     current_idx_topics_stage = [
         row["name"] if isinstance(row, sqlite3.Row) else row[2]
