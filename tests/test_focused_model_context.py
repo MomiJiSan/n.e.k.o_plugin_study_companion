@@ -59,7 +59,7 @@ def test_focused_model_context_is_exactly_one_hop_for_every_bundled_topic(
     guidance, index_module = _modules(monkeypatch, "_focused_context_full_graph_test")
     graph = index_module.KnowledgeGraphIndex(_seed_topics())
     assert len(graph.by_id) == 892
-    assert len(graph.edges) == 4790
+    assert len(graph.edges) == 4827
 
     for selected_id, selected_topic in graph.by_id.items():
         context = guidance._build_focused_model_context(
