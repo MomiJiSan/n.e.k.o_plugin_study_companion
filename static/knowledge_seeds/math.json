@@ -6461,6 +6461,24 @@
             "target_subject": "math",
             "added_for": "math_core_pack_second_batch_20260626"
           }
+        },
+        {
+          "id": "quadratic_application_profit",
+          "relation": "application",
+          "reason": "The opening direction determines whether the vertex represents a maximum or minimum, which is essential when interpreting a quadratic profit model.",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.9,
+          "use_cases": [
+            "diagnosis",
+            "hint_generation",
+            "practice_planning"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -7467,6 +7485,24 @@
             "added_for": "math_core_pack_second_batch_20260626",
             "cross_subject": true,
             "bridge_direction": "math_to_economics"
+          }
+        },
+        {
+          "id": "quadratic_max_min",
+          "relation": "procedure_step",
+          "reason": "After expressing revenue or profit as a quadratic function, apply the quadratic maximum-or-minimum method and then check the feasible domain.",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.92,
+          "use_cases": [
+            "hint_generation",
+            "practice_planning",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
           }
         }
       ],
@@ -17713,6 +17749,24 @@
             "source_subject": "math",
             "target_subject": "math",
             "added_for": "math_core_pack_second_batch_20260626"
+          }
+        },
+        {
+          "id": "probability_fairness",
+          "relation": "procedure_step",
+          "reason": "After calculating compound-event probabilities, compare the outcomes to judge whether a game or selection rule is fair.",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.9,
+          "use_cases": [
+            "hint_generation",
+            "practice_planning",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
           }
         }
       ],
@@ -40952,6 +41006,42 @@
             "target_subject": "math",
             "added_for": "math_core_pack_second_batch_20260626"
           }
+        },
+        {
+          "id": "senior_binomial_distribution",
+          "relation": "confusable",
+          "reason": "Classical probability evaluates an equiprobable event directly, while binomial distribution models the count of successes in repeated trials; their combinatorial formulas are often mixed up.",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.88,
+          "use_cases": [
+            "diagnosis",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
+          }
+        },
+        {
+          "id": "senior_random_variable",
+          "relation": "procedure_step",
+          "reason": "After finding probabilities in an equiprobable sample space, define a random variable and organize its possible values into a distribution table.",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.9,
+          "use_cases": [
+            "hint_generation",
+            "practice_planning",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
+          }
         }
       ],
       "typical_misconceptions": [
@@ -41044,6 +41134,42 @@
             "source_subject": "math",
             "target_subject": "math",
             "added_for": "math_core_pack_second_batch_20260626"
+          }
+        },
+        {
+          "id": "senior_normal_distribution",
+          "relation": "confusable",
+          "reason": "A discrete random-variable distribution lists values and probabilities, whereas a normal distribution is a continuous model; learners often confuse their representations and applicable formulas.",
+          "priority": "core",
+          "context": "diagnosis",
+          "confidence": 0.88,
+          "use_cases": [
+            "diagnosis",
+            "hint_generation",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
+          }
+        },
+        {
+          "id": "senior_binomial_distribution",
+          "relation": "procedure_step",
+          "reason": "After constructing a discrete random-variable distribution, identify the repeated independent-trial case and use the binomial-distribution model.",
+          "priority": "core",
+          "context": "practice",
+          "confidence": 0.9,
+          "use_cases": [
+            "hint_generation",
+            "practice_planning",
+            "review"
+          ],
+          "metadata": {
+            "source_subject": "math",
+            "target_subject": "math",
+            "added_for": "taxonomy_math_gap_review_20260826"
           }
         }
       ],
