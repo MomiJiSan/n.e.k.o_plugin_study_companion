@@ -5,8 +5,8 @@ import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, Iterable
 from types import ModuleType
+from typing import Any, Iterable
 
 try:
     from .knowledge_graph_guidance import build_knowledge_guidance_payload
