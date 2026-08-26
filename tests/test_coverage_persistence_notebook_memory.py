@@ -225,6 +225,9 @@ def test_topic_fsrs_and_mastery_histories_trim_and_reopen(study_store) -> None:
     assert [item["topic_id"] for item in study_store.list_fsrs_cards(None)] == [
         "topic-fsrs"
     ]
+    reopened_review_log = study_store.list_review_log()
+    assert [item["scheduled_days"] for item in reopened_review_log] == [2, 3]
+    assert all(item["topic_id"] == "topic-fsrs" for item in reopened_review_log)
     assert study_store.list_fsrs_cards(topic_ids=[]) == []
     mastery_count = study_store._require_conn().execute(
         "SELECT COUNT(*) FROM mastery_snapshots WHERE topic_id = ?",

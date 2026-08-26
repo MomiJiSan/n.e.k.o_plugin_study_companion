@@ -120,22 +120,25 @@ def test_store_transaction_rolls_back_all_statements_and_commits_success(
 
 
 def test_answer_writeback_late_failure_rolls_back_every_learning_table(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     store = _open_store(tmp_path)
     store.ensure_topic(topic_id="topic-writeback", name="Writeback")
-
-    def fail_review_log(_conn, **_kwargs) -> None:
-        raise RuntimeError("forced review-log failure")
-
-    monkeypatch.setattr(store, "_batch_write_review_log", fail_review_log)
     try:
-        with pytest.raises(RuntimeError, match="forced review-log failure"):
+        store._require_conn().execute(
+            """CREATE TEMP TRIGGER fail_answer_review_log
+               BEFORE INSERT ON review_log
+               BEGIN
+                   SELECT RAISE(ABORT, 'forced review-log failure');
+               END"""
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="forced review-log failure"):
             store.batch_write_answer_data(**_answer_payload("attempt-rollback"))
 
         conn = store._require_conn()
         checks = {
             "sessions": "id = 'session-writeback'",
+            "question_instances": "question_id = 'question-writeback'",
             "attempts": "attempt_id = 'attempt-rollback'",
             "evaluations": "attempt_id = 'attempt-rollback'",
             "qa_records": "json_extract(question, '$.attempt_id') = 'attempt-rollback'",
@@ -194,6 +197,12 @@ def test_assessment_mastery_and_fsrs_writeback_survive_reopen(tmp_path: Path) ->
             "fallback_reason": "",
         }
         assert store.get_latest_mastery("topic-writeback")["attempts"] == 4
+        assert store.get_fsrs_card("topic-writeback")["last_rating"] == 3
+        assert store.list_review_log()[-1]["scheduled_days"] == 2
+        reopened_queue = store.list_mastery_projection_queue(statuses=("pending",))
+        assert len(reopened_queue) == 1
+        assert reopened_queue[0]["attempt_id"] == "attempt-committed"
+        assert reopened_queue[0]["status"] == "pending"
     finally:
         store.close()
 
@@ -232,6 +241,22 @@ def test_open_migrates_legacy_topic_and_memory_card_tables_in_place(
             ) VALUES ('legacy-topic', 'Legacy topic', 'math', 'algebra',
                       '[]', '[]', '[]', 'legacy')"""
         )
+        conn.execute(
+            """INSERT INTO decks (
+                id, name, deck_type, subject, language, source
+            ) VALUES (
+                'legacy-deck', 'Legacy deck', 'custom', 'history', 'en', 'legacy'
+            )"""
+        )
+        conn.execute(
+            """INSERT INTO memory_items (
+                id, deck_id, item_type, prompt, answer, metadata_json,
+                fsrs_card_id, status
+            ) VALUES (
+                'legacy-item', 'legacy-deck', 'custom', 'Legacy prompt',
+                'Legacy answer', '{}', NULL, 'active'
+            )"""
+        )
         conn.execute("DROP TABLE memory_fsrs_cards")
         conn.execute(
             """CREATE TABLE memory_fsrs_cards (
@@ -242,6 +267,18 @@ def test_open_migrates_legacy_topic_and_memory_card_tables_in_place(
                 last_rating INTEGER,
                 updated_at TEXT DEFAULT (datetime('now'))
             )"""
+        )
+        legacy_card_data = (
+            '{"sentinel":"LEGACY-CARD-SENTINEL-42","topic_id":"legacy-item"}'
+        )
+        conn.execute(
+            """INSERT INTO memory_fsrs_cards (
+                id, item_id, card_data, fsrs_state, last_rating
+            ) VALUES (?, ?, ?, ?, ?)""",
+            (42, "legacy-item", legacy_card_data, "review", 3),
+        )
+        conn.execute(
+            "UPDATE memory_items SET fsrs_card_id = 42 WHERE id = 'legacy-item'"
         )
         conn.commit()
     finally:
@@ -262,5 +299,26 @@ def test_open_migrates_legacy_topic_and_memory_card_tables_in_place(
             )
         }
         assert "next_due" in columns
+        legacy_card = reopened._require_conn().execute(
+            """SELECT id, item_id, card_data, fsrs_state, last_rating, next_due
+               FROM memory_fsrs_cards WHERE item_id = ?""",
+            ("legacy-item",),
+        ).fetchone()
+        assert dict(legacy_card) == {
+            "id": 42,
+            "item_id": "legacy-item",
+            "card_data": legacy_card_data,
+            "fsrs_state": "review",
+            "last_rating": 3,
+            "next_due": None,
+        }
+        legacy_item = reopened._require_conn().execute(
+            "SELECT deck_id, fsrs_card_id FROM memory_items WHERE id = ?",
+            ("legacy-item",),
+        ).fetchone()
+        assert dict(legacy_item) == {
+            "deck_id": "legacy-deck",
+            "fsrs_card_id": 42,
+        }
     finally:
         reopened.close()
