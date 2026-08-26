@@ -540,7 +540,7 @@ async def test_compatible_transport_success_uses_mock_port(transport_module: Any
 
 
 @pytest.mark.parametrize(
-    ("base_url", "diagnostic"),
+    ("endpoint", "diagnostic"),
     [
         ("http://dashscope.aliyuncs.com/compatible-mode/v1", "invalid_endpoint"),
         ("https://example.com/compatible-mode/v1", "invalid_endpoint"),
@@ -550,10 +550,10 @@ async def test_compatible_transport_success_uses_mock_port(transport_module: Any
     ],
 )
 def test_compatible_transport_rejects_unsafe_endpoints(
-    transport_module: Any, base_url: str, diagnostic: str
+    transport_module: Any, endpoint: str, diagnostic: str
 ) -> None:
     with pytest.raises(transport_module.QwenCompatibleTransportError) as raised:
-        transport_module.compatible_chat_completions_url(base_url)
+        transport_module.compatible_chat_completions_url(endpoint)
     assert raised.value.diagnostic == diagnostic
 
 
