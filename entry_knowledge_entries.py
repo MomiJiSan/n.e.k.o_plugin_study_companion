@@ -7,7 +7,6 @@ from .entry_common import (
     _entry_exception_error,
     asyncio,
     build_contribution_settings_payload,
-    build_knowledge_map_page_payload,
     build_knowledge_map_payload,
     plugin_entry,
     tr,
@@ -19,6 +18,7 @@ from .knowledge_quality import (
     KnowledgeCandidateType,
     KnowledgeEvidenceType,
 )
+from .ui_api import build_knowledge_map_page_payload
 
 
 class _KnowledgeEntriesMixin:
