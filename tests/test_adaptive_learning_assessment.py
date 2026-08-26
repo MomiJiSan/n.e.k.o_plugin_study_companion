@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
+# isort: split
+
 from adaptive_learning.assessment import (
     AssessmentEngine,
     AssessmentRequest,

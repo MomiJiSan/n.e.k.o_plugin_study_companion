@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import pytest
+
+# isort: split
+
 from adaptive_learning.planner import build_question_plan, select_practice_selection, topic_ref_from_mapping
 
 

@@ -2,11 +2,13 @@
 name = "study_companion"
 version = "0.1.6"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "httpx>=0.28,<1",
+    "Pillow>=11,<12",
+]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28,<1",
     "pytest>=8.4,<9",
     "pytest-asyncio>=1.1,<2",
 ]
