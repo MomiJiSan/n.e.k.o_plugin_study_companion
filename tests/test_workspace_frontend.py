@@ -280,6 +280,11 @@ harness.setRequestId(2);
 const currentSuccess = harness.load(2);
 await Promise.resolve();
 if (requests.length !== 2) throw new Error('overlapping knowledge requests were not started');
+if (requests.some((request) => request.entryId !== 'study_query_knowledge_map'
+    || request.args.page_size !== 100 || request.args.include_boundary !== true
+    || typeof request.args.scope !== 'object')) {
+  throw new Error('knowledge loader did not issue the V2 scoped request first');
+}
 requests[1].resolve({ nodes: [{ id: 'current' }], edges: [] });
 await currentSuccess;
 if (harness.getPayload()?.nodes?.[0]?.id !== 'current' || harness.renders.length !== 1) {
@@ -316,6 +321,11 @@ harness.setActive(true);
 const currentFailure = harness.load(6);
 await Promise.resolve();
 requests[4].reject(new Error('plugin_call_timeout'));
+await new Promise((resolve) => setTimeout(resolve, 0));
+if (requests[5]?.entryId !== 'study_knowledge_map' || requests[5]?.args?.limit !== 1000) {
+  throw new Error('knowledge loader did not fall back to the V1 map entry');
+}
+requests[5].reject(new Error('plugin_call_timeout'));
 await currentFailure;
 const currentError = harness.states.find((state) => state.state === 'error');
 if (currentError?.error !== 'Localized plugin timeout') {

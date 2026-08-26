@@ -413,15 +413,27 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     ensureBrandCSS();
     let mounted = true;
     setIsLoading(true);
-    callPlugin(props.api, 'study_knowledge_map', { limit: 1000 })
+    callPlugin(props.api, 'study_query_knowledge_map', {
+      scope: { stage: '', subject: '', chapter: '', unit: '' },
+      page_size: 100,
+      include_boundary: true,
+    })
+      .catch((error) => {
+        if (!mounted) throw error;
+        return callPlugin(props.api, 'study_knowledge_map', { limit: 1000 });
+      })
       .then((payload: any) => {
         if (!mounted) {
           return;
         }
         const nextNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+        const nextEdges = Array.isArray(payload.edges) ? payload.edges : [];
         setNodes(nextNodes);
-        setEdges(Array.isArray(payload.edges) ? payload.edges : []);
-        setSummary(payload.summary || {});
+        setEdges(nextEdges);
+        setSummary(payload.summary || {
+          topic_count: Number(payload.scope_total_count || payload.scope_returned_count || nextNodes.length),
+          edge_count: nextEdges.length,
+        });
         setSelectedNode(null);
         setError('');
       })

@@ -1553,7 +1553,18 @@ function mountKnowledgeFullscreenHost() {
 
 async function loadKnowledgeMap(requestId) {
   try {
-    const payload = await callPlugin('study_knowledge_map', { limit: 1000 });
+    let payload;
+    try {
+      payload = await callPlugin('study_query_knowledge_map', {
+        scope: { stage: '', subject: '', chapter: '', unit: '' },
+        page_size: 100,
+        include_boundary: true,
+      });
+    } catch {
+      const knowledgeMap = studyKnowledgeMap();
+      if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
+      payload = await callPlugin('study_knowledge_map', { limit: 1000 });
+    }
     const knowledgeMap = studyKnowledgeMap();
     if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
     lastKnowledgeMapPayload = payload;

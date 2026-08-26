@@ -197,6 +197,33 @@ def _init_db(self) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS knowledge_edge_projection_state (
+            projection_key TEXT PRIMARY KEY,
+            active_revision TEXT NOT NULL,
+            edge_count INTEGER NOT NULL DEFAULT 0,
+            built_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_edges (
+            source_topic_id TEXT NOT NULL,
+            target_topic_id TEXT NOT NULL,
+            relation_type TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT '',
+            confidence REAL NOT NULL DEFAULT 0.0,
+            context TEXT NOT NULL DEFAULT '',
+            reason TEXT NOT NULL DEFAULT '',
+            use_cases_json TEXT NOT NULL DEFAULT '[]',
+            required_mastery_json TEXT NOT NULL DEFAULT 'null',
+            catalog_revision TEXT NOT NULL,
+            PRIMARY KEY (source_topic_id, target_topic_id, relation_type, catalog_revision)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS wrong_questions (
             id TEXT PRIMARY KEY,
             topic_id TEXT NOT NULL REFERENCES topics(id),
@@ -311,6 +338,44 @@ def _init_db(self) -> None:
             mode TEXT NOT NULL,
             response_time_ms INTEGER,
             created_at TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS question_instances (
+            question_id TEXT PRIMARY KEY,
+            topic_id TEXT REFERENCES topics(id),
+            source_question_id TEXT REFERENCES captured_questions(id) ON DELETE SET NULL,
+            question_json TEXT NOT NULL,
+            question_type TEXT NOT NULL DEFAULT '',
+            difficulty INTEGER,
+            status TEXT NOT NULL DEFAULT 'answered',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS attempts (
+            attempt_id TEXT PRIMARY KEY,
+            question_id TEXT NOT NULL REFERENCES question_instances(question_id),
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            topic_id TEXT REFERENCES topics(id),
+            user_answer TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            response_time_ms INTEGER,
+            submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS evaluations (
+            attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
+            evaluation_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
     )
@@ -442,6 +507,12 @@ def _init_db(self) -> None:
         "CREATE INDEX IF NOT EXISTS idx_knowledge_seed_membership_topic_active ON knowledge_seed_membership(topic_id, active)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_edges_revision_from ON knowledge_edges(catalog_revision, source_topic_id, relation_type, target_topic_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_edges_revision_to ON knowledge_edges(catalog_revision, target_topic_id, relation_type, source_topic_id)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_mastery_topic_updated ON mastery_snapshots(topic_id, updated_at DESC, id DESC)"
     )
     conn.execute(
@@ -452,6 +523,15 @@ def _init_db(self) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_qa_source_question ON qa_records(source_question_id, created_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_question_instances_topic_created ON question_instances(topic_id, created_at DESC, question_id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attempts_question_submitted ON attempts(question_id, submitted_at DESC, attempt_id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_attempts_topic_submitted ON attempts(topic_id, submitted_at DESC, attempt_id DESC)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_captured_questions_topic_used ON captured_questions(topic_id, last_used_at DESC, id DESC)"

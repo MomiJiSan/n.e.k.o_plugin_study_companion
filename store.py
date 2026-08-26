@@ -23,6 +23,7 @@ from .models import (
     build_config,
     json_copy,
 )
+from .store_attempt_facts import get_attempt_fact, write_attempt_facts
 from .store_captured_questions import (
     clear_captured_questions,
     delete_captured_question,
@@ -60,6 +61,12 @@ from .store_knowledge_contribution import (
     list_anonymous_knowledge_stats,
     list_knowledge_contribution_queue,
     upsert_anonymous_knowledge_stat,
+)
+from .store_knowledge_edges import (
+    get_knowledge_edge_revision,
+    list_knowledge_edges,
+    query_knowledge_map_page,
+    rebuild_knowledge_edge_projection,
 )
 from .store_maintenance import json_loads, purge_all, transaction
 from .store_qa import (
@@ -312,6 +319,16 @@ class StudyStore:
                 self._init_db()
                 self._load_seed_if_empty()
                 self.load_knowledge_seed()
+                try:
+                    self.rebuild_knowledge_edge_projection()
+                except Exception as exc:
+                    # The topic rows remain canonical.  A projection failure
+                    # must not make the store unavailable or replace a prior
+                    # active revision with a partial rebuild.
+                    self._log_warning(
+                        "study knowledge edge projection rebuild failed; retaining prior revision: %s",
+                        exc,
+                    )
             except Exception:
                 if conn is not None:
                     try:
@@ -772,6 +789,14 @@ class StudyStore:
             try:
                 if attempt_key:
                     existing_attempt = conn.execute(
+                        """SELECT a.topic_id, e.evaluation_json AS eval_result
+                        FROM attempts a
+                        LEFT JOIN evaluations e ON e.attempt_id = a.attempt_id
+                        WHERE a.attempt_id = ?""",
+                        (attempt_key,),
+                    ).fetchone()
+                    if existing_attempt is None:
+                        existing_attempt = conn.execute(
                         """
                         SELECT topic_id, eval_result
                         FROM qa_records
@@ -781,7 +806,7 @@ class StudyStore:
                         LIMIT 1
                         """,
                         (attempt_key,),
-                    ).fetchone()
+                        ).fetchone()
                     if existing_attempt is not None:
                         conn.commit()
                         return {
@@ -804,6 +829,20 @@ class StudyStore:
                     )
                 step = "session"
                 self._batch_write_session(conn, session_key, mode)
+                step = "attempt_facts"
+                write_attempt_facts(
+                    self,
+                    conn,
+                    session_id=session_key,
+                    topic_id=db_topic_key,
+                    source_question_id=source_question_key,
+                    question=question_payload,
+                    user_answer=user_answer,
+                    eval_result=eval_result,
+                    mode=mode,
+                    response_time_ms=response_time_ms,
+                    attempt_id=attempt_key,
+                )
                 step = "qa_record"
                 self._batch_write_qa_record(
                     conn,
@@ -1595,7 +1634,12 @@ StudyStore._init_db = _init_db  # type: ignore[method-assign]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]
 StudyStore._trim_append_only_rows = _trim_append_only_rows  # type: ignore[method-assign]
 StudyStore._load_seed_if_empty = _load_seed_if_empty  # type: ignore[method-assign]
+StudyStore.get_attempt_fact = get_attempt_fact  # type: ignore[method-assign]
 StudyStore.load_knowledge_seed = load_knowledge_seed  # type: ignore[method-assign]
+StudyStore.get_knowledge_edge_revision = get_knowledge_edge_revision  # type: ignore[method-assign]
+StudyStore.list_knowledge_edges = list_knowledge_edges  # type: ignore[method-assign]
+StudyStore.query_knowledge_map_page = query_knowledge_map_page  # type: ignore[method-assign]
+StudyStore.rebuild_knowledge_edge_projection = rebuild_knowledge_edge_projection  # type: ignore[method-assign]
 StudyStore.upsert_topic = upsert_topic  # type: ignore[method-assign]
 StudyStore.ensure_topic = ensure_topic  # type: ignore[method-assign]
 StudyStore.get_topic = get_topic  # type: ignore[method-assign]
