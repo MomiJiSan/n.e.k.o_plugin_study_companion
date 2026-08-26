@@ -32,6 +32,7 @@ def _load_entries(monkeypatch: pytest.MonkeyPatch):
     common._entry_exception_error = _raise_entry_exception
     common.asyncio = asyncio
     common.build_contribution_settings_payload = lambda **_kwargs: {}
+    common.build_knowledge_map_page_payload = ui_api.build_knowledge_map_page_payload
     common.build_knowledge_map_payload = ui_api.build_knowledge_map_payload
     common.plugin_entry = lambda **_kwargs: lambda function: function
     common.tr = lambda _key, *, default: default
@@ -83,6 +84,21 @@ class _Store:
     def list_wrong_questions(self, **kwargs):
         self.wrong_requests.append(dict(kwargs))
         return [{"id": "wrong", "topic_id": "scope-topic", "status": "retrying"}]
+
+    def query_knowledge_map_page(self, **kwargs):
+        self.map_v2_request = dict(kwargs)
+        return {
+            "schema_version": 2,
+            "catalog_revision": "edge-v1",
+            "scope": {"stage": "senior_high", "subject": "math"},
+            "scope_total_count": 1_001,
+            "scope_returned_count": 1,
+            "has_more": True,
+            "next_cursor": "next-page",
+            "nodes": [self.scope_topic],
+            "edges": [],
+            "boundary": {"nodes": [], "returned_count": 0, "truncated": False},
+        }
 
 
 class _Tracker:
@@ -148,6 +164,42 @@ def test_knowledge_graph_builds_leave_the_async_entry_responsive(
         return await task
 
     assert asyncio.run(run_map()) == {"heartbeat_seen_while_building": True}
+
+
+def test_knowledge_map_v2_reads_a_bounded_page_and_reports_real_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = _load_entries(monkeypatch)
+    store = _Store()
+
+    class Harness(entries._KnowledgeEntriesMixin):
+        _store = store
+        _knowledge_tracker = _Tracker()
+
+    payload = asyncio.run(
+        Harness().study_query_knowledge_map(
+            scope={"stage": "senior_high", "subject": "math"},
+            page_size=100,
+            cursor="",
+            include_boundary=True,
+        )
+    )
+
+    assert store.map_v2_request == {
+        "stage": "senior_high",
+        "subject": "math",
+        "course_family": "",
+        "chapter": "",
+        "unit": "",
+        "page_size": 100,
+        "cursor": "",
+        "include_boundary": True,
+    }
+    assert payload["schema_version"] == 2
+    assert payload["scope_total_count"] == 1_001
+    assert payload["scope_returned_count"] == 1
+    assert payload["has_more"] is True
+    assert payload["next_cursor"] == "next-page"
 
 
 def test_knowledge_guidance_build_leaves_the_async_entry_responsive(

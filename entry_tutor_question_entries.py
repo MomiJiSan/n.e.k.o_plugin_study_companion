@@ -4,6 +4,8 @@ import re
 import uuid
 from functools import wraps
 
+from .adaptive_learning.planner import build_question_plan
+from .adaptive_learning.question_factory import QuestionFactory
 from .entry_common import (
     LLM_OPERATION_QUESTION_GENERATE,
     Any,
@@ -443,6 +445,44 @@ class _TutorQuestionEntriesMixin:
 
         if not selected_topic_id and not selected_topic_name:
             reason = "no_data"
+
+        # The planner is being introduced behind a conservative adapter: it
+        # may confirm the server-owned topic choice only when it produces the
+        # exact legacy result.  Public targeted-context fields, reason
+        # payloads, difficulty coercion, and the no-data path deliberately
+        # remain owned by this compatibility block until the full planner
+        # migration is complete.
+        planner_catalog = (
+            {
+                selected_topic_id: {
+                    "id": selected_topic_id,
+                    "name": selected_topic_name or selected_topic_id,
+                }
+            }
+            if selected_topic_id
+            else {}
+        )
+        try:
+            question_plan = build_question_plan(
+                params,
+                plan_id="targeted-selection-adapter",
+                topics_by_id=planner_catalog,
+            )
+        except Exception:
+            # A new internal adapter must never change the established public
+            # selection behavior when it cannot interpret legacy input.
+            question_plan = None
+        public_reason = (
+            "retry"
+            if question_plan is not None and question_plan.selection.reason == "wrong_retry"
+            else (question_plan.selection.reason if question_plan is not None else "")
+        )
+        if (
+            question_plan is not None
+            and public_reason == reason
+            and question_plan.target_topic.id == selected_topic_id
+        ):
+            selected_topic_id = question_plan.target_topic.id
         return {
             "selected_topic_id": selected_topic_id,
             "selected_topic_name": selected_topic_name or selected_topic_id,
@@ -726,8 +766,11 @@ class _TutorQuestionEntriesMixin:
             generation_context = dict(tutor_context)
             if validation_failure:
                 generation_context["generation_feedback"] = validation_failure
-            candidate_reply = await self._agent.question_generate(
-                source_text, mode=active_mode, context=generation_context
+            candidate_reply = await QuestionFactory.delegate(
+                self._agent.question_generate,
+                source_text,
+                mode=active_mode,
+                context=generation_context,
             )
             if not targeted_context:
                 reply = candidate_reply
@@ -760,7 +803,8 @@ class _TutorQuestionEntriesMixin:
                     structural.errors
                 )
                 continue
-            validation_reply = await self._agent.question_validate(
+            validation_reply = await QuestionFactory.delegate(
+                self._agent.question_validate,
                 context=_question_validation_context(
                     candidate_payload,
                     targeted_context,

@@ -8,6 +8,16 @@ from ._semantic_routing import (
     build_semantic_routing_messages,
     parse_study_input_semantics,
 )
+from .adaptive_learning import (
+    EvaluatedAttempt,
+    EvaluationResult,
+    QuestionInstance,
+    TopicRef,
+)
+from .adaptive_learning.learning_commit import (
+    DelegatingCommitPort,
+    LearningCommitService,
+)
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
     LLM_OPERATION_CONCEPT_EXPLAIN,
@@ -970,35 +980,70 @@ class _TutorContextSupportMixin:
                     "study knowledge tracker mastery-before read failed: {}", exc
                 )
                 mastery_before = None
-        try:
-            tracking_task = asyncio.create_task(
-                asyncio.to_thread(
-                    self._knowledge_tracker.on_answer,
-                    topic_id=topic,
-                    question=question_payload,
-                    user_answer=str(
-                        context.get("answer") or eval_reply.input_text or ""
-                    ),
-                    eval_result=eval_result,
-                    mode=str(context.get("mode") or self._state.active_mode),
-                    session_id=session_id,
-                    allow_knowledge_update=allow_knowledge_update,
-                    require_existing_topic=True,
-                    origin_wrong_question_id=(
-                        str(binding.get("origin_wrong_question_id") or "").strip()
-                        if allow_knowledge_update
-                        else ""
-                    ),
-                    attempt_id=str(
-                        context.get("attempt_id")
-                        or question_payload.get("attempt_id")
-                        or current_question.get("attempt_id")
-                        or ""
-                    ).strip(),
+        attempt_id = str(
+            context.get("attempt_id")
+            or question_payload.get("attempt_id")
+            or current_question.get("attempt_id")
+            or ""
+        ).strip()
+        evaluated_attempt = EvaluatedAttempt(
+            attempt_id=attempt_id,
+            question=QuestionInstance(
+                question_id=str(
+                    question_payload.get("question_id")
+                    or current_question.get("question_id")
+                    or attempt_id
+                    or ""
+                ).strip(),
+                plan_id="",
+                target_topic=TopicRef(id=topic, name=topic),
+                question_type=str(question_payload.get("question_type") or ""),
+                difficulty=question_payload.get("difficulty") or 0,
+                public_payload={"question": question_text},
+                private_payload={"answer": question_payload.get("answer") or ""},
+                status="answered",
+            ),
+            learner_answer=str(context.get("answer") or eval_reply.input_text or ""),
+            evaluation=EvaluationResult(
+                verdict=str(eval_payload.get("verdict") or "wrong"),
+                score=eval_payload.get("score") or 0,
+                feedback=str(eval_payload.get("feedback") or ""),
+                error_type=str(eval_payload.get("error_type") or ""),
+                final_answer_correct=bool(eval_payload.get("final_answer_correct")),
+                details=eval_payload,
+            ),
+            session_id=session_id,
+            response_time_ms=context.get("response_time_ms"),
+        )
+        tracker_call_kwargs = {
+            "topic_id": topic,
+            "question": question_payload,
+            "user_answer": str(context.get("answer") or eval_reply.input_text or ""),
+            "eval_result": eval_result,
+            "mode": str(context.get("mode") or self._state.active_mode),
+            "session_id": session_id,
+            "allow_knowledge_update": allow_knowledge_update,
+            "require_existing_topic": True,
+            "origin_wrong_question_id": (
+                str(binding.get("origin_wrong_question_id") or "").strip()
+                if allow_knowledge_update
+                else ""
+            ),
+            "attempt_id": attempt_id,
+        }
+        commit_service = LearningCommitService(
+            DelegatingCommitPort(
+                lambda _attempt: asyncio.to_thread(
+                    self._knowledge_tracker.on_answer, **tracker_call_kwargs
                 )
             )
+        )
+        try:
+            tracking_task = asyncio.create_task(
+                commit_service.commit(evaluated_attempt)
+            )
             try:
-                tracking_result = await asyncio.shield(tracking_task)
+                tracking_result = (await asyncio.shield(tracking_task)).as_payload()
             except asyncio.CancelledError:
                 # The SQLite worker cannot be cancelled once running. Drain it so
                 # the caller never clears the reservation while commit state is

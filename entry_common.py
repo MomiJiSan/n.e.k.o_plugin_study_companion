@@ -86,6 +86,7 @@ from .tutor_llm_agent import TutorLLMAgent, diagnostic_code_for_exception
 from .ui_api import (
     build_contribution_settings_payload,
     build_habit_dashboard_payload,
+    build_knowledge_map_page_payload,  # noqa: F401 - re-exported for entry mixins
     build_knowledge_map_payload,
     build_open_ui_payload,
     build_pomodoro_status_payload,

@@ -7,6 +7,7 @@ from .entry_common import (
     _entry_exception_error,
     asyncio,
     build_contribution_settings_payload,
+    build_knowledge_map_page_payload,
     build_knowledge_map_payload,
     plugin_entry,
     tr,
@@ -21,6 +22,115 @@ from .knowledge_quality import (
 
 
 class _KnowledgeEntriesMixin:
+    @ui.action()
+    @plugin_entry(
+        id="study_query_knowledge_map",
+        name=tr("entries.knowledge_map_v2.name", default="Query Study Knowledge Map"),
+        description=tr(
+            "entries.knowledge_map_v2.description",
+            default="Return one cursor-paged study knowledge-map slice with explicit totals and boundary truncation.",
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "scope": {
+                    "type": "object",
+                    "properties": {
+                        "stage": {"type": "string", "default": ""},
+                        "subject": {"type": "string", "default": ""},
+                        "course_family": {"type": "string", "default": ""},
+                        "chapter": {"type": "string", "default": ""},
+                        "unit": {"type": "string", "default": ""},
+                    },
+                },
+                "page_size": {"type": "integer", "default": 100},
+                "cursor": {"type": "string", "default": ""},
+                "include_boundary": {"type": "boolean", "default": True},
+            },
+        },
+        llm_result_fields=[
+            "schema_version",
+            "scope_total_count",
+            "scope_returned_count",
+            "has_more",
+            "next_cursor",
+            "nodes",
+            "edges",
+            "boundary",
+            "catalog_revision",
+        ],
+    )
+    async def study_query_knowledge_map(
+        self,
+        scope: dict | None = None,
+        page_size: int = 100,
+        cursor: str = "",
+        include_boundary: bool = True,
+        **_,
+    ):
+        """V2 cursor-paged map entry; V1 remains untouched during migration."""
+        try:
+            scope_payload = scope if isinstance(scope, dict) else {}
+            normalized_scope = {
+                field: str(scope_payload.get(field) or "").strip()
+                for field in ("stage", "subject", "course_family", "chapter", "unit")
+            }
+            page = await asyncio.to_thread(
+                self._store.query_knowledge_map_page,
+                **normalized_scope,
+                page_size=page_size,
+                cursor=str(cursor or ""),
+                include_boundary=bool(include_boundary),
+            )
+            page_topics = list(page.get("nodes") or [])
+            page_topic_ids = {
+                str(topic.get("id") or "").strip()
+                for topic in page_topics
+                if str(topic.get("id") or "").strip()
+            }
+            mastery, weak_topics, wrong_questions = await asyncio.gather(
+                asyncio.to_thread(
+                    self._store.list_latest_mastery_for_topics, page_topic_ids
+                ),
+                asyncio.to_thread(
+                    self._knowledge_tracker.get_weak_topics,
+                    limit=max(1, len(page_topic_ids)),
+                    topic_ids=page_topic_ids,
+                ),
+                asyncio.to_thread(
+                    self._store.list_wrong_questions,
+                    limit=None,
+                    topic_ids=page_topic_ids,
+                    statuses=("active", "retrying"),
+                ),
+            )
+            boundary = page.get("boundary") or {}
+            payload = await asyncio.to_thread(
+                build_knowledge_map_page_payload,
+                page_topics=page_topics,
+                boundary_topics=list(boundary.get("nodes") or []),
+                edges=list(page.get("edges") or []),
+                mastery_overview=mastery,
+                weak_topics=weak_topics,
+                wrong_questions=wrong_questions,
+                scope=dict(page.get("scope") or normalized_scope),
+                scope_total_count=int(page.get("scope_total_count") or 0),
+                has_more=bool(page.get("has_more")),
+                next_cursor=str(page.get("next_cursor") or ""),
+                boundary_truncated=bool(boundary.get("truncated")),
+                catalog_revision=str(page.get("catalog_revision") or ""),
+            )
+            if page.get("edge_truncated"):
+                payload["edges_truncated"] = True
+                payload["omitted_edge_count"] = max(
+                    0, int(page.get("omitted_edge_count") or 0)
+                )
+            return Ok(payload)
+        except Exception as exc:
+            return _entry_exception_error(
+                self, exc, operation="study_query_knowledge_map"
+            )
+
     @plugin_entry(
         id="study_knowledge_quality_status",
         name=tr(

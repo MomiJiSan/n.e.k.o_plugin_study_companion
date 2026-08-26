@@ -355,6 +355,156 @@ def build_knowledge_map_payload(
     }
 
 
+def build_knowledge_map_page_payload(
+    *,
+    page_topics: list[dict[str, Any]] | None = None,
+    boundary_topics: list[dict[str, Any]] | None = None,
+    edges: list[dict[str, Any]] | None = None,
+    mastery_overview: list[dict[str, Any]] | None = None,
+    weak_topics: list[dict[str, Any]] | None = None,
+    wrong_questions: list[dict[str, Any]] | None = None,
+    scope: dict[str, Any] | None = None,
+    scope_total_count: int = 0,
+    has_more: bool = False,
+    next_cursor: str = "",
+    boundary_truncated: bool = False,
+    catalog_revision: str = "",
+) -> dict[str, Any]:
+    """Format one already-bounded map page without reconstructing the catalog.
+
+    The V2 store query supplies a page of canonical topics, its one-hop boundary,
+    and persisted edge projection rows.  Keeping that query result bounded is
+    what prevents the historical 1,000-topic UI limit from becoming a hidden
+    catalog cap.
+    """
+    scope_items = list(page_topics or [])
+    boundary_items = list(boundary_topics or [])
+    scope_ids = {
+        str(topic.get("id") or "").strip()
+        for topic in scope_items
+        if str(topic.get("id") or "").strip()
+    }
+    boundary_ids = {
+        str(topic.get("id") or "").strip()
+        for topic in boundary_items
+        if str(topic.get("id") or "").strip() and str(topic.get("id") or "").strip() not in scope_ids
+    }
+    mastery_items = list(mastery_overview or [])
+    weak_items = list(weak_topics or [])
+    wrong_items = list(wrong_questions or [])
+    mastery_by_topic = {str(item.get("topic_id") or ""): item for item in mastery_items}
+    weak_by_topic = {str(item.get("topic_id") or ""): item for item in weak_items}
+    weak_ids = set(weak_by_topic)
+    active_wrong_ids = {
+        str(item.get("topic_id") or "")
+        for item in wrong_items
+        if str(item.get("status") or "").strip().lower() in {"active", "retrying"}
+    }
+    nodes: list[dict[str, Any]] = []
+    weak_node_count = 0
+    for topic in [*scope_items, *boundary_items]:
+        topic_id = str(topic.get("id") or "").strip()
+        if not topic_id or topic_id not in scope_ids | boundary_ids:
+            continue
+        stage = str(
+            topic.get("stage")
+            or topic.get("grade_level")
+            or topic.get("education_level")
+            or topic.get("course_level")
+            or ""
+        )
+        subject = str(topic.get("subject") or "")
+        chapter = str(topic.get("chapter") or "")
+        unit = str(topic.get("unit") or chapter)
+        mastery = mastery_by_topic.get(topic_id) or weak_by_topic.get(topic_id)
+        assessed, mastery_value, mastery_status, weak = _knowledge_map_mastery_state(
+            mastery,
+            listed_as_weak=topic_id in weak_ids,
+            has_active_wrong_question=topic_id in active_wrong_ids,
+        )
+        if weak and topic_id in scope_ids:
+            weak_node_count += 1
+        nodes.append(
+            {
+                "id": topic_id,
+                "label": str(topic.get("name") or topic_id),
+                "subject": subject,
+                "course_family": str(topic.get("course_family") or ""),
+                "chapter": chapter,
+                "unit": unit,
+                "stage": stage,
+                "grade_level": stage,
+                "skills": _display_list(topic.get("skills")),
+                "question_types": _display_list(topic.get("question_types")),
+                "examples": list(topic.get("examples") or []),
+                "typical_misconceptions": list(
+                    topic["typical_misconceptions"]
+                    if isinstance(topic.get("typical_misconceptions"), list)
+                    else topic.get("misconceptions") or []
+                ),
+                "assessed": assessed,
+                "mastery": mastery_value,
+                "mastery_status": mastery_status,
+                "level": str((mastery or {}).get("level") or ""),
+                "weak": weak,
+                "in_scope": topic_id in scope_ids,
+                "boundary": topic_id in boundary_ids,
+            }
+        )
+    public_edges = []
+    included_ids = scope_ids | boundary_ids
+    for edge in edges or []:
+        source_id = str(edge.get("from") or "").strip()
+        target_id = str(edge.get("to") or "").strip()
+        relation = str(edge.get("relation") or "").strip()
+        if (
+            source_id
+            and target_id
+            and relation
+            and source_id in included_ids
+            and target_id in included_ids
+            and (source_id in scope_ids or target_id in scope_ids)
+        ):
+            public_edges.append(
+                _knowledge_edge_payload(
+                    source_id=source_id,
+                    target_id=target_id,
+                    relation=relation,
+                    ref=edge,
+                )
+            )
+    return {
+        "schema_version": 2,
+        "catalog_revision": str(catalog_revision or ""),
+        "scope": dict(scope or {}),
+        "scope_total_count": max(0, int(scope_total_count)),
+        "scope_returned_count": len(scope_ids),
+        "has_more": bool(has_more),
+        "next_cursor": str(next_cursor or ""),
+        "nodes": nodes,
+        "edges": public_edges,
+        "boundary": {
+            "returned_count": len(boundary_ids),
+            "truncated": bool(boundary_truncated),
+        },
+        # Keep the existing map's useful learner-state payloads available to
+        # clients that share rendering code during the staged migration.
+        "mastery_overview": mastery_items,
+        "weak_topics": weak_items,
+        "wrong_questions": wrong_items,
+        "summary": {
+            "topic_count": len(scope_ids),
+            "scope_topic_count": len(scope_ids),
+            "scope_total_count": max(0, int(scope_total_count)),
+            "boundary_node_count": len(boundary_ids),
+            "closure_truncated": bool(boundary_truncated),
+            "edge_count": len(public_edges),
+            "weak_topic_count": weak_node_count,
+            "wrong_question_count": len(wrong_items),
+        },
+    }
+
+
 def build_contribution_settings_payload(
     *, opt_in: bool, preview: dict[str, Any] | None = None
 ) -> dict[str, Any]:
