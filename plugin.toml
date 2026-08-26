@@ -18,9 +18,6 @@ supported = ">=0.1.0,<0.3.0"
 [plugin.store]
 enabled = true
 
-[plugin.database]
-enabled = false
-
 [plugin_state]
 backend = "memory"
 
