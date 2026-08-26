@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from adaptive_learning import PracticeSelection, QuestionInstance, QuestionPlan, TopicRef
 from adaptive_learning.question_factory import (
     QuestionFactory,
