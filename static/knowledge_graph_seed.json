@@ -2,8 +2,8 @@
   "version": "1.0",
   "seed_id": "study_companion_builtin",
   "seed_protocol_version": 1,
-  "content_revision": 5,
-  "manifest_sha256": "6e744ccd527a0445d7586c56d18a4cd6486a797f32959f9fd1e434fb89b17fd2",
+  "content_revision": 6,
+  "manifest_sha256": "8501418799edae2b0785210b98320958873e5683405901ffaa78fb101c6a3181",
   "type": "knowledge_seed_manifest",
   "description": "Study Companion public knowledge graph seed manifest.",
   "files": [

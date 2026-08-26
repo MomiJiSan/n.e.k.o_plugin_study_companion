@@ -24,7 +24,12 @@ def _topic(topic_id: str, **overrides: object) -> dict[str, object]:
     return topic
 
 
-def _validate(tmp_path: Path, topics: list[dict[str, object]]):
+def _validate(
+    tmp_path: Path,
+    topics: list[dict[str, object]],
+    *,
+    strict_taxonomy_coverage: bool = False,
+):
     seed_path = tmp_path / "seed.json"
     manifest_path = tmp_path / "manifest.json"
     seed_path.write_text(
@@ -32,7 +37,25 @@ def _validate(tmp_path: Path, topics: list[dict[str, object]]):
         encoding="utf-8",
     )
     manifest_path.write_text(json.dumps({"files": ["seed.json"]}), encoding="utf-8")
-    return validate_knowledge_seed_manifest(manifest_path)
+    return validate_knowledge_seed_manifest(
+        manifest_path,
+        strict_taxonomy_coverage=strict_taxonomy_coverage,
+    )
+
+
+def test_taxonomy_coverage_is_report_only_until_strict_mode_is_requested(
+    tmp_path: Path,
+) -> None:
+    topics = [_topic("unconnected")]
+
+    report_only = _validate(tmp_path, topics)
+    strict = _validate(tmp_path, topics, strict_taxonomy_coverage=True)
+
+    assert report_only.is_valid
+    assert "taxonomy_coverage_gap" not in {
+        issue.code for issue in report_only.issues
+    }
+    assert "taxonomy_coverage_gap" in {issue.code for issue in strict.issues}
 
 
 def test_validator_preserves_supported_distinct_relation_types(tmp_path: Path) -> None:
@@ -223,9 +246,12 @@ def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
     assert result.report["cycles_in_prerequisites"] == 0
     assert result.report["isolated_nodes"] == 0
     assert result.report["prerequisite_stage_reverse_count"] == 0
-    assert result.report["edge_count"] == 4790
+    assert result.report["edge_count"] == 4827
     assert result.report["relation_counts"]["prerequisite"] == 1019
     assert result.report["relation_counts"]["supports"] == 13
+    assert result.report["subject_minimum_standard_gap_counts"]["geography"] == 0
+    assert result.report["subject_minimum_standard_gap_counts"]["history"] == 24
+    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 6
 
 
 def test_bundled_seed_target_context_audit_baseline() -> None:

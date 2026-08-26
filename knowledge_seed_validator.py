@@ -473,12 +473,31 @@ def _validate_topic_fields(
 
 
 def _validate_taxonomy_coverage(
-    topics: Iterable[KnowledgeSeedTopic],
+    report: dict[str, Any],
     issues: list[KnowledgeSeedIssue],
+    manifest_path: Path,
 ) -> None:
-    # TODO: Re-enable hard taxonomy coverage validation once the bundled legacy seed
-    # has complete curriculum context; current gaps are reported as quality metrics.
-    return
+    """Turn reported minimum-standard gaps into strict-mode errors."""
+    gap_counts = report.get("subject_minimum_standard_gap_counts")
+    if not isinstance(gap_counts, dict):
+        return
+    for subject, raw_count in sorted(gap_counts.items()):
+        try:
+            gap_count = int(raw_count)
+        except (TypeError, ValueError):
+            continue
+        if gap_count <= 0:
+            continue
+        issues.append(
+            KnowledgeSeedIssue(
+                "taxonomy_coverage_gap",
+                (
+                    f"{subject} has {gap_count} unresolved minimum-standard "
+                    "coverage gaps"
+                ),
+                str(manifest_path),
+            )
+        )
 
 
 def _validate_stage_specific_context(
@@ -1273,7 +1292,11 @@ def _validate_graph_quality(
         )
 
 
-def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidationResult:
+def validate_knowledge_seed_manifest(
+    path: Path | str,
+    *,
+    strict_taxonomy_coverage: bool = False,
+) -> KnowledgeSeedValidationResult:
     manifest_path = Path(path).resolve()
     issues: list[KnowledgeSeedIssue] = []
     manifest_payload = _read_json(manifest_path, issues)
@@ -1334,7 +1357,6 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
             continue
         topic_ids.add(topic_id)
     _validate_references(topics, topic_ids, issues)
-    _validate_taxonomy_coverage(topics, issues)
     _validate_stage_specific_context(topics, issues)
 
     if isinstance(manifest_payload.get("files"), list):
@@ -1362,6 +1384,8 @@ def validate_knowledge_seed_manifest(path: Path | str) -> KnowledgeSeedValidatio
 
     topic_tuple = tuple(topics)
     report = _build_quality_report(topic_tuple)
+    if strict_taxonomy_coverage:
+        _validate_taxonomy_coverage(report, issues, manifest_path)
     return KnowledgeSeedValidationResult(
         topic_tuple,
         tuple(issues),
@@ -1453,8 +1477,16 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(__file__).resolve().parent / "static" / "knowledge_graph_seed.json",
         help="Path to knowledge_graph_seed.json or a legacy seed file.",
     )
+    parser.add_argument(
+        "--strict-taxonomy-coverage",
+        action="store_true",
+        help="Fail validation when target-context taxonomy coverage has gaps.",
+    )
     args = parser.parse_args(argv)
-    result = validate_knowledge_seed_manifest(Path(args.path))
+    result = validate_knowledge_seed_manifest(
+        Path(args.path),
+        strict_taxonomy_coverage=args.strict_taxonomy_coverage,
+    )
     for line in _format_quality_report(result.report):
         print(line)
     if result.is_valid:
