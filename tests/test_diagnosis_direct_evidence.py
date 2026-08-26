@@ -123,7 +123,7 @@ def test_direct_diagnosis_evidence_respects_incidence_and_direction_globally(
     index_module = importlib.import_module(f"{package_name}.knowledge_graph_index")
     graph = index_module.KnowledgeGraphIndex(_seed_topics())
     assert len(graph.by_id) == 892
-    assert len(graph.edges) == 4827
+    assert len(graph.edges) == 4872
 
     allowed = {
         "prerequisite",

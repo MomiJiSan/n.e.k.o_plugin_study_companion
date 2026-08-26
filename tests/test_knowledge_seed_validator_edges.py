@@ -246,12 +246,12 @@ def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
     assert result.report["cycles_in_prerequisites"] == 0
     assert result.report["isolated_nodes"] == 0
     assert result.report["prerequisite_stage_reverse_count"] == 0
-    assert result.report["edge_count"] == 4827
+    assert result.report["edge_count"] == 4872
     assert result.report["relation_counts"]["prerequisite"] == 1019
     assert result.report["relation_counts"]["supports"] == 13
     assert result.report["subject_minimum_standard_gap_counts"]["geography"] == 0
-    assert result.report["subject_minimum_standard_gap_counts"]["history"] == 24
-    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 6
+    assert result.report["subject_minimum_standard_gap_counts"]["history"] == 0
+    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 0
 
 
 def test_bundled_seed_target_context_audit_baseline() -> None:
@@ -269,3 +269,101 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     assert sum(report["subject_target_context_ready_counts"].values()) + sum(
         report["subject_target_context_gap_counts"].values()
     ) == report["topic_count"]
+    assert report["subject_minimum_standard_gap_counts"]["history"] == 0
+    assert report["subject_minimum_standard_gap_counts"]["geography"] == 0
+    assert report["subject_minimum_standard_gap_counts"]["math"] == 0
+
+
+
+
+def test_strict_taxonomy_coverage_excuses_only_the_declared_primary_root(
+    tmp_path: Path,
+) -> None:
+    related = [
+        {"id": "application", "relation": "application", "reason": "application"},
+        {"id": "procedure", "relation": "procedure_step", "reason": "procedure"},
+        {"id": "confusable", "relation": "confusable", "reason": "confusable"},
+    ]
+    policy_root = _topic(
+        "primary_number_sense",
+        subject="math",
+        stage="primary",
+        depth=1,
+        related=related,
+    )
+    non_policy_root = _topic(
+        "another_primary_root",
+        subject="math",
+        stage="primary",
+        depth=1,
+        related=related,
+    )
+    targets = [_topic(item["id"], subject="other") for item in related]
+
+    result = _validate(
+        tmp_path,
+        [policy_root, non_policy_root, *targets],
+        strict_taxonomy_coverage=True,
+    )
+
+    assert not result.is_valid
+    assert result.report is not None
+    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 1
+    assert result.report["subject_minimum_standard_excused_root_counts"]["math"] == 1
+    assert result.report["subject_minimum_standard_excused_roots"]["math"] == [
+        {
+            "id": "primary_number_sense",
+            "excused_relations": ["prerequisite"],
+        }
+    ]
+    assert "taxonomy_coverage_gap" in {issue.code for issue in result.issues}
+
+
+def test_declared_taxonomy_root_must_match_its_policy_metadata(tmp_path: Path) -> None:
+    related = [
+        {"id": "application", "relation": "application", "reason": "application"},
+        {"id": "procedure", "relation": "procedure_step", "reason": "procedure"},
+        {"id": "confusable", "relation": "confusable", "reason": "confusable"},
+    ]
+    result = _validate(
+        tmp_path,
+        [
+            _topic(
+                "primary_number_sense",
+                subject="math",
+                stage="primary",
+                depth=2,
+                related=related,
+            ),
+            *[_topic(item["id"], subject="other") for item in related],
+        ],
+        strict_taxonomy_coverage=True,
+    )
+
+    assert not result.is_valid
+    assert result.report is not None
+    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 1
+    assert result.report["subject_minimum_standard_excused_root_counts"]["math"] == 0
+
+
+def test_bundled_seed_passes_strict_taxonomy_coverage() -> None:
+    manifest = Path(__file__).resolve().parents[1] / "static" / "knowledge_graph_seed.json"
+    result = validate_knowledge_seed_manifest(
+        manifest,
+        strict_taxonomy_coverage=True,
+    )
+
+    assert result.is_valid
+    assert result.report is not None
+    assert all(
+        gap_count == 0
+        for gap_count in result.report["subject_minimum_standard_gap_counts"].values()
+    )
+    assert result.report["subject_minimum_standard_gap_counts"]["math"] == 0
+    assert result.report["subject_minimum_standard_excused_roots"]["math"] == [
+        {
+            "id": "primary_number_sense",
+            "excused_relations": ["prerequisite"],
+        }
+    ]
+    assert "taxonomy_coverage_gap" not in {issue.code for issue in result.issues}

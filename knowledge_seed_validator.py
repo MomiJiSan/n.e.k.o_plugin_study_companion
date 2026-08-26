@@ -110,6 +110,14 @@ SUBJECT_MINIMUM_STANDARDS: dict[str, dict[str, tuple[str, ...]]] = {
         "fields": (),
     },
 }
+TAXONOMY_ROOT_POLICIES: dict[str, dict[str, Any]] = {
+    "primary_number_sense": {
+        "subject": "math",
+        "stage": "primary",
+        "depth": 1,
+        "excused_relations": ("prerequisite",),
+    },
+}
 SUBJECT_MINIMUM_GAP_SAMPLE_LIMIT = 10
 QUALITY_ACTION_LIST_LIMIT = 12
 LEGACY_EDGE_SAMPLE_LIMIT = 20
@@ -500,6 +508,34 @@ def _validate_taxonomy_coverage(
         )
 
 
+def _excused_taxonomy_root_relations(
+    topic: KnowledgeSeedTopic,
+    *,
+    prerequisite_inbound_count: int,
+    missing_relations: list[str],
+    missing_fields: list[str],
+) -> tuple[str, ...]:
+    """Return the explicitly policy-excused relations for a true course root."""
+    topic_id = str(topic.data.get("id") or "").strip()
+    policy = TAXONOMY_ROOT_POLICIES.get(topic_id)
+    if not policy:
+        return ()
+    if (
+        topic.subject != policy["subject"]
+        or topic.stage != policy["stage"]
+        or topic.data.get("depth") != policy["depth"]
+        or prerequisite_inbound_count != 0
+    ):
+        return ()
+    prerequisites = topic.data.get("prerequisites")
+    if not isinstance(prerequisites, list) or prerequisites:
+        return ()
+    excused_relations = tuple(policy["excused_relations"])
+    if missing_fields or set(missing_relations) != set(excused_relations):
+        return ()
+    return excused_relations
+
+
 def _validate_stage_specific_context(
     topics: Iterable[KnowledgeSeedTopic],
     issues: list[KnowledgeSeedIssue],
@@ -841,10 +877,12 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
     subject_minimum_standard_topic_counts: dict[str, int] = {}
     subject_minimum_standard_ready_counts: dict[str, int] = {}
     subject_minimum_standard_gap_counts: dict[str, int] = {}
+    subject_minimum_standard_excused_root_counts: dict[str, int] = {}
     subject_minimum_standard_relation_gap_counts: dict[str, dict[str, int]] = {}
     subject_minimum_standard_field_gap_counts: dict[str, dict[str, int]] = {}
     subject_minimum_standard_uncovered_subject_counts: dict[str, int] = {}
     subject_minimum_standard_gap_samples: dict[str, list[dict[str, Any]]] = {}
+    subject_minimum_standard_excused_roots: dict[str, list[dict[str, Any]]] = {}
     minimum_gap_candidates: dict[str, list[dict[str, Any]]] = {}
     chapter_ready_counts: dict[str, dict[str, int]] = {}
     chapter_gap_counts: dict[str, dict[str, int]] = {}
@@ -1024,6 +1062,28 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
                 field for field in required_fields if not topic.data.get(field)
             )
             if missing_relations or missing_fields:
+                excused_relations = _excused_taxonomy_root_relations(
+                    topic,
+                    prerequisite_inbound_count=prerequisite_inbound_counts.get(
+                        topic_id, 0
+                    ),
+                    missing_relations=missing_relations,
+                    missing_fields=missing_fields,
+                )
+                if excused_relations:
+                    subject_minimum_standard_excused_root_counts[subject] = (
+                        subject_minimum_standard_excused_root_counts.get(subject, 0)
+                        + 1
+                    )
+                    subject_minimum_standard_excused_roots.setdefault(
+                        subject, []
+                    ).append(
+                        {
+                            "id": topic_id,
+                            "excused_relations": list(excused_relations),
+                        }
+                    )
+                    continue
                 chapter_gaps = chapter_gap_counts.setdefault(subject, {})
                 chapter_gaps[chapter] = chapter_gaps.get(chapter, 0) + 1
                 subject_minimum_standard_gap_counts[subject] = (
@@ -1083,6 +1143,7 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         subject_minimum_standard_topic_counts.setdefault(subject, 0)
         subject_minimum_standard_ready_counts.setdefault(subject, 0)
         subject_minimum_standard_gap_counts.setdefault(subject, 0)
+        subject_minimum_standard_excused_root_counts.setdefault(subject, 0)
     subject_minimum_standard_ready_rates = {
         subject: (
             subject_minimum_standard_ready_counts.get(subject, 0)
@@ -1199,6 +1260,9 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         "subject_minimum_standard_gap_counts": dict(
             sorted(subject_minimum_standard_gap_counts.items())
         ),
+        "subject_minimum_standard_excused_root_counts": dict(
+            sorted(subject_minimum_standard_excused_root_counts.items())
+        ),
         "subject_minimum_standard_ready_rates": dict(
             sorted(subject_minimum_standard_ready_rates.items())
         ),
@@ -1264,6 +1328,10 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         "sample_subject_minimum_standard_gaps": {
             subject: samples
             for subject, samples in sorted(subject_minimum_standard_gap_samples.items())
+        },
+        "subject_minimum_standard_excused_roots": {
+            subject: roots
+            for subject, roots in sorted(subject_minimum_standard_excused_roots.items())
         },
     }
 
@@ -1419,6 +1487,7 @@ def _format_quality_report(report: dict[str, Any] | None) -> list[str]:
     topic_counts = report.get("subject_minimum_standard_topic_counts")
     ready_counts = report.get("subject_minimum_standard_ready_counts")
     gap_counts = report.get("subject_minimum_standard_gap_counts")
+    excused_root_counts = report.get("subject_minimum_standard_excused_root_counts")
     ready_rates = report.get("subject_minimum_standard_ready_rates")
     if isinstance(topic_counts, dict) and topic_counts:
         lines.append("subject_minimum_standard_ready_counts:")
@@ -1429,11 +1498,15 @@ def _format_quality_report(report: dict[str, Any] | None) -> list[str]:
             gap_count = 0
             if isinstance(gap_counts, dict):
                 gap_count = int(gap_counts.get(subject, 0) or 0)
+            excused_root_count = 0
+            if isinstance(excused_root_counts, dict):
+                excused_root_count = int(excused_root_counts.get(subject, 0) or 0)
             rate = 0.0
             if isinstance(ready_rates, dict):
                 rate = float(ready_rates.get(subject, 0.0) or 0.0)
             lines.append(
-                f"  {subject}: {count}/{int(total)} ready, {gap_count} gaps, {rate:.2%}"
+                f"  {subject}: {count}/{int(total)} ready, {gap_count} gaps, "
+                f"{excused_root_count} excused roots, {rate:.2%}"
             )
     top_missing = report.get("top_missing_relation_by_subject")
     if isinstance(top_missing, dict) and top_missing:
