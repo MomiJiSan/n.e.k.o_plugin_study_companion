@@ -119,15 +119,13 @@ def test_shadow_enqueue_is_atomic_idempotent_and_persists_trusted_hint(
         assert duplicate["duplicate_attempt"] is True
         assert _count(store, "mastery_projection_queue") == 1
         assert store.get_attempt_fact("attempt-queued")["used_hint"] is True
-        assert store.list_mastery_projection_queue() == [
-            {
-                **store.list_mastery_projection_queue()[0],
-                "attempt_id": "attempt-queued",
-                "status": "pending",
-                "retry_count": 0,
-                "last_error": "",
-            }
-        ]
+        queue = store.list_mastery_projection_queue()
+        assert len(queue) == 1
+        assert queue[0]["attempt_id"] == "attempt-queued"
+        assert queue[0]["status"] == "pending"
+        assert queue[0]["retry_count"] == 0
+        assert queue[0]["last_error"] == ""
+        assert queue[0]["lease_token"] == ""
     finally:
         store.close()
 
@@ -165,9 +163,14 @@ def test_projection_retry_and_completion_are_idempotent(
             **_answer_kwargs("attempt-worker"), enqueue_mastery_v2=True
         )
 
-        assert store.claim_mastery_projections()[0]["status"] == "processing"
+        first_claim = store.claim_mastery_projections()[0]
+        assert first_claim["status"] == "processing"
+        first_lease = first_claim["lease_token"]
+        assert first_lease
         assert store.mark_mastery_projection_failed(
-            attempt_id="attempt-worker", error="temporary failure"
+            attempt_id="attempt-worker",
+            lease_token=first_lease,
+            error="temporary failure",
         )
         failed = store.list_mastery_projection_queue(statuses=("failed",))[0]
         assert failed["retry_count"] == 1
@@ -183,12 +186,19 @@ def test_projection_retry_and_completion_are_idempotent(
             ("attempt-worker",),
         )
         conn.commit()
-        assert store.claim_mastery_projections()[0]["status"] == "processing"
-        completed = store.complete_mastery_projection(_snapshot("attempt-worker"))
-        repeated = store.complete_mastery_projection(_snapshot("attempt-worker"))
+        second_claim = store.claim_mastery_projections()[0]
+        assert second_claim["status"] == "processing"
+        second_lease = second_claim["lease_token"]
+        assert second_lease and second_lease != first_lease
+        completed = store.complete_mastery_projection(
+            _snapshot("attempt-worker"), lease_token=second_lease
+        )
+        with pytest.raises(ValueError, match="lease is no longer active"):
+            store.complete_mastery_projection(
+                _snapshot("attempt-worker"), lease_token=second_lease
+            )
 
         assert completed["mastery"] == pytest.approx(0.8)
-        assert repeated["id"] == completed["id"]
         assert _count(store, "mastery_snapshots_v2") == 1
         queue = store.list_mastery_projection_queue()[0]
         assert queue["status"] == "done"
@@ -207,7 +217,9 @@ def test_stale_processing_projection_lease_is_reclaimed(
         store.batch_write_answer_data(
             **_answer_kwargs("attempt-stale"), enqueue_mastery_v2=True
         )
-        assert store.claim_mastery_projections()[0]["status"] == "processing"
+        first_claim = store.claim_mastery_projections()[0]
+        assert first_claim["status"] == "processing"
+        first_lease = first_claim["lease_token"]
         conn = store._require_conn()
         conn.execute(
             """
@@ -224,6 +236,27 @@ def test_stale_processing_projection_lease_is_reclaimed(
         assert reclaimed[0]["attempt_id"] == "attempt-stale"
         assert reclaimed[0]["status"] == "processing"
         assert reclaimed[0]["retry_count"] == 1
+        second_lease = reclaimed[0]["lease_token"]
+        assert second_lease and second_lease != first_lease
+
+        with pytest.raises(ValueError, match="lease is no longer active"):
+            store.complete_mastery_projection(
+                _snapshot("attempt-stale"), lease_token=first_lease
+            )
+        assert not store.mark_mastery_projection_failed(
+            attempt_id="attempt-stale",
+            lease_token=first_lease,
+            error="stale worker failure",
+        )
+        assert _count(store, "mastery_snapshots_v2") == 0
+
+        completed = store.complete_mastery_projection(
+            _snapshot("attempt-stale"), lease_token=second_lease
+        )
+        assert completed["source_attempt_id"] == "attempt-stale"
+        queue = store.list_mastery_projection_queue()[0]
+        assert queue["status"] == "done"
+        assert queue["lease_token"] == ""
     finally:
         store.close()
 
@@ -364,6 +397,18 @@ def test_open_adds_v2_tables_and_nullable_hint_to_legacy_attempts(
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE mastery_projection_queue (
+                attempt_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
         connection.commit()
     finally:
         connection.close()
@@ -382,8 +427,15 @@ def test_open_adds_v2_tables_and_nullable_hint_to_legacy_attempts(
             .execute("SELECT name FROM sqlite_master WHERE type = 'table'")
             .fetchall()
         }
+        queue_columns = {
+            str(row["name"])
+            for row in store._require_read_conn()
+            .execute("PRAGMA table_info(mastery_projection_queue)")
+            .fetchall()
+        }
 
         assert "used_hint" in columns
+        assert "lease_token" in queue_columns
         assert {"mastery_snapshots_v2", "mastery_projection_queue"} <= tables
     finally:
         store.close()

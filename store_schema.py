@@ -415,6 +415,7 @@ def _init_db(self) -> None:
                 CHECK(status IN ('pending', 'processing', 'done', 'failed')),
             retry_count INTEGER NOT NULL DEFAULT 0,
             last_error TEXT,
+            lease_token TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
@@ -539,6 +540,12 @@ def _init_db(self) -> None:
         "attempts",
         "used_hint",
         "INTEGER CHECK(used_hint IS NULL OR used_hint IN (0, 1))",
+    )
+    self._ensure_column(
+        conn,
+        "mastery_projection_queue",
+        "lease_token",
+        "TEXT NOT NULL DEFAULT ''",
     )
     # PR-8 adds evaluator provenance without replacing the evaluation JSON.
     # Defaults make records created before this migration read as the legacy

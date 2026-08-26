@@ -30,9 +30,20 @@ class MasteryProjectionStore(Protocol):
 
     def get_mastery_v2_projection_input(self, attempt_id: str) -> dict[str, Any] | None: ...
 
-    def complete_mastery_projection(self, snapshot: dict[str, Any]) -> dict[str, Any]: ...
+    def complete_mastery_projection(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        lease_token: str,
+    ) -> dict[str, Any]: ...
 
-    def mark_mastery_projection_failed(self, *, attempt_id: str, error: str) -> bool: ...
+    def mark_mastery_projection_failed(
+        self,
+        *,
+        attempt_id: str,
+        lease_token: str,
+        error: str,
+    ) -> bool: ...
 
     def upsert_mastery_snapshot_v2(self, snapshot: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -162,9 +173,12 @@ class MasteryV2Projector:
         failures: list[ProjectionFailure] = []
         for item in claimed_items:
             attempt_id = str(item.get("attempt_id") or "").strip()
+            lease_token = str(item.get("lease_token") or "").strip()
             try:
                 if not attempt_id:
                     raise ValueError("claimed mastery projection has no attempt_id")
+                if not lease_token:
+                    raise ValueError("claimed mastery projection has no lease_token")
                 projection_input = self._store.get_mastery_v2_projection_input(attempt_id)
                 if projection_input is None:
                     raise ValueError("mastery projection input is unavailable")
@@ -173,7 +187,9 @@ class MasteryV2Projector:
                     expected_source_attempt_id=attempt_id,
                     as_of=projection_time,
                 )
-                self._store.complete_mastery_projection(snapshot.to_record())
+                self._store.complete_mastery_projection(
+                    snapshot.to_record(), lease_token=lease_token
+                )
                 completed += 1
             except Exception as exc:
                 failure = ProjectionFailure(
@@ -181,7 +197,9 @@ class MasteryV2Projector:
                     error=_error_text(exc),
                 )
                 failures.append(failure)
-                self._mark_failed_without_raising(failure)
+                self._mark_failed_without_raising(
+                    failure, lease_token=lease_token
+                )
 
         return ProjectionRunSummary(
             claimed=len(claimed_items),
@@ -413,12 +431,15 @@ class MasteryV2Projector:
         value = self._clock() if as_of is None else as_of
         return _utc_datetime(value)
 
-    def _mark_failed_without_raising(self, failure: ProjectionFailure) -> None:
+    def _mark_failed_without_raising(
+        self, failure: ProjectionFailure, *, lease_token: str
+    ) -> None:
         if not failure.attempt_id:
             return
         try:
             self._store.mark_mastery_projection_failed(
                 attempt_id=failure.attempt_id,
+                lease_token=lease_token,
                 error=failure.error,
             )
         except Exception:
@@ -457,9 +478,10 @@ def evidence_from_mappings(
 def _latest_evidence(evidence: Sequence[MasteryEvidence]) -> MasteryEvidence:
     if not evidence:
         raise ValueError("mastery evidence is required")
-    # ISO timestamps emitted by SQLite sort chronologically in their canonical
-    # form; calculate_mastery_v2 performs the authoritative datetime parsing.
-    return max(evidence, key=lambda item: (str(item.submitted_at), item.attempt_id))
+    return max(
+        evidence,
+        key=lambda item: (_utc_datetime(item.submitted_at), item.attempt_id),
+    )
 
 
 def _optional_int(value: object) -> int | None:

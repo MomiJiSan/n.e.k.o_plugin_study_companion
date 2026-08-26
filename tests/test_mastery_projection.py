@@ -39,7 +39,7 @@ class FakeStore:
         self.wrong_counts: dict[str, int] = {}
         self.completed: list[dict[str, Any]] = []
         self.upserted: list[dict[str, Any]] = []
-        self.failed: list[tuple[str, str]] = []
+        self.failed: list[tuple[str, str, str]] = []
         self.claim_error: Exception | None = None
         self.complete_error_for: set[str] = set()
         self.attempt_ids: list[str] = []
@@ -50,19 +50,32 @@ class FakeStore:
     def claim_mastery_projections(self, *, limit: int = 1) -> list[dict[str, Any]]:
         if self.claim_error is not None:
             raise self.claim_error
-        return self.claimed[:limit]
+        return [
+            {
+                **item,
+                "lease_token": str(
+                    item.get("lease_token") or f"lease:{item.get('attempt_id')}"
+                ),
+            }
+            for item in self.claimed[:limit]
+        ]
 
     def get_mastery_v2_projection_input(self, attempt_id: str) -> dict[str, Any] | None:
         return self.inputs.get(attempt_id)
 
-    def complete_mastery_projection(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+    def complete_mastery_projection(
+        self, snapshot: dict[str, Any], *, lease_token: str
+    ) -> dict[str, Any]:
+        assert lease_token == f"lease:{snapshot['source_attempt_id']}"
         if str(snapshot["source_attempt_id"]) in self.complete_error_for:
             raise RuntimeError("snapshot write failed")
         self.completed.append(snapshot)
         return snapshot
 
-    def mark_mastery_projection_failed(self, *, attempt_id: str, error: str) -> bool:
-        self.failed.append((attempt_id, error))
+    def mark_mastery_projection_failed(
+        self, *, attempt_id: str, lease_token: str, error: str
+    ) -> bool:
+        self.failed.append((attempt_id, lease_token, error))
         return True
 
     def upsert_mastery_snapshot_v2(self, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -130,7 +143,13 @@ def test_process_pending_completes_valid_work_and_isolates_each_failure() -> Non
     assert summary.failed == 1
     assert store.completed[0]["source_attempt_id"] == "attempt-1"
     assert store.completed[0]["computed_at"] == PROJECTION_TIME
-    assert store.failed == [("attempt-2", "mastery projection input is unavailable")]
+    assert store.failed == [
+        (
+            "attempt-2",
+            "lease:attempt-2",
+            "mastery projection input is unavailable",
+        )
+    ]
 
 
 def test_process_pending_does_not_raise_claim_or_snapshot_write_failures() -> None:
@@ -157,7 +176,9 @@ def test_process_pending_does_not_raise_claim_or_snapshot_write_failures() -> No
     )
 
     assert write_summary.failed == 1
-    assert store.failed == [("attempt-1", "snapshot write failed")]
+    assert store.failed == [
+        ("attempt-1", "lease:attempt-1", "snapshot write failed")
+    ]
 
 
 def test_projection_rejects_newer_facts_than_the_queued_source_attempt() -> None:
@@ -198,6 +219,22 @@ def test_full_rebuild_uses_latest_fact_time_and_continues_past_empty_topics() ->
     assert store.upserted[0]["source_attempt_id"] == "attempt-2"
     assert store.upserted[0]["computed_at"] == PROJECTION_TIME
     assert store.upserted[0]["unresolved_wrong_count"] == 1
+
+
+def test_rebuild_latest_evidence_uses_parsed_iso_time_order() -> None:
+    store = FakeStore()
+    store.evidence["topic-1"] = [
+        _fact("attempt-offset", submitted_at="2026-08-26T04:00:00+02:00"),
+        _fact("attempt-z", submitted_at="2026-08-26T03:00:00Z"),
+    ]
+
+    summary = MasteryV2Projector(store).rebuild_topics(
+        ["topic-1"], as_of=PROJECTION_TIME
+    )
+
+    assert summary.rebuilt == 1
+    assert summary.failed == 0
+    assert store.upserted[0]["source_attempt_id"] == "attempt-z"
 
 
 def test_rebuild_all_replays_each_stable_attempt_and_matches_incremental_latest() -> None:

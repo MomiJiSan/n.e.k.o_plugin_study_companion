@@ -147,7 +147,7 @@ def _consume_mastery_v2_projection_task(
     if failed:
         _warn(logger, "study mastery V2 projection reported {} failed item(s)", failed)
     if isinstance(result, dict) and bool(result.get("has_more")):
-        setattr(owner, "_mastery_v2_projection_dirty", True)
+        owner._mastery_v2_projection_dirty = True
     if bool(getattr(owner, "_mastery_v2_projection_dirty", False)):
         _schedule_mastery_v2_projection(owner)
 
@@ -162,12 +162,12 @@ def _schedule_mastery_v2_projection(owner: Any) -> None:
     tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
     if not isinstance(tasks, set):
         tasks = set()
-        setattr(owner, "_mastery_v2_projection_tasks", tasks)
+        owner._mastery_v2_projection_tasks = tasks
     tasks.intersection_update(task for task in tasks if not task.done())
     if tasks:
-        setattr(owner, "_mastery_v2_projection_dirty", True)
+        owner._mastery_v2_projection_dirty = True
         return
-    setattr(owner, "_mastery_v2_projection_dirty", False)
+    owner._mastery_v2_projection_dirty = False
     task = asyncio.create_task(asyncio.to_thread(project_pending, limit=100))
     tasks.add(task)
     task.add_done_callback(

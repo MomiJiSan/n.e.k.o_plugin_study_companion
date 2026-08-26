@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from .store_common import Any, sqlite3
+from .store_common import Any, sqlite3, uuid
 
 _QUEUE_STATUSES = frozenset({"pending", "processing", "done", "failed"})
 _PROJECTION_LEASE_SECONDS = 300
@@ -44,6 +44,7 @@ def _queue_from_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "status": str(row["status"]),
         "retry_count": int(row["retry_count"] or 0),
         "last_error": str(row["last_error"] or ""),
+        "lease_token": str(row["lease_token"] or ""),
         "created_at": str(row["created_at"] or ""),
         "updated_at": str(row["updated_at"] or ""),
     }
@@ -191,11 +192,14 @@ def claim_mastery_projections(
         conn = self._require_conn()
         conn.execute("BEGIN IMMEDIATE")
         try:
+            # Keep the expired timestamp so this event-driven worker can
+            # reclaim immediately.  A fresh lease token fences the old worker;
+            # delaying here could strand work when no later answer wakes it.
             conn.execute(
                 """
                 UPDATE mastery_projection_queue
                 SET status = 'failed', retry_count = retry_count + 1,
-                    last_error = 'projection lease expired'
+                    last_error = 'projection lease expired', lease_token = ''
                 WHERE status = 'processing'
                   AND updated_at <= datetime('now', ?)
                 """,
@@ -218,44 +222,46 @@ def claim_mastery_projections(
                     max(1, int(limit)),
                 ),
             ).fetchall()
-            attempt_ids = [str(row["attempt_id"]) for row in rows]
-            if attempt_ids:
-                placeholders = ", ".join("?" for _ in attempt_ids)
-                conn.execute(
-                    f"""
+            claimed_items: list[dict[str, Any]] = []
+            for row in rows:
+                attempt_id = str(row["attempt_id"])
+                lease_token = str(uuid.uuid4())
+                cursor = conn.execute(
+                    """
                     UPDATE mastery_projection_queue
                     SET status = 'processing', last_error = NULL,
-                        updated_at = datetime('now')
+                        lease_token = ?, updated_at = datetime('now')
                     WHERE status IN ('pending', 'failed')
-                      AND attempt_id IN ({placeholders})
+                      AND attempt_id = ?
                     """,
-                    attempt_ids,
+                    (lease_token, attempt_id),
                 )
+                if int(cursor.rowcount or 0) != 1:
+                    continue
+                claimed = conn.execute(
+                    """
+                    SELECT * FROM mastery_projection_queue
+                    WHERE attempt_id = ? AND status = 'processing'
+                      AND lease_token = ?
+                    """,
+                    (attempt_id, lease_token),
+                ).fetchone()
+                item = _queue_from_row(claimed)
+                if item is not None:
+                    claimed_items.append(item)
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-    if not attempt_ids:
-        return []
-    placeholders = ", ".join("?" for _ in attempt_ids)
-    claimed_rows = self._require_read_conn().execute(
-        f"""
-        SELECT * FROM mastery_projection_queue
-        WHERE status = 'processing' AND attempt_id IN ({placeholders})
-        ORDER BY created_at, attempt_id
-        """,
-        attempt_ids,
-    ).fetchall()
-    return [
-        item for item in (_queue_from_row(row) for row in claimed_rows) if item
-    ]
+    return claimed_items
 
 
 def mark_mastery_projection_failed(
-    self, *, attempt_id: str, error: str
+    self, *, attempt_id: str, lease_token: str, error: str
 ) -> bool:
     attempt_key = str(attempt_id or "").strip()
-    if not attempt_key:
+    lease_key = str(lease_token or "").strip()
+    if not attempt_key or not lease_key:
         return False
     with self._lock:
         conn = self._require_conn()
@@ -263,10 +269,10 @@ def mark_mastery_projection_failed(
             """
             UPDATE mastery_projection_queue
             SET status = 'failed', retry_count = retry_count + 1,
-                last_error = ?, updated_at = datetime('now')
-            WHERE attempt_id = ? AND status != 'done'
+                last_error = ?, lease_token = '', updated_at = datetime('now')
+            WHERE attempt_id = ? AND status = 'processing' AND lease_token = ?
             """,
-            (str(error or "")[:2000], attempt_key),
+            (str(error or "")[:2000], attempt_key, lease_key),
         )
         conn.commit()
     return int(cursor.rowcount or 0) > 0
@@ -298,10 +304,13 @@ def upsert_mastery_snapshot_v2(
 
 
 def complete_mastery_projection(
-    self, snapshot: dict[str, Any]
+    self, snapshot: dict[str, Any], *, lease_token: str
 ) -> dict[str, Any]:
     """Atomically store a snapshot and mark its source queue item done."""
     item = _normalized_snapshot(snapshot)
+    lease_key = str(lease_token or "").strip()
+    if not lease_key:
+        raise ValueError("active mastery projection lease is required")
     with self._lock:
         conn = self._require_conn()
         conn.execute("BEGIN IMMEDIATE")
@@ -310,14 +319,15 @@ def complete_mastery_projection(
             cursor = conn.execute(
                 """
                 UPDATE mastery_projection_queue
-                SET status = 'done', last_error = NULL,
+                SET status = 'done', last_error = NULL, lease_token = '',
                     updated_at = datetime('now')
-                WHERE attempt_id = ?
+                WHERE attempt_id = ? AND status = 'processing'
+                  AND lease_token = ?
                 """,
-                (item["source_attempt_id"],),
+                (item["source_attempt_id"], lease_key),
             )
             if int(cursor.rowcount or 0) < 1:
-                raise ValueError("source attempt is not queued for mastery projection")
+                raise ValueError("mastery projection lease is no longer active")
             conn.commit()
         except Exception:
             conn.rollback()
