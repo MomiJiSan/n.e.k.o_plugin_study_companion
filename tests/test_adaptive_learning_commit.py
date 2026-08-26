@@ -4,6 +4,8 @@ import asyncio
 
 import pytest
 
+# isort: split
+
 from adaptive_learning import (
     EvaluatedAttempt,
     EvaluationResult,
