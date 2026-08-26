@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -141,9 +142,14 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
             self.window_seconds = window_seconds
             self.snapshot_interval = snapshot_interval
 
+    class _StudyEvent:
+        def __init__(self, *, name: str, payload: dict[str, Any]):
+            self.name = name
+            self.payload = payload
+
     local_modules: dict[str, dict[str, Any]] = {
         "_event_bus": {
-            "StudyEvent": _blank_class("StudyEvent"),
+            "StudyEvent": _StudyEvent,
             "StudyEventBus": _blank_class("StudyEventBus"),
         },
         "awareness_buffer": {"ActivityBuffer": _ActivityBuffer},
@@ -225,10 +231,24 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
     for module_name, attributes in local_modules.items():
         _install_module(monkeypatch, f"{package}.{module_name}", **attributes)
 
+    _install_module(
+        monkeypatch,
+        f"{package}.entry_common",
+        Any=Any,
+        StudyEvent=_StudyEvent,
+        StudyEventBus=_blank_class("StudyEventBus"),
+        asyncio=asyncio,
+    )
+    _install_module(
+        monkeypatch,
+        f"{package}.fsrs_bridge",
+        REVIEW_IS_DUE_AFTER_KEY="review_is_due_after",
+        REVIEW_WAS_DUE_BEFORE_KEY="review_was_due_before",
+    )
+
     mixins = {
         "entry_checkin_entries": "_CheckinEntriesMixin",
         "entry_communication_pomodoro_events": "_CommunicationPomodoroEventsMixin",
-        "entry_communication_review_events": "_CommunicationReviewEventsMixin",
         "entry_communication_tutor_events": "_CommunicationTutorEventsMixin",
         "entry_document_analysis_jobs": "_DocumentAnalysisJobsEntriesMixin",
         "entry_export_support": "_ExportSupportMixin",
@@ -292,6 +312,19 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
 
 async def _forever() -> None:
     await asyncio.Event().wait()
+
+
+def _assert_cancelled_tasks(tasks: dict[str, asyncio.Task[None]]) -> None:
+    for name, task in tasks.items():
+        assert task.done(), f"{name} task was not finished"
+        assert task.cancelled(), f"{name} task was not cancelled"
+
+
+async def _cleanup_tasks(tasks: dict[str, asyncio.Task[Any]]) -> None:
+    for task in tasks.values():
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks.values(), return_exceptions=True)
 
 
 class _Resource:
@@ -394,40 +427,50 @@ async def test_startup_failure_cleans_partial_runtime_and_reports_stable_error(
             raise RuntimeError("config unavailable")
 
     owner.config = _Config()
-    owner._awareness_task = asyncio.create_task(_forever())
-    owner._command_worker_task = asyncio.create_task(_forever())
-    owner._interruptible_task = asyncio.create_task(_forever())
-    owner._review_due_task = asyncio.create_task(_forever())
+    tasks = {
+        "awareness": asyncio.create_task(_forever()),
+        "command_worker": asyncio.create_task(_forever()),
+        "interruptible": asyncio.create_task(_forever()),
+        "review": asyncio.create_task(_forever()),
+    }
+    owner._awareness_task = tasks["awareness"]
+    owner._command_worker_task = tasks["command_worker"]
+    owner._interruptible_task = tasks["interruptible"]
+    owner._review_due_task = tasks["review"]
     owner._command_queue.put_nowait(("quiz", {"id": 1}))
 
-    result = await owner.startup()
+    try:
+        result = await owner.startup()
 
-    assert isinstance(result, _Err)
-    assert str(result.value) == "failed to start study_companion"
-    assert owner._state.status == "error"
-    assert owner._state.last_error == "startup_failed"
-    assert owner._event_bus is None
-    assert owner._agent is None
-    assert owner._local_model_manager is None
-    assert owner._ocr_pipeline is None
-    assert owner._static_ui_config is None
-    assert owner._command_queue.empty()
-    assert owner._awareness_task is None
-    assert owner._command_worker_task is None
-    assert owner._interruptible_task is None
-    assert owner._review_due_task is None
-    assert owner.projection_awaited is True
-    assert {
-        "document_jobs.shutdown",
-        "commands.unsubscribe",
-        "event_bus.stop_worker",
-        "actions.clear",
-        "entry.unregister:study_export_notes",
-        "agent.shutdown",
-        "local_model_manager.shutdown",
-        "ocr.close",
-        "store.close",
-    } <= set(calls)
+        assert isinstance(result, _Err)
+        assert str(result.value) == "failed to start study_companion"
+        assert owner._state.status == "error"
+        assert owner._state.last_error == "startup_failed"
+        assert owner._event_bus is None
+        assert owner._agent is None
+        assert owner._local_model_manager is None
+        assert owner._ocr_pipeline is None
+        assert owner._static_ui_config is None
+        assert owner._command_queue.empty()
+        assert owner._awareness_task is None
+        assert owner._command_worker_task is None
+        assert owner._interruptible_task is None
+        assert owner._review_due_task is None
+        _assert_cancelled_tasks(tasks)
+        assert owner.projection_awaited is True
+        assert {
+            "document_jobs.shutdown",
+            "commands.unsubscribe",
+            "event_bus.stop_worker",
+            "actions.clear",
+            "entry.unregister:study_export_notes",
+            "agent.shutdown",
+            "local_model_manager.shutdown",
+            "ocr.close",
+            "store.close",
+        } <= set(calls)
+    finally:
+        await _cleanup_tasks(tasks)
 
 
 @pytest.mark.asyncio
@@ -445,19 +488,35 @@ async def test_shutdown_releases_resources_despite_best_effort_cleanup_failures(
         raise RuntimeError("registry unavailable")
 
     owner.unregister_dynamic_entry = fail_unregister
+    tasks = {
+        "awareness": asyncio.create_task(_forever()),
+        "command_worker": asyncio.create_task(_forever()),
+        "interruptible": asyncio.create_task(_forever()),
+        "review": asyncio.create_task(_forever()),
+    }
+    owner._awareness_task = tasks["awareness"]
+    owner._command_worker_task = tasks["command_worker"]
+    owner._interruptible_task = tasks["interruptible"]
+    owner._review_due_task = tasks["review"]
+    owner._command_queue.put_nowait(("quiz", {"id": 1}))
 
-    result = await owner.shutdown()
+    try:
+        result = await owner.shutdown()
 
-    assert isinstance(result, _Ok)
-    assert result.value == {"status": "stopped"}
-    assert owner._state.status == "stopped"
-    assert owner._event_bus is None
-    assert owner._ocr_pipeline is None
-    assert owner._store.saved_state is owner._state
-    assert owner.projection_awaited is True
-    assert calls[-3:] == ["state.clear_ocr_session", "store.save_state", "store.close"]
-    assert "agent.shutdown" in calls
-    assert "local_model.shutdown" in calls
+        assert isinstance(result, _Ok)
+        assert result.value == {"status": "stopped"}
+        assert owner._state.status == "stopped"
+        assert owner._event_bus is None
+        assert owner._ocr_pipeline is None
+        assert owner._store.saved_state is owner._state
+        assert owner._command_queue.empty()
+        _assert_cancelled_tasks(tasks)
+        assert owner.projection_awaited is True
+        assert calls[-3:] == ["state.clear_ocr_session", "store.save_state", "store.close"]
+        assert "agent.shutdown" in calls
+        assert "local_model.shutdown" in calls
+    finally:
+        await _cleanup_tasks(tasks)
 
 
 @pytest.mark.asyncio
@@ -532,17 +591,36 @@ async def test_awareness_and_review_loops_are_periodic_and_cancellation_safe(
     )
     owner._ocr_pipeline = object()
     awareness_seen = asyncio.Event()
-    review_seen = asyncio.Event()
+    build_started = [threading.Event(), threading.Event()]
+    build_release = [threading.Event(), threading.Event()]
+    build_count = 0
+
+    class _EventBus:
+        def __init__(self) -> None:
+            self.events: list[Any] = []
+
+        def schedule_emit(self, event: Any) -> None:
+            self.events.append(event)
+
+    event_bus = _EventBus()
+    owner._event_bus = event_bus
 
     async def awareness_tick() -> None:
         awareness_seen.set()
 
-    async def emit_review() -> None:
-        review_seen.set()
-
     owner.awareness_tick = awareness_tick
-    owner._emit_review_due_if_needed = emit_review
-    monkeypatch.setattr(module, "_REVIEW_DUE_INTERVAL_SECONDS", 60.0)
+
+    def build_review_due_payload() -> dict[str, int]:
+        nonlocal build_count
+        index = build_count
+        build_count += 1
+        build_started[index].set()
+        assert build_release[index].wait(timeout=1.0)
+        return {"due_count": index + 1}
+
+    owner._build_review_due_payload = build_review_due_payload
+    owner._resolve_study_target_lanlan = lambda: None
+    monkeypatch.setattr(module, "_REVIEW_DUE_INTERVAL_SECONDS", 0.0)
 
     owner.start_awareness_loop()
     owner._start_review_due_task()
@@ -550,18 +628,44 @@ async def test_awareness_and_review_loops_are_periodic_and_cancellation_safe(
     review_task = owner._review_due_task
     assert awareness_task is not None
     assert review_task is not None
-    await asyncio.wait_for(awareness_seen.wait(), timeout=1.0)
-    await asyncio.wait_for(review_seen.wait(), timeout=1.0)
+    tasks = {"awareness": awareness_task, "review": review_task}
+    try:
+        await asyncio.wait_for(awareness_seen.wait(), timeout=1.0)
+        assert await asyncio.to_thread(build_started[0].wait, 1.0)
+        first_future = owner._review_due_payload_future
+        assert first_future is not None
+        assert not first_future.done()
 
-    owner.stop_awareness_loop()
-    await owner._await_awareness_stop()
-    await owner._cancel_review_due_task()
+        build_release[0].set()
+        assert await asyncio.to_thread(build_started[1].wait, 1.0)
+        second_future = owner._review_due_payload_future
+        assert second_future is not None
+        assert second_future is not first_future
+        assert build_count == 2
+        assert len(event_bus.events) == 1
 
-    assert awareness_task.cancelled()
-    assert review_task.cancelled()
-    assert owner._awareness_task is None
-    assert owner._review_due_task is None
-    assert owner._buffer is None
-    assert owner._last_awareness_push_at == 0.0
-    assert owner._awareness_idle_ticks == 0
-    assert owner._consecutive_os_read_failures == 0
+        owner.stop_awareness_loop()
+        await owner._await_awareness_stop()
+        cancel_review = asyncio.create_task(owner._cancel_review_due_task())
+        tasks["review_cancel"] = cancel_review
+        await asyncio.sleep(0)
+        assert not cancel_review.done()
+        assert owner._review_due_payload_future is second_future
+
+        build_release[1].set()
+        await cancel_review
+
+        assert awareness_task.cancelled()
+        assert review_task.cancelled()
+        assert second_future.done()
+        assert owner._review_due_payload_future is None
+        assert owner._awareness_task is None
+        assert owner._review_due_task is None
+        assert owner._buffer is None
+        assert owner._last_awareness_push_at == 0.0
+        assert owner._awareness_idle_ticks == 0
+        assert owner._consecutive_os_read_failures == 0
+    finally:
+        build_release[0].set()
+        build_release[1].set()
+        await _cleanup_tasks(tasks)
