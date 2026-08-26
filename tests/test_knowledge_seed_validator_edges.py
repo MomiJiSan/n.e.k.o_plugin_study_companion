@@ -246,11 +246,11 @@ def test_bundled_seed_has_no_invalid_or_duplicate_edges() -> None:
     assert result.report["cycles_in_prerequisites"] == 0
     assert result.report["isolated_nodes"] == 0
     assert result.report["prerequisite_stage_reverse_count"] == 0
-    assert result.report["edge_count"] == 4827
+    assert result.report["edge_count"] == 4865
     assert result.report["relation_counts"]["prerequisite"] == 1019
     assert result.report["relation_counts"]["supports"] == 13
     assert result.report["subject_minimum_standard_gap_counts"]["geography"] == 0
-    assert result.report["subject_minimum_standard_gap_counts"]["history"] == 24
+    assert result.report["subject_minimum_standard_gap_counts"]["history"] == 0
     assert result.report["subject_minimum_standard_gap_counts"]["math"] == 6
 
 
@@ -269,3 +269,6 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     assert sum(report["subject_target_context_ready_counts"].values()) + sum(
         report["subject_target_context_gap_counts"].values()
     ) == report["topic_count"]
+    assert report["subject_minimum_standard_gap_counts"]["history"] == 0
+    assert report["subject_minimum_standard_gap_counts"]["geography"] == 0
+    assert report["subject_minimum_standard_gap_counts"]["math"] == 6
