@@ -402,6 +402,33 @@ class AssessmentConfig:
 
 
 @dataclass(slots=True)
+class MasteryConfig:
+    """Versioned mastery shadow-model controls with a V1-safe default."""
+
+    v2_shadow_enabled: bool = False
+    read_model: str = "v1"
+    model_version: str = "mastery-v2-shadow-1"
+
+    def __post_init__(self) -> None:
+        self.v2_shadow_enabled = (
+            self.v2_shadow_enabled
+            if isinstance(self.v2_shadow_enabled, bool)
+            else False
+        )
+        read_model = str(self.read_model or "v1").strip().lower()
+        self.read_model = read_model if read_model in {"v1", "v2"} else "v1"
+        model_version = str(self.model_version or "").strip()
+        self.model_version = (
+            model_version
+            if model_version == "mastery-v2-shadow-1"
+            else "mastery-v2-shadow-1"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class StudyConfig:
     mode: StudyMode = MODE_COMPANION
     default_mode: StudyMode = MODE_COMPANION
@@ -447,6 +474,7 @@ class StudyConfig:
     communication: CommunicationConfig = field(default_factory=CommunicationConfig)
     awareness: AwarenessConfig = field(default_factory=AwarenessConfig)
     assessment: AssessmentConfig = field(default_factory=AssessmentConfig)
+    mastery: MasteryConfig = field(default_factory=MasteryConfig)
 
     def __post_init__(self) -> None:
         self.mode = normalize_mode(self.mode)
@@ -539,6 +567,12 @@ class StudyConfig:
                 AssessmentConfig(**self.assessment)
                 if isinstance(self.assessment, dict)
                 else AssessmentConfig()
+            )
+        if not isinstance(self.mastery, MasteryConfig):
+            self.mastery = (
+                MasteryConfig(**self.mastery)
+                if isinstance(self.mastery, dict)
+                else MasteryConfig()
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -782,6 +816,7 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
     assessment = (
         raw.get("assessment") if isinstance(raw.get("assessment"), dict) else {}
     )
+    mastery = raw.get("mastery") if isinstance(raw.get("mastery"), dict) else {}
     communication = (
         study_companion.get("communication")
         if isinstance(study_companion.get("communication"), dict)
@@ -1147,6 +1182,13 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             ),
             math_expression_enabled=_bool(
                 assessment, "math_expression_enabled", False
+            ),
+        ),
+        mastery=MasteryConfig(
+            v2_shadow_enabled=_bool(mastery, "v2_shadow_enabled", False),
+            read_model=_str(mastery, "read_model", "v1"),
+            model_version=_str(
+                mastery, "model_version", "mastery-v2-shadow-1"
             ),
         ),
     )

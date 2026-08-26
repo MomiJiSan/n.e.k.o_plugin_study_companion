@@ -132,6 +132,77 @@ def _warn(logger: Any, message: str, *args: Any) -> None:
         warning(message, *args)
 
 
+def _consume_mastery_v2_projection_task(
+    task: asyncio.Task[Any], *, owner: Any, logger: Any
+) -> None:
+    tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
+    if isinstance(tasks, set):
+        tasks.discard(task)
+    try:
+        result = task.result()
+    except BaseException as exc:
+        _warn(logger, "study mastery V2 projection task failed: {}", exc)
+        return
+    failed = int((result or {}).get("failed") or 0) if isinstance(result, dict) else 0
+    if failed:
+        _warn(logger, "study mastery V2 projection reported {} failed item(s)", failed)
+    if isinstance(result, dict) and bool(result.get("has_more")):
+        setattr(owner, "_mastery_v2_projection_dirty", True)
+    if bool(getattr(owner, "_mastery_v2_projection_dirty", False)):
+        _schedule_mastery_v2_projection(owner)
+
+
+def _schedule_mastery_v2_projection(owner: Any) -> None:
+    tracker = getattr(owner, "_knowledge_tracker", None)
+    if not bool(getattr(tracker, "mastery_v2_shadow_enabled", False)):
+        return
+    project_pending = getattr(tracker, "project_mastery_v2_pending", None)
+    if not callable(project_pending):
+        return
+    tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
+    if not isinstance(tasks, set):
+        tasks = set()
+        setattr(owner, "_mastery_v2_projection_tasks", tasks)
+    tasks.intersection_update(task for task in tasks if not task.done())
+    if tasks:
+        setattr(owner, "_mastery_v2_projection_dirty", True)
+        return
+    setattr(owner, "_mastery_v2_projection_dirty", False)
+    task = asyncio.create_task(asyncio.to_thread(project_pending, limit=100))
+    tasks.add(task)
+    task.add_done_callback(
+        lambda completed: _consume_mastery_v2_projection_task(
+            completed,
+            owner=owner,
+            logger=getattr(owner, "logger", None),
+        )
+    )
+
+
+async def _await_mastery_v2_projection_tasks(owner: Any) -> None:
+    while True:
+        tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
+        active = (
+            tuple(task for task in tasks if not task.done())
+            if isinstance(tasks, set)
+            else ()
+        )
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+            await asyncio.sleep(0)
+            continue
+        if isinstance(tasks, set) and tasks:
+            # A task may be done while its callback is still queued.  Give the
+            # callback a turn so it can publish has_more/dirty and reschedule.
+            await asyncio.sleep(0)
+            continue
+        if bool(getattr(owner, "_mastery_v2_projection_dirty", False)):
+            _schedule_mastery_v2_projection(owner)
+            await asyncio.sleep(0)
+            continue
+        return
+
+
 class _LearningContext(dict[str, Any]):
     def __init__(
         self,
@@ -1049,6 +1120,7 @@ class _TutorContextSupportMixin:
                 # the caller never clears the reservation while commit state is
                 # still unknown; the atomic attempt guard makes a later retry safe.
                 await asyncio.shield(tracking_task)
+                _schedule_mastery_v2_projection(self)
                 raise
         except asyncio.CancelledError:
             raise
@@ -1057,6 +1129,7 @@ class _TutorContextSupportMixin:
             raise SdkError(
                 "answer persistence failed", code="ANSWER_PERSISTENCE_FAILED"
             ) from exc
+        _schedule_mastery_v2_projection(self)
         knowledge_tracking_status = str(
             tracking_result.get("knowledge_tracking_status") or ""
         )

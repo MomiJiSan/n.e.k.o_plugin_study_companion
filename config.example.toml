@@ -8,3 +8,10 @@ auto_start = false
 exact_short_answer_enabled = false
 numeric_tolerance_enabled = false
 math_expression_enabled = false
+
+# Shadow mastery model.  The kill switch is v2_shadow_enabled; read_model
+# remains V1 during the comparison period even when shadow projection is on.
+[mastery]
+v2_shadow_enabled = false
+read_model = "v1"
+model_version = "mastery-v2-shadow-1"

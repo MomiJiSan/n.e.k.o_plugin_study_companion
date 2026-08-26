@@ -60,6 +60,7 @@ def write_attempt_facts(
     eval_result: dict[str, Any],
     mode: str,
     response_time_ms: int | None,
+    used_hint: bool | None,
     attempt_id: str,
 ) -> bool:
     """Write the new facts in the caller-owned answer transaction.
@@ -101,8 +102,8 @@ def write_attempt_facts(
     conn.execute(
         """INSERT INTO attempts (
             attempt_id, question_id, session_id, topic_id, user_answer, mode,
-            response_time_ms, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
+            response_time_ms, used_hint, submitted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
         (
             attempt_key,
             question_key,
@@ -111,6 +112,7 @@ def write_attempt_facts(
             str(user_answer or ""),
             str(mode or "companion"),
             int(response_time_ms) if response_time_ms is not None else None,
+            1 if used_hint is True else 0 if used_hint is False else None,
         ),
     )
     evaluator_type, evaluator_version, confidence, fallback_reason = _evaluation_metadata(
@@ -140,7 +142,8 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
         return None
     row = self._require_read_conn().execute(
         """SELECT a.attempt_id, a.question_id, a.session_id, a.topic_id,
-                  a.user_answer, a.mode, a.response_time_ms, a.submitted_at,
+                  a.user_answer, a.mode, a.response_time_ms, a.used_hint,
+                  a.submitted_at,
                   q.source_question_id, q.question_json, e.evaluation_json,
                   e.evaluator_type, e.evaluator_version, e.confidence,
                   e.fallback_reason
@@ -168,6 +171,9 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
             },
             "mode": str(row["mode"] or ""),
             "response_time_ms": int(row["response_time_ms"] or 0),
+            "used_hint": (
+                None if row["used_hint"] is None else bool(row["used_hint"])
+            ),
             "submitted_at": str(row["submitted_at"] or ""),
             "storage": "attempt_facts",
         }
@@ -204,6 +210,7 @@ def get_attempt_fact(self, attempt_id: str) -> dict[str, Any] | None:
         },
         "mode": str(legacy.get("mode") or ""),
         "response_time_ms": int(legacy.get("response_time_ms") or 0),
+        "used_hint": None,
         "submitted_at": str(legacy.get("created_at") or ""),
         "storage": "legacy_qa_record",
     }

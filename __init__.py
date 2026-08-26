@@ -67,7 +67,11 @@ from .entry_practice_scope_entries import _PracticeScopeEntriesMixin
 from .entry_status_entries import _StatusEntriesMixin
 from .entry_supervision_entries import _SupervisionEntriesMixin
 from .entry_tutor_answer_entries import _TutorAnswerEntriesMixin
-from .entry_tutor_context_support import _TutorContextSupportMixin
+from .entry_tutor_context_support import (
+    _await_mastery_v2_projection_tasks,
+    _schedule_mastery_v2_projection,
+    _TutorContextSupportMixin,
+)
 from .entry_tutor_explain_entries import _TutorExplainEntriesMixin
 from .entry_tutor_question_entries import _TutorQuestionEntriesMixin
 from .entry_tutor_summary_entries import _TutorSummaryEntriesMixin
@@ -309,6 +313,7 @@ class StudyCompanionPlugin(
             self._store,
             retention_target=self._cfg.fsrs_retention_target,
             logger=self.logger,
+            mastery_config=self._cfg.mastery,
         )
         self._memory_deck_store = MemoryDeckStore(
             self._store,
@@ -364,6 +369,7 @@ class StudyCompanionPlugin(
                 self._store,
                 retention_target=self._cfg.fsrs_retention_target,
                 logger=self.logger,
+                mastery_config=self._cfg.mastery,
             )
             self._memory_deck_store = MemoryDeckStore(
                 self._store,
@@ -372,6 +378,7 @@ class StudyCompanionPlugin(
             self._knowledge_tracker.set_memory_deck_summary_provider(
                 self._memory_deck_store.status_summary
             )
+            _schedule_mastery_v2_projection(self)
             self._habit_store = StudyHabitStore(self._store)
             self._checkin_manager = CheckinManager(
                 self._habit_store,
@@ -471,6 +478,7 @@ class StudyCompanionPlugin(
         await self._cancel_command_worker()
         await self._cancel_review_due_task()
         await self._cancel_pomodoro_watcher()
+        await _await_mastery_v2_projection_tasks(self)
         event_bus = self._event_bus
         agent = self._agent
         local_model_manager = self._local_model_manager
@@ -566,6 +574,7 @@ class StudyCompanionPlugin(
         if self._agent is not None:
             await self._agent.shutdown()
         await self._shutdown_local_model_manager()
+        await _await_mastery_v2_projection_tasks(self)
         ocr_pipeline = self._ocr_pipeline
         self._ocr_pipeline = None
         if ocr_pipeline is not None:
@@ -1147,7 +1156,9 @@ class StudyCompanionPlugin(
             "review_queue": self._knowledge_tracker.get_review_queue(limit=8),
             "memory_deck": self._memory_deck_store.status_summary(limit=8),
             "weak_topics": self._knowledge_tracker.get_weak_topics(limit=8),
-            "mastery_overview": self._store.list_mastery_overview(limit=8),
+            "mastery_overview": self._knowledge_tracker.list_mastery_overview(
+                limit=8
+            ),
         }
         return build_status_payload(
             config=self._cfg,

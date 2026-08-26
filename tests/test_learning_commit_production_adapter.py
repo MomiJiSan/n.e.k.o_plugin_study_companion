@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -153,3 +154,109 @@ def test_record_answer_knowledge_delegates_to_existing_tracker_unchanged(
         "mastery_after": 0.5,
         "mastery_delta": 0.0,
     }
+
+
+def test_shadow_projection_is_scheduled_only_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    support = _load_context_support(monkeypatch)
+    projected: list[int] = []
+
+    class Tracker:
+        store = SimpleNamespace(get_topic=lambda _topic_id: {"id": "topic-a"})
+        mastery_v2_shadow_enabled = True
+
+        def get_mastery(self, _topic_id: str) -> float:
+            return 0.5
+
+        def on_answer(self, **_kwargs: Any) -> dict[str, Any]:
+            return {"topic_id": "topic-a", "knowledge_tracking_status": "updated"}
+
+        def project_mastery_v2_pending(self, *, limit: int) -> dict[str, Any]:
+            projected.append(limit)
+            return {"completed": 1, "failed": 0}
+
+    class Harness(support._TutorContextSupportMixin):
+        _knowledge_tracker = Tracker()
+        _state = SimpleNamespace(active_mode="companion", run_id="state-run")
+        ctx = SimpleNamespace(run_id="ctx-run")
+        _event_bus = None
+        logger = _Logger()
+
+        def _invalidate_knowledge_guidance_cache(self) -> None:
+            return None
+
+    async def scenario() -> None:
+        harness = Harness()
+        await harness._record_answer_knowledge(
+            _Reply(
+                input_text="4",
+                payload={"verdict": "correct", "score": 100},
+                created_at="now",
+            ),
+            _Reply(payload={"topic": "topic-a"}),
+            extra_context={
+                "question_payload": {
+                    "question_id": "question-1",
+                    "question": "What is 2 + 2?",
+                    "answer": "4",
+                    "difficulty": 2,
+                },
+                "answer": "4",
+                "attempt_id": "attempt-1",
+            },
+        )
+        tasks = list(getattr(harness, "_mastery_v2_projection_tasks", ()))
+        assert tasks
+        await asyncio.gather(*tasks)
+
+    asyncio.run(scenario())
+
+    assert projected == [100]
+
+
+def test_shadow_projection_reschedules_when_marked_dirty_while_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    support = _load_context_support(monkeypatch)
+    started = threading.Event()
+    release = threading.Event()
+    second_run = threading.Event()
+    release_second = threading.Event()
+
+    class Tracker:
+        mastery_v2_shadow_enabled = True
+        calls = 0
+
+        def project_mastery_v2_pending(self, *, limit: int) -> dict[str, Any]:
+            assert limit == 100
+            self.calls += 1
+            if self.calls == 1:
+                started.set()
+                assert release.wait(2)
+            else:
+                second_run.set()
+                assert release_second.wait(2)
+            return {"completed": 1, "failed": 0, "has_more": False}
+
+    class Harness:
+        _knowledge_tracker = Tracker()
+        logger = _Logger()
+
+    async def scenario() -> None:
+        harness = Harness()
+        support._schedule_mastery_v2_projection(harness)
+        assert await asyncio.to_thread(started.wait, 1)
+        support._schedule_mastery_v2_projection(harness)
+        release.set()
+        assert await asyncio.to_thread(second_run.wait, 2)
+        waiter = asyncio.create_task(
+            support._await_mastery_v2_projection_tasks(harness)
+        )
+        await asyncio.sleep(0)
+        assert not waiter.done()
+        release_second.set()
+        await waiter
+        assert harness._knowledge_tracker.calls == 2
+
+    asyncio.run(scenario())

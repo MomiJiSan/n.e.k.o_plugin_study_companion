@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .adaptive_learning.learner_state import tracker_list_mastery
 from .entry_common import (
     Ok,
     PublicGraphContributionBuilder,
@@ -90,7 +91,10 @@ class _KnowledgeEntriesMixin:
             }
             mastery, weak_topics, wrong_questions = await asyncio.gather(
                 asyncio.to_thread(
-                    self._store.list_latest_mastery_for_topics, page_topic_ids
+                    tracker_list_mastery,
+                    self._knowledge_tracker,
+                    page_topic_ids,
+                    store=self._store,
                 ),
                 asyncio.to_thread(
                     self._knowledge_tracker.get_weak_topics,
@@ -374,7 +378,10 @@ class _KnowledgeEntriesMixin:
             catalog_topics, mastery, weak_topics, wrong_questions = await asyncio.gather(
                 asyncio.to_thread(self._store.list_topics, None),
                 asyncio.to_thread(
-                    self._store.list_latest_mastery_for_topics, scope_topic_ids
+                    tracker_list_mastery,
+                    self._knowledge_tracker,
+                    scope_topic_ids,
+                    store=self._store,
                 ),
                 asyncio.to_thread(
                     self._knowledge_tracker.get_weak_topics,

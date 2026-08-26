@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from .adaptive_learning.learner_state import LearnerStateReader
 from .models import STUDY_EXPORT_FORMATS, STUDY_EXPORT_STYLES, DocExportConfig
 from .store_notebook import NotebookStore
 
@@ -63,9 +64,11 @@ class DocExporter:
         *,
         config: DocExportConfig | None = None,
         styles_dir: Path | None = None,
+        learner_state: LearnerStateReader | None = None,
     ) -> None:
         self._validate_store(store)
         self._store = store
+        self._learner_state = learner_state or LearnerStateReader(store)
         self._config = config or DocExportConfig()
         self._styles_dir = (
             styles_dir or Path(__file__).resolve().parent / "data" / "export_styles"
@@ -157,7 +160,7 @@ class DocExporter:
         topics = self._resolve_topics(
             topics_limit=topics_limit, topic_ids=requested_topic_ids
         )
-        mastery = self._store.list_mastery_overview(limit=topics_limit)
+        mastery = self._learner_state.list_overview(limit=topics_limit)
         wrong_questions = self._store.list_wrong_questions(limit=limit)
 
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

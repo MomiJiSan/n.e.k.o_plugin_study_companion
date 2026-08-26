@@ -69,6 +69,21 @@ from .store_knowledge_edges import (
     rebuild_knowledge_edge_projection,
 )
 from .store_maintenance import json_loads, purge_all, transaction
+from .store_mastery_v2 import (
+    claim_mastery_projections,
+    complete_mastery_projection,
+    count_active_wrong_questions,
+    enqueue_mastery_projection,
+    get_latest_mastery_v2,
+    get_mastery_snapshot_v2,
+    get_mastery_v2_projection_input,
+    list_latest_mastery_v2_for_topics,
+    list_mastery_projection_queue,
+    list_mastery_v2_attempt_ids,
+    list_mastery_v2_evidence,
+    mark_mastery_projection_failed,
+    upsert_mastery_snapshot_v2,
+)
 from .store_qa import (
     add_qa_record,
     add_wrong_question,
@@ -770,6 +785,8 @@ class StudyStore:
         topic_candidate_data: dict[str, Any] | None = None,
         attempt_id: str = "",
         source_question_id: str | None = None,
+        used_hint: bool | None = None,
+        enqueue_mastery_v2: bool = False,
         history_limit: int = _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
     ) -> dict[str, Any]:
         session_key = str(session_id or "default")
@@ -830,7 +847,7 @@ class StudyStore:
                 step = "session"
                 self._batch_write_session(conn, session_key, mode)
                 step = "attempt_facts"
-                write_attempt_facts(
+                attempt_facts_written = write_attempt_facts(
                     self,
                     conn,
                     session_id=session_key,
@@ -841,8 +858,16 @@ class StudyStore:
                     eval_result=eval_result,
                     mode=mode,
                     response_time_ms=response_time_ms,
+                    used_hint=used_hint,
                     attempt_id=attempt_key,
                 )
+                if enqueue_mastery_v2 and attempt_facts_written:
+                    step = "mastery_v2_enqueue"
+                    enqueue_mastery_projection(
+                        self,
+                        conn,
+                        attempt_id=attempt_key,
+                    )
                 step = "qa_record"
                 self._batch_write_qa_record(
                     conn,
@@ -1635,6 +1660,19 @@ StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]
 StudyStore._trim_append_only_rows = _trim_append_only_rows  # type: ignore[method-assign]
 StudyStore._load_seed_if_empty = _load_seed_if_empty  # type: ignore[method-assign]
 StudyStore.get_attempt_fact = get_attempt_fact  # type: ignore[method-assign]
+StudyStore.enqueue_mastery_projection = enqueue_mastery_projection  # type: ignore[method-assign]
+StudyStore.list_mastery_projection_queue = list_mastery_projection_queue  # type: ignore[method-assign]
+StudyStore.claim_mastery_projections = claim_mastery_projections  # type: ignore[method-assign]
+StudyStore.mark_mastery_projection_failed = mark_mastery_projection_failed  # type: ignore[method-assign]
+StudyStore.upsert_mastery_snapshot_v2 = upsert_mastery_snapshot_v2  # type: ignore[method-assign]
+StudyStore.complete_mastery_projection = complete_mastery_projection  # type: ignore[method-assign]
+StudyStore.get_mastery_snapshot_v2 = get_mastery_snapshot_v2  # type: ignore[method-assign]
+StudyStore.get_latest_mastery_v2 = get_latest_mastery_v2  # type: ignore[method-assign]
+StudyStore.list_latest_mastery_v2_for_topics = list_latest_mastery_v2_for_topics  # type: ignore[method-assign]
+StudyStore.count_active_wrong_questions = count_active_wrong_questions  # type: ignore[method-assign]
+StudyStore.list_mastery_v2_attempt_ids = list_mastery_v2_attempt_ids  # type: ignore[method-assign]
+StudyStore.list_mastery_v2_evidence = list_mastery_v2_evidence  # type: ignore[method-assign]
+StudyStore.get_mastery_v2_projection_input = get_mastery_v2_projection_input  # type: ignore[method-assign]
 StudyStore.load_knowledge_seed = load_knowledge_seed  # type: ignore[method-assign]
 StudyStore.get_knowledge_edge_revision = get_knowledge_edge_revision  # type: ignore[method-assign]
 StudyStore.list_knowledge_edges = list_knowledge_edges  # type: ignore[method-assign]

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .adaptive_learning.learner_state import LearnerStateReader
+from .adaptive_learning.mastery_projection import MasteryV2Projector
 from .fsrs_bridge import (
     REVIEW_IS_DUE_AFTER_KEY,
     REVIEW_WAS_DUE_BEFORE_KEY,
@@ -34,6 +36,12 @@ _LOGGER = logging.getLogger(__name__)
 # same fallback at runtime so an older imported seed cannot silently turn a
 # missing threshold into an always-ready prerequisite.
 DEFAULT_PREREQUISITE_REQUIRED_MASTERY = 0.55
+
+
+def _mastery_config_value(config: Any, name: str, default: Any) -> Any:
+    if isinstance(config, dict):
+        return config.get(name, default)
+    return getattr(config, name, default) if config is not None else default
 
 
 class _BatchAnswerWriteFailed(RuntimeError):
@@ -253,8 +261,14 @@ class MasteryTracker:
 class KnowledgeGraph:
     _TOPIC_INDEX_LIMIT = 1000
 
-    def __init__(self, store: Any) -> None:
+    def __init__(
+        self,
+        store: Any,
+        *,
+        learner_state: LearnerStateReader | None = None,
+    ) -> None:
         self._store = store
+        self._learner_state = learner_state or LearnerStateReader(store)
         self._quality = KnowledgeQualityStore(store)
         self._topic_id_index: set[str] = set()
         self._topic_name_index: dict[str, str] = {}
@@ -347,12 +361,7 @@ class KnowledgeGraph:
         """Read the latest mastery only for the topic IDs this decision needs."""
         if not topic_ids:
             return {}
-        list_for_topics = getattr(self._store, "list_latest_mastery_for_topics", None)
-        if callable(list_for_topics):
-            rows = list_for_topics(topic_ids)
-        else:
-            get_latest = getattr(self._store, "get_latest_mastery", None)
-            rows = [get_latest(topic_id) for topic_id in topic_ids] if callable(get_latest) else []
+        rows = self._learner_state.list_mastery(tuple(topic_ids))
         return {
             str(item.get("topic_id") or ""): float(item.get("mastery") or 0.0)
             for item in rows
@@ -507,11 +516,40 @@ class WrongQuestionStore:
 
 class KnowledgeTracker:
     def __init__(
-        self, store: Any, *, retention_target: float = 0.90, logger: Any | None = None
+        self,
+        store: Any,
+        *,
+        retention_target: float = 0.90,
+        logger: Any | None = None,
+        mastery_config: Any | None = None,
     ) -> None:
         self.store = store
         self.mastery = MasteryTracker()
-        self.graph = KnowledgeGraph(store)
+        shadow_enabled = _mastery_config_value(
+            mastery_config, "v2_shadow_enabled", False
+        ) is True
+        requested_read_model = str(
+            _mastery_config_value(mastery_config, "read_model", "v1") or "v1"
+        ).strip().lower()
+        effective_read_model = (
+            "v2" if shadow_enabled and requested_read_model == "v2" else "v1"
+        )
+        model_version = str(
+            _mastery_config_value(
+                mastery_config,
+                "model_version",
+                "mastery-v2-shadow-1",
+            )
+            or "mastery-v2-shadow-1"
+        ).strip()
+        self._mastery_v2_shadow_enabled = shadow_enabled
+        self.learner_state = LearnerStateReader(
+            store,
+            read_model=effective_read_model,
+            model_version=model_version,
+        )
+        self._mastery_v2_projector = MasteryV2Projector(store)
+        self.graph = KnowledgeGraph(store, learner_state=self.learner_state)
         self.quality = KnowledgeQualityStore(store)
         self.wrong_store = WrongQuestionStore(store)
         self.fsrs = FSRSBridge(retention_target=retention_target)
@@ -525,9 +563,73 @@ class KnowledgeTracker:
         self._memory_deck_summary_provider = provider
 
     def get_mastery(self, topic_id: str) -> float:
-        resolved = self._resolve_topic_id(topic_id)
-        latest = self.store.get_latest_mastery(resolved) if resolved else None
+        latest = self.get_mastery_snapshot(topic_id)
         return float((latest or {}).get("mastery") or 0.0)
+
+    def get_mastery_snapshot(self, topic_id: str) -> dict[str, Any] | None:
+        resolved = self._resolve_topic_id(topic_id)
+        return self.learner_state.get_mastery(resolved) if resolved else None
+
+    def list_mastery(
+        self,
+        topic_ids: list[str] | set[str] | tuple[str, ...],
+    ) -> list[dict[str, Any]]:
+        return self.learner_state.list_mastery(tuple(topic_ids))
+
+    def list_mastery_overview(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self.learner_state.list_overview(limit)
+
+    @property
+    def mastery_v2_shadow_enabled(self) -> bool:
+        return self._mastery_v2_shadow_enabled
+
+    def project_mastery_v2_pending(self, *, limit: int = 100) -> dict[str, Any]:
+        if not self._mastery_v2_shadow_enabled:
+            return {
+                "enabled": False,
+                "claimed": 0,
+                "completed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "failures": [],
+            }
+        batch_size = max(1, int(limit))
+        totals: dict[str, Any] = {
+            "enabled": True,
+            "claimed": 0,
+            "completed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "failures": [],
+            "batches": 0,
+            "has_more": False,
+        }
+        for _ in range(100):
+            result = self._mastery_v2_projector.process_pending(
+                limit=batch_size
+            ).to_dict()
+            totals["batches"] += 1
+            for key in ("claimed", "completed", "failed", "skipped"):
+                totals[key] += int(result.get(key) or 0)
+            totals["failures"].extend(result.get("failures") or [])
+            if int(result.get("claimed") or 0) < batch_size:
+                break
+        else:
+            totals["has_more"] = True
+        return totals
+
+    def rebuild_mastery_v2(
+        self, topic_ids: list[str] | set[str] | tuple[str, ...] | None = None
+    ) -> dict[str, Any]:
+        result = (
+            self._mastery_v2_projector.rebuild_topics(topic_ids)
+            if topic_ids is not None
+            else self._mastery_v2_projector.rebuild_all()
+        )
+        return result.to_dict()
+
+    def mastery_v2_difference_report(self) -> dict[str, Any]:
+        return self._mastery_v2_projector.difference_report()
 
     def on_answer(
         self,
@@ -765,6 +867,8 @@ class KnowledgeTracker:
                 topic_candidate_data=topic_candidate_data,
                 attempt_id=attempt_id,
                 source_question_id=source_question_id or None,
+                used_hint=None,
+                enqueue_mastery_v2=self._mastery_v2_shadow_enabled,
             )
         except Exception as exc:
             raise _BatchAnswerWriteFailed(exc) from exc
@@ -1089,7 +1193,7 @@ class KnowledgeTracker:
             topics_by_id=candidate_topics_by_id,
         )
         topic = self.store.get_topic(resolved) if resolved else None
-        latest = self.store.get_latest_mastery(resolved) if resolved else None
+        latest = self.get_mastery_snapshot(resolved) if resolved else None
         mastery_value = float((latest or {}).get("mastery") or 0.0)
         if mastery_value < 0.35:
             difficulty = 2
@@ -1160,7 +1264,7 @@ class KnowledgeTracker:
 
     def get_session_summary(self) -> dict[str, Any]:
         return {
-            "mastery_overview": self.store.list_mastery_overview(limit=10),
+            "mastery_overview": self.list_mastery_overview(limit=10),
             "weak_topics": self.get_weak_topics(limit=8),
             "review_queue": self.get_review_queue(limit=8),
             "memory_deck": self.get_memory_deck_status(limit=8),
@@ -1348,9 +1452,9 @@ class KnowledgeTracker:
         topic_ids: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> list[dict[str, Any]]:
         overview = (
-            self.store.list_latest_mastery_for_topics(topic_ids)
+            self.list_mastery(topic_ids)
             if topic_ids is not None
-            else self.store.list_mastery_overview(limit=1000)
+            else self.list_mastery_overview(limit=1000)
         )
         weak = [
             item
@@ -1367,7 +1471,7 @@ class KnowledgeTracker:
         return weak[: max(1, int(limit))]
 
     def count_weak_topics(self) -> int:
-        overview = self.store.list_mastery_overview(limit=5000)
+        overview = self.list_mastery_overview(limit=5000)
         return sum(
             1
             for item in overview
@@ -1376,12 +1480,12 @@ class KnowledgeTracker:
         )
 
     def get_status_summary(self, *, limit: int = 8) -> dict[str, Any]:
-        overview = self.store.list_mastery_overview(limit=limit)
+        overview = self.list_mastery_overview(limit=limit)
         memory_deck = self.get_memory_deck_status(limit=limit)
         return {
             "topic_count": self.store.count_topics(),
-            "tracked_topic_count": self.store.count_tracked_mastery_topics(),
-            "average_mastery": round(float(self.store.average_latest_mastery()), 4),
+            "tracked_topic_count": self.learner_state.count_tracked_topics(),
+            "average_mastery": round(self.learner_state.average_mastery(), 4),
             "weak_topic_count": self.count_weak_topics(),
             "due_review_count": self.count_due_reviews(),
             "memory_card_count": int(
