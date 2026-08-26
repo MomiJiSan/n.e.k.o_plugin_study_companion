@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from adaptive_learning.graph_read_model import MapCursorError, query_map_page
 
 

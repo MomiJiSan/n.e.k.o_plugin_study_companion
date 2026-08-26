@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
 from adaptive_learning import (
     EvaluatedAttempt,
     EvaluationResult,
