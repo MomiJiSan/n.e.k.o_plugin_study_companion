@@ -6,6 +6,7 @@ from typing import Any
 
 from plugin.sdk.plugin import Err, Ok, SdkError
 
+from .adaptive_learning.learner_state import tracker_list_mastery_overview
 from .constants import MODE_COMPANION, MODE_INTERACTIVE, MODE_TEACHING
 from .entry_common import _plugin_lock
 
@@ -436,7 +437,10 @@ class _NekoCommandsMixin:
                 )
         else:
             overview = await asyncio.to_thread(
-                self._store.list_mastery_overview, limit=10
+                tracker_list_mastery_overview,
+                self._knowledge_tracker,
+                limit=10,
+                store=self._store,
             )
             for entry in overview or []:
                 progress_items.append(

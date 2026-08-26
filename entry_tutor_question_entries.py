@@ -4,6 +4,7 @@ import re
 import uuid
 from functools import wraps
 
+from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import build_question_plan
 from .adaptive_learning.question_factory import QuestionFactory
 from .entry_common import (
@@ -518,9 +519,7 @@ class _TutorQuestionEntriesMixin:
                 )
                 if str(topic.get("id") or "") in eligible
             ]
-        mastery_overview = self._knowledge_tracker.store.list_latest_mastery_for_topics(
-            eligible
-        )
+        mastery_overview = tracker_list_mastery(self._knowledge_tracker, eligible)
         mastery_by_topic = {
             str(item.get("topic_id") or ""): dict(item)
             for item in mastery_overview

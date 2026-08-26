@@ -128,7 +128,12 @@ class _TutorAnswerEntriesMixin:
         self, topic_id: str
     ) -> tuple[dict | None, bool]:
         store = self._knowledge_tracker.store
-        snapshot = store.get_latest_mastery(topic_id)
+        get_snapshot = getattr(self._knowledge_tracker, "get_mastery_snapshot", None)
+        snapshot = (
+            get_snapshot(topic_id)
+            if callable(get_snapshot)
+            else store.get_latest_mastery(topic_id)
+        )
         active_wrong_questions = store.list_wrong_questions(
             limit=1,
             topic_id=topic_id,

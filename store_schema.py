@@ -18,6 +18,7 @@ _COLUMN_DEFINITION_ALLOWLIST = {
     "TEXT NOT NULL DEFAULT 'LLM_RUBRIC'",
     "TEXT NOT NULL DEFAULT 'LEGACY-V1'",
     "INTEGER NOT NULL DEFAULT 0",
+    "INTEGER CHECK(USED_HINT IS NULL OR USED_HINT IN (0, 1))",
     "REAL",
 }
 
@@ -369,6 +370,7 @@ def _init_db(self) -> None:
             user_answer TEXT NOT NULL,
             mode TEXT NOT NULL,
             response_time_ms INTEGER,
+            used_hint INTEGER CHECK(used_hint IS NULL OR used_hint IN (0, 1)),
             submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
@@ -383,6 +385,39 @@ def _init_db(self) -> None:
             confidence REAL,
             fallback_reason TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mastery_snapshots_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            mastery REAL NOT NULL,
+            accuracy REAL NOT NULL,
+            recency REAL NOT NULL,
+            consistency REAL NOT NULL,
+            confidence REAL NOT NULL,
+            evidence_count INTEGER NOT NULL DEFAULT 0,
+            unresolved_wrong_count INTEGER NOT NULL DEFAULT 0,
+            mastery_model_version TEXT NOT NULL,
+            source_attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+            computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(topic_id, mastery_model_version, source_attempt_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mastery_projection_queue (
+            attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'processing', 'done', 'failed')),
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            lease_token TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
     )
@@ -500,6 +535,18 @@ def _init_db(self) -> None:
     self._ensure_column(conn, "knowledge_seed_membership", "retired_at", "TEXT")
     self._ensure_column(conn, "candidate_knowledge_items", "dedupe_key", "TEXT")
     self._ensure_column(conn, "qa_records", "source_question_id", "TEXT")
+    self._ensure_column(
+        conn,
+        "attempts",
+        "used_hint",
+        "INTEGER CHECK(used_hint IS NULL OR used_hint IN (0, 1))",
+    )
+    self._ensure_column(
+        conn,
+        "mastery_projection_queue",
+        "lease_token",
+        "TEXT NOT NULL DEFAULT ''",
+    )
     # PR-8 adds evaluator provenance without replacing the evaluation JSON.
     # Defaults make records created before this migration read as the legacy
     # LLM rubric path while keeping the original JSON untouched.
@@ -558,6 +605,12 @@ def _init_db(self) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_attempts_topic_submitted ON attempts(topic_id, submitted_at DESC, attempt_id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mastery_v2_topic_model_computed ON mastery_snapshots_v2(topic_id, mastery_model_version, computed_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mastery_projection_status_updated ON mastery_projection_queue(status, updated_at, attempt_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_captured_questions_topic_used ON captured_questions(topic_id, last_used_at DESC, id DESC)"

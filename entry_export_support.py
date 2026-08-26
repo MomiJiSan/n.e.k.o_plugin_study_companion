@@ -86,7 +86,13 @@ class _ExportSupportMixin:
             normalize_format(fmt)
             normalized_topic_ids = topic_ids if isinstance(topic_ids, list) else []
             normalized_note_ids = note_ids if isinstance(note_ids, list) else []
-            exporter = DocExporter(self._store, config=self._cfg.doc_export)
+            exporter = DocExporter(
+                self._store,
+                config=self._cfg.doc_export,
+                learner_state=getattr(
+                    self._knowledge_tracker, "learner_state", None
+                ),
+            )
             exported = await asyncio.to_thread(
                 exporter.export,
                 fmt=fmt,
