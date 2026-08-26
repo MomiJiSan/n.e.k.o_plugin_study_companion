@@ -65,6 +65,7 @@ from .store_knowledge_contribution import (
 from .store_knowledge_edges import (
     get_knowledge_edge_revision,
     list_knowledge_edges,
+    mark_knowledge_edge_projection_dirty,
     query_knowledge_map_page,
     rebuild_knowledge_edge_projection,
 )
@@ -1377,6 +1378,7 @@ class StudyStore:
                 str(topic.get("source") or "runtime"),
             ),
         )
+        self.mark_knowledge_edge_projection_dirty(conn=conn)
 
     def _batch_upsert_candidate_with_evidence(
         self, conn: sqlite3.Connection, candidate: dict[str, Any]
@@ -1675,6 +1677,7 @@ StudyStore.list_mastery_v2_evidence = list_mastery_v2_evidence  # type: ignore[m
 StudyStore.get_mastery_v2_projection_input = get_mastery_v2_projection_input  # type: ignore[method-assign]
 StudyStore.load_knowledge_seed = load_knowledge_seed  # type: ignore[method-assign]
 StudyStore.get_knowledge_edge_revision = get_knowledge_edge_revision  # type: ignore[method-assign]
+StudyStore.mark_knowledge_edge_projection_dirty = mark_knowledge_edge_projection_dirty  # type: ignore[method-assign]
 StudyStore.list_knowledge_edges = list_knowledge_edges  # type: ignore[method-assign]
 StudyStore.query_knowledge_map_page = query_knowledge_map_page  # type: ignore[method-assign]
 StudyStore.rebuild_knowledge_edge_projection = rebuild_knowledge_edge_projection  # type: ignore[method-assign]

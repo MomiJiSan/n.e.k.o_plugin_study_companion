@@ -15,6 +15,9 @@ def _load_tracker(monkeypatch: pytest.MonkeyPatch):
     package = ModuleType(package_name)
     package.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, package_name, package)
+    mode_manager = ModuleType(f"{package_name}.mode_manager")
+    mode_manager.normalize_mode = lambda value: str(value or "companion")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, mode_manager.__name__, mode_manager)
     return importlib.import_module(f"{package_name}.knowledge_tracker")
 
 
@@ -22,10 +25,7 @@ class _Store:
     def __init__(self) -> None:
         self.list_topics_limits: list[int | None] = []
         self.mastery_requests: list[set[str]] = []
-        self.topics = [
-            {"id": f"topic-{index}", "prerequisites": []}
-            for index in range(1001)
-        ] + [
+        self.topics = [{"id": f"topic-{index}", "prerequisites": []} for index in range(1001)] + [
             {
                 "id": "gated-topic",
                 "prerequisites": [{"id": "old-prerequisite"}],
@@ -75,3 +75,37 @@ def test_missing_threshold_uses_compatibility_gate(monkeypatch: pytest.MonkeyPat
     graph = tracker_module.KnowledgeGraph(store)
 
     assert graph.find_blocker("gated-topic") == ["old-prerequisite"]
+
+
+def test_readiness_in_scope_keeps_diagnostics_inside_the_requested_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracker_module = _load_tracker(monkeypatch)
+    store = _Store()
+    store.topics.extend(
+        [
+            {"id": "inside-ready", "name": "Inside ready", "prerequisites": []},
+            {
+                "id": "inside-blocked",
+                "name": "Inside blocked",
+                "prerequisites": [{"id": "outside-prerequisite", "required_mastery": 0.8}],
+            },
+            {"id": "outside-prerequisite", "name": "Outside prerequisite"},
+        ]
+    )
+    store.mastery["outside-prerequisite"] = 0.2
+    graph = tracker_module.KnowledgeGraph(store)
+
+    ready, blockers = graph.readiness_in_scope({"inside-ready", "inside-blocked"})
+
+    assert ready == {"inside-ready"}
+    assert blockers == {
+        "inside-blocked": [
+            {
+                "id": "outside-prerequisite",
+                "name": "Outside prerequisite",
+                "required_mastery": 0.8,
+                "mastery": 0.2,
+            }
+        ]
+    }

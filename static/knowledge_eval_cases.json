@@ -247,7 +247,15 @@
         "college_physics_kinematics_calculus",
         "college_derivative_calculation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_experiment_acceleration",
+          "to": "college_derivative_calculation",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "边际成本为什么用导数？",
@@ -255,7 +263,15 @@
         "college_derivative_definition",
         "college_micro_cost_short_run"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_cost_short_run",
+          "to": "college_derivative_definition",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "矩阵和图算法有什么关系？",
@@ -264,7 +280,15 @@
         "college_matrix_operations",
         "college_ds_graph_representation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_rank",
+          "to": "college_ds_graph_representation",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "函数图像怎么看物理运动？",
@@ -272,7 +296,15 @@
         "function_graph_reading",
         "physics_senior_motion_graph_synthesis"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "function_graph_reading",
+          "to": "physics_senior_motion_graph_synthesis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "需求供给曲线和函数图像有什么关系？",
@@ -280,7 +312,15 @@
         "college_micro_demand_supply",
         "linear_function_graph"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_demand_supply",
+          "to": "linear_function_graph",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "弹性分析和斜率有什么关系？",
@@ -288,7 +328,15 @@
         "college_micro_elasticity",
         "linear_function_kb"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_elasticity",
+          "to": "linear_function_kb",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "极值怎么用来分析利润最大化？",
@@ -297,7 +345,15 @@
         "college_extreme_value_points",
         "college_absolute_extrema"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_firm_profit",
+          "to": "college_absolute_extrema",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "积分和物理做功有什么关系？",
@@ -305,7 +361,15 @@
         "physics_junior_work_power",
         "college_integral_physics_application"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_junior_work_power",
+          "to": "college_integral_physics_application",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "三角函数和简谐运动有什么关系？",
@@ -315,7 +379,15 @@
         "college_physics_simple_harmonic_oscillation",
         "senior_trig_graph"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_simple_harmonic",
+          "to": "senior_trig_graph",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "向量和力的分解有什么关系？",
@@ -323,7 +395,15 @@
         "physics_senior_force_decomposition",
         "senior_plane_vector_concept"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_force_decomposition",
+          "to": "senior_plane_vector_concept",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "递归为什么和证明思路有关？",
@@ -332,7 +412,15 @@
         "college_c_recursion_basic",
         "proof_writing"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_c_recursion_basic",
+          "to": "proof_writing",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "复杂度和函数增长有什么关系？",
@@ -342,7 +430,15 @@
         "function_thinking",
         "senior_exponential_function"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_ds_algorithm_complexity",
+          "to": "function_thinking",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "图论和图遍历算法怎么连起来？",
@@ -351,7 +447,15 @@
         "college_graph_theory_intro",
         "college_ds_graph_traversal"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_ds_algorithm_complexity",
+          "to": "college_graph_theory_intro",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "二维数组和矩阵运算有什么关系？",
@@ -359,7 +463,15 @@
         "college_matrix_operations",
         "college_c_2d_array_matrix"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_c_2d_array_matrix",
+          "to": "college_matrix_operations",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "动态规划和矩阵思维有什么关系？",
@@ -367,7 +479,15 @@
         "college_ds_greedy_dp_intro",
         "college_matrix_operations"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_ds_greedy_dp_intro",
+          "to": "college_matrix_operations",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "边际收益和导数有什么关系？",
@@ -375,7 +495,15 @@
         "college_derivative_definition",
         "college_micro_firm_profit"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_derivative_definition",
+          "to": "college_micro_firm_profit",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "供需均衡为什么要看交点？",
@@ -383,7 +511,15 @@
         "linear_function_intersection",
         "college_micro_demand_supply"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "linear_function_intersection",
+          "to": "college_micro_demand_supply",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "比率变化和经济弹性怎么连接？",
@@ -391,7 +527,15 @@
         "college_micro_elasticity",
         "function_concept"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_elasticity",
+          "to": "function_concept",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "位移时间图像和一次函数有什么关系？",
@@ -399,7 +543,15 @@
         "linear_function_graph",
         "physics_senior_motion_graph_synthesis"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "linear_function_graph",
+          "to": "physics_senior_motion_graph_synthesis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "加速度为什么可以用导数理解？",
@@ -407,7 +559,15 @@
         "physics_senior_experiment_acceleration",
         "college_derivative_calculation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_experiment_acceleration",
+          "to": "college_derivative_calculation",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "变力做功为什么要用积分？",
@@ -415,7 +575,15 @@
         "college_integral_physics_application",
         "physics_senior_work_energy_path"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_integral_physics_application",
+          "to": "physics_senior_work_energy_path",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "斜面力分解和三角函数有什么关系？",
@@ -424,7 +592,15 @@
         "physics_senior_force_decomposition",
         "senior_trig_definitions"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "trig_area",
+          "to": "physics_senior_force_decomposition",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "矢量空间和物理矢量有什么关系？",
@@ -433,7 +609,15 @@
         "college_vector_space",
         "senior_vector_linear_operation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_physics_vector_calculus",
+          "to": "college_vector_space",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "功和动能定理为什么要用被积函数和数量积？",
@@ -442,7 +626,15 @@
         "college_physics_work_energy_theorem",
         "senior_vector_dot_product"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_integral_application_integrand",
+          "to": "college_physics_work_energy_theorem",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "简谐运动为什么可以用三角函数描述？",
@@ -452,7 +644,15 @@
         "senior_trig_graph",
         "trig_area"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_simple_harmonic",
+          "to": "senior_trig_graph",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "阻尼振动和指数函数增长衰减有什么关系？",
@@ -460,7 +660,15 @@
         "college_physics_damped_forced_oscillation",
         "senior_exponential_function"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_physics_damped_forced_oscillation",
+          "to": "senior_exponential_function",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "经济增长和指数函数有什么关系？",
@@ -468,7 +676,15 @@
         "college_econ_growth_productivity",
         "senior_exponential_function"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_econ_growth_productivity",
+          "to": "senior_exponential_function",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "经济数据图表为什么要懂期望方差和正态分布？",
@@ -477,7 +693,15 @@
         "college_expectation_variance",
         "college_normal_distribution"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_econ_data_graph",
+          "to": "college_expectation_variance",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "短期成本曲线为什么要用导数和单调极值？",
@@ -486,7 +710,15 @@
         "college_micro_cost_short_run",
         "college_monotonic_extrema"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_micro_cost_short_run",
+          "to": "college_derivative_calculation",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "利润最大化为什么既看二次函数最值又看导数？",
@@ -496,7 +728,15 @@
         "college_micro_firm_profit",
         "quadratic_max_min"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_derivative_calculation",
+          "to": "college_micro_firm_profit",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "图的存储结构和邻接矩阵怎么联系？",
@@ -505,7 +745,15 @@
         "college_ds_graph_representation",
         "college_matrix_operations"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_c_2d_array_matrix",
+          "to": "college_matrix_operations",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "递归程序和数列递推有什么关系？",
@@ -514,7 +762,15 @@
         "college_c_recursion_basic",
         "senior_sequence_recursion"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_ds_recursion_iteration",
+          "to": "senior_sequence_recursion",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "图论里的遍历和算法里的BFS DFS有什么关系？",
@@ -522,7 +778,15 @@
         "college_graph_traversal",
         "college_ds_graph_traversal"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_ds_graph_traversal",
+          "to": "college_graph_traversal",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "地图三要素和比例尺有什么关系？",
@@ -530,7 +794,15 @@
         "geo_junior_map_skills",
         "primary_ratio_scale"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "geo_junior_map_skills",
+          "to": "primary_ratio_scale",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "世界气候类型和函数图像信息读取有什么关系？",
@@ -538,7 +810,15 @@
         "geo_junior_climate_types",
         "function_graph_reading"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "geo_junior_climate_types",
+          "to": "function_graph_reading",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "农业工业区位和需求供给模型有什么关系？",
@@ -546,7 +826,15 @@
         "geo_junior_agriculture_industry",
         "college_micro_demand_supply"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "geo_junior_agriculture_industry",
+          "to": "college_micro_demand_supply",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "区域可持续发展和政策权衡分析有什么关系？",
@@ -554,7 +842,15 @@
         "geo_senior_regional_sustainability",
         "pol_senior_economy_market"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "geo_senior_regional_sustainability",
+          "to": "pol_senior_economy_market",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "秦统一与中央集权和全面依法治国有什么关系？",
@@ -562,7 +858,15 @@
         "history_junior_qin_unification",
         "pol_senior_rule_of_law"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "history_junior_qin_unification",
+          "to": "pol_senior_rule_of_law",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "工业革命和产业区位与区域发展有什么关系？",
@@ -570,7 +874,15 @@
         "history_junior_industrial_revolution",
         "geo_senior_industrial_location"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "history_junior_industrial_revolution",
+          "to": "geo_senior_industrial_location",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "史料实证方法和实用类文本信息筛选有什么关系？",
@@ -578,7 +890,15 @@
         "history_senior_material_analysis",
         "chinese_senior_practical_filter"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "history_senior_material_analysis",
+          "to": "chinese_senior_practical_filter",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "权利与义务和阅读题规范分点有什么关系？",
@@ -586,7 +906,15 @@
         "pol_junior_rights_obligations",
         "chinese_senior_text_answer_template"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "pol_junior_rights_obligations",
+          "to": "chinese_senior_text_answer_template",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "市场机制与宏观调控和财政政策有什么关系？",
@@ -594,7 +922,15 @@
         "pol_senior_economy_market",
         "college_macro_fiscal_policy"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "pol_senior_economy_market",
+          "to": "college_macro_fiscal_policy",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "唯物辩证法和议论文论证层次有什么关系？",
@@ -602,7 +938,15 @@
         "pol_senior_philosophy_dialectics",
         "chinese_senior_composition_argument_layer"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "pol_senior_philosophy_dialectics",
+          "to": "chinese_senior_composition_argument_layer",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "阅读细节定位题和实用类文本信息筛选有什么关系？",
@@ -610,7 +954,15 @@
         "english_senior_reading_detail_location",
         "chinese_senior_practical_filter"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "english_senior_reading_detail_location",
+          "to": "chinese_senior_practical_filter",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "作者态度与观点题和逻辑与思维方法有什么关系？",
@@ -618,7 +970,15 @@
         "english_senior_reading_author_attitude",
         "pol_senior_logical_thinking"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "english_senior_reading_author_attitude",
+          "to": "pol_senior_logical_thinking",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "概要写作和压缩语段与概括有什么关系？",
@@ -626,7 +986,15 @@
         "english_senior_summary_writing",
         "chinese_senior_language_compression"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "english_senior_summary_writing",
+          "to": "chinese_senior_language_compression",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "化学方程式配平和一元一次方程有什么关系？",
@@ -634,7 +1002,15 @@
         "chem_junior_chemical_equation",
         "linear_equation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "chem_junior_chemical_equation",
+          "to": "linear_equation",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "弱电解质电离与 pH 和对数函数有什么关系？",
@@ -642,7 +1018,15 @@
         "chem_senior_ph_ionization",
         "senior_logarithmic_function"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "chem_senior_ph_ionization",
+          "to": "senior_logarithmic_function",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "化学反应速率影响因素和函数单调性有什么关系？",
@@ -650,7 +1034,15 @@
         "chem_senior_rate_factors",
         "senior_function_monotonicity"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "chem_senior_rate_factors",
+          "to": "senior_function_monotonicity",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "酸碱中和滴定和一次函数交点有什么关系？",
@@ -658,7 +1050,15 @@
         "chem_senior_acid_base_titration",
         "linear_function_intersection"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "chem_senior_acid_base_titration",
+          "to": "linear_function_intersection",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "孟德尔遗传定律和二项分布有什么关系？",
@@ -666,7 +1066,15 @@
         "bio_senior_genetics_law",
         "senior_binomial_distribution"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "bio_senior_genetics_law",
+          "to": "senior_binomial_distribution",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "酶活性曲线分析和导数与极值最值有什么关系？",
@@ -674,7 +1082,15 @@
         "bio_senior_enzyme_curve",
         "senior_derivative_extrema"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "bio_senior_enzyme_curve",
+          "to": "senior_derivative_extrema",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "实验误差与结论评价和方差有什么关系？",
@@ -682,7 +1098,15 @@
         "bio_senior_experiment_error_analysis",
         "variance"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "bio_senior_experiment_error_analysis",
+          "to": "variance",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "电势图像和函数图像分析有什么关系？",
@@ -690,7 +1114,15 @@
         "physics_senior_electric_potential_graph",
         "college_function_graph_analysis"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_electric_potential_graph",
+          "to": "college_function_graph_analysis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "实验数据处理和方差有什么关系？",
@@ -698,7 +1130,15 @@
         "physics_senior_experiment_data",
         "variance"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_experiment_data",
+          "to": "variance",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "几何光学和相似三角形有什么关系？",
@@ -706,7 +1146,15 @@
         "college_physics_geometric_optics",
         "similar_triangles"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_physics_geometric_optics",
+          "to": "similar_triangles",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "有机同分异构和排列组合有什么关系？",
@@ -714,7 +1162,15 @@
         "chem_senior_organic_isomer",
         "college_combination"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "chem_senior_organic_isomer",
+          "to": "college_combination",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "PCR和电泳与指数增长有什么关系？",
@@ -722,7 +1178,15 @@
         "bio_senior_pcr_electrophoresis",
         "senior_exponential_function"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "bio_senior_pcr_electrophoresis",
+          "to": "senior_exponential_function",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "群落演替和地理可持续发展有什么关系？",
@@ -730,7 +1194,15 @@
         "bio_senior_community_succession",
         "geo_senior_regional_sustainability"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "bio_senior_community_succession",
+          "to": "geo_senior_regional_sustainability",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "逻辑思维和议论文论证有什么关系？",
@@ -738,7 +1210,15 @@
         "pol_senior_logical_thinking",
         "chinese_senior_composition_argument_layer"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "pol_senior_logical_thinking",
+          "to": "chinese_senior_composition_argument_layer",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "三角函数图像怎么解释简谐运动？",
@@ -748,7 +1228,15 @@
         "physics_senior_simple_harmonic",
         "special_angles"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "physics_senior_simple_harmonic",
+          "to": "senior_trig_graph",
+          "relations": ["prerequisite"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "波动干涉为什么要用和差角公式？",
@@ -758,7 +1246,15 @@
         "physics_senior_wave_interference",
         "senior_trig_graph"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "senior_double_angle",
+          "to": "physics_senior_wave_interference",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "角平分线和几何证明思路怎么连起来？",
@@ -785,7 +1281,15 @@
         "college_limit_concept",
         "college_ds_algorithm_complexity"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_important_limits",
+          "to": "college_ds_algorithm_complexity",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "定积分性质怎么用来解释物理中的功？",
@@ -794,7 +1298,15 @@
         "college_integral_physics_application",
         "college_physics_work_energy_theorem"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_definite_integral_properties",
+          "to": "college_physics_work_energy_theorem",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "泰勒公式为什么能做物理小量近似？",
@@ -803,7 +1315,15 @@
         "college_differential",
         "college_physics_simple_harmonic_oscillation"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "college_taylor_formula",
+          "to": "college_physics_simple_harmonic_oscillation",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "坐标系中的面积和运动图像位移有什么关系？",
@@ -811,7 +1331,15 @@
         "coordinate_area",
         "physics_senior_motion_graph_synthesis"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "coordinate_area",
+          "to": "physics_senior_motion_graph_synthesis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "含参方程怎么和物理建模连接？",
@@ -820,7 +1348,15 @@
         "physics_senior_motion_graph_synthesis",
         "mathematical_modeling"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "equation_parameter",
+          "to": "physics_senior_motion_graph_synthesis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "方差怎么支持实验误差与结论评价？",
@@ -829,7 +1365,15 @@
         "college_standard_deviation",
         "bio_senior_experiment_error_analysis"
       ],
-      "expect_cross_subject": true
+      "expect_cross_subject": true,
+      "expected_links": [
+        {
+          "from": "variance",
+          "to": "bio_senior_experiment_error_analysis",
+          "relations": ["application", "supports"]
+        }
+      ],
+      "require_model_context_cue": true
     },
     {
       "query": "ε-δ极限定义怎么证明？",

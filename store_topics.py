@@ -219,6 +219,9 @@ def load_knowledge_seed(self, path: Path | str | None = None, _visited: set[str]
                     ON CONFLICT(seed_key) DO UPDATE SET protocol = excluded.protocol, revision = excluded.revision, content_hash = excluded.content_hash, topic_count = excluded.topic_count, edge_count = excluded.edge_count, applied_at = datetime('now'), updated_at = datetime('now')""",
                     (seed_key, protocol, revision, content_hash, len(topics), edge_count),
                 )
+                # Retirement and replacement alter active catalog membership
+                # even when no individual topic payload changed.
+                self.mark_knowledge_edge_projection_dirty(conn=conn)
             if savepoint_started:
                 conn.execute("RELEASE SAVEPOINT knowledge_seed_load")
             else:
@@ -241,7 +244,8 @@ def _upsert_topic_no_commit(self, topic: dict[str, Any]) -> None:
     if not topic_id or not name:
         return
     with self._lock:
-        self._require_conn().execute(
+        conn = self._require_conn()
+        conn.execute(
             """
             INSERT INTO topics (
                 id, name, subject, chapter, stage, unit, depth, difficulty,
@@ -375,6 +379,7 @@ def _upsert_topic_no_commit(self, topic: dict[str, Any]) -> None:
                 str(topic.get("source") or "runtime"),
             ),
         )
+        self.mark_knowledge_edge_projection_dirty(conn=conn)
 
 
 def upsert_topic(self, topic: dict[str, Any], *, commit: bool = True) -> None:

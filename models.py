@@ -20,9 +20,7 @@ STUDY_EXPORT_STYLES = ("neko", "academic", "compact")
 _LOGGER = logging.getLogger(__name__)
 OCR_SNIPPET_MAX_CHARS = 200
 OCR_SESSION_TEXT_TTL_SECONDS = 30 * 60
-_SCREEN_CLASSIFICATION_PUBLIC_FIELDS = frozenset(
-    {"screen_type", "confidence", "reason", "signals", "at"}
-)
+_SCREEN_CLASSIFICATION_PUBLIC_FIELDS = frozenset({"screen_type", "confidence", "reason", "signals", "at"})
 PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
     {
         "answer",
@@ -67,11 +65,7 @@ def public_screen_classification_payload(value: object) -> dict[str, Any]:
 
     if not isinstance(value, dict):
         return {}
-    return {
-        key: json_copy(item)
-        for key, item in value.items()
-        if key in _SCREEN_CLASSIFICATION_PUBLIC_FIELDS
-    }
+    return {key: json_copy(item) for key, item in value.items() if key in _SCREEN_CLASSIFICATION_PUBLIC_FIELDS}
 
 
 def _parse_utc_iso(value: object) -> datetime | None:
@@ -79,9 +73,7 @@ def _parse_utc_iso(value: object) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
     except ValueError:
         return None
 
@@ -272,15 +264,9 @@ class SupervisionConfig:
 
     def __post_init__(self) -> None:
         self.enabled = bool(self.enabled)
-        self.remind_interval_minutes = _range_or_default(
-            self.remind_interval_minutes, 1, 60, 10
-        )
-        self.inactivity_timeout_minutes = _range_or_default(
-            self.inactivity_timeout_minutes, 1, 30, 5
-        )
-        self.idle_away_seconds = _range_or_default(
-            self.idle_away_seconds, 60, 3600, 900
-        )
+        self.remind_interval_minutes = _range_or_default(self.remind_interval_minutes, 1, 60, 10)
+        self.inactivity_timeout_minutes = _range_or_default(self.inactivity_timeout_minutes, 1, 30, 5)
+        self.idle_away_seconds = _range_or_default(self.idle_away_seconds, 60, 3600, 900)
         self.allow_disable_by_chat = bool(self.allow_disable_by_chat)
 
     def to_dict(self) -> dict[str, Any]:
@@ -331,12 +317,8 @@ class AwarenessConfig:
 
     def __post_init__(self) -> None:
         self.enabled = bool(self.enabled)
-        self.snapshot_interval_seconds = _clamp_int_or_default(
-            self.snapshot_interval_seconds, 1, 60, 5
-        )
-        self.context_window_minutes = _clamp_int_or_default(
-            self.context_window_minutes, 1, 60, 5
-        )
+        self.snapshot_interval_seconds = _clamp_int_or_default(self.snapshot_interval_seconds, 1, 60, 5)
+        self.context_window_minutes = _clamp_int_or_default(self.context_window_minutes, 1, 60, 5)
         classify_mode = str(self.classify_mode or "title_first").strip()
         if classify_mode not in {"title_first", "ocr_text", "both"}:
             _LOGGER.warning(
@@ -345,12 +327,8 @@ class AwarenessConfig:
             )
             classify_mode = "title_first"
         self.classify_mode = classify_mode
-        self.image_max_bytes = _clamp_int_or_default(
-            self.image_max_bytes, 10240, 512_000, 65_536
-        )
-        self.push_to_llm_interval_seconds = _clamp_int_or_default(
-            self.push_to_llm_interval_seconds, 30, 300, 300
-        )
+        self.image_max_bytes = _clamp_int_or_default(self.image_max_bytes, 10240, 512_000, 65_536)
+        self.push_to_llm_interval_seconds = _clamp_int_or_default(self.push_to_llm_interval_seconds, 30, 300, 300)
         push_mode = str(self.push_to_llm_mode or "read").strip()
         if push_mode not in {"read", "blind", "respond"}:
             _LOGGER.warning(
@@ -382,19 +360,13 @@ class AssessmentConfig:
     def __post_init__(self) -> None:
         # Do not treat strings such as ``"false"`` as truthy configuration.
         self.exact_short_answer_enabled = (
-            self.exact_short_answer_enabled
-            if isinstance(self.exact_short_answer_enabled, bool)
-            else False
+            self.exact_short_answer_enabled if isinstance(self.exact_short_answer_enabled, bool) else False
         )
         self.numeric_tolerance_enabled = (
-            self.numeric_tolerance_enabled
-            if isinstance(self.numeric_tolerance_enabled, bool)
-            else False
+            self.numeric_tolerance_enabled if isinstance(self.numeric_tolerance_enabled, bool) else False
         )
         self.math_expression_enabled = (
-            self.math_expression_enabled
-            if isinstance(self.math_expression_enabled, bool)
-            else False
+            self.math_expression_enabled if isinstance(self.math_expression_enabled, bool) else False
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -410,19 +382,11 @@ class MasteryConfig:
     model_version: str = "mastery-v2-shadow-1"
 
     def __post_init__(self) -> None:
-        self.v2_shadow_enabled = (
-            self.v2_shadow_enabled
-            if isinstance(self.v2_shadow_enabled, bool)
-            else False
-        )
+        self.v2_shadow_enabled = self.v2_shadow_enabled if isinstance(self.v2_shadow_enabled, bool) else False
         read_model = str(self.read_model or "v1").strip().lower()
         self.read_model = read_model if read_model in {"v1", "v2"} else "v1"
         model_version = str(self.model_version or "").strip()
-        self.model_version = (
-            model_version
-            if model_version == "mastery-v2-shadow-1"
-            else "mastery-v2-shadow-1"
-        )
+        self.model_version = model_version if model_version == "mastery-v2-shadow-1" else "mastery-v2-shadow-1"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -465,6 +429,9 @@ class StudyConfig:
     local_models_directory: str = ""
     fsrs_retention_target: float = 0.90
     fsrs_auto_optimize_interval_days: int = 30
+    # Applies only to automatic recommended/default targeted-question choices.
+    # Explicit user choices, retry, due-review, and weak-topic paths bypass it.
+    adaptive_practice_readiness_enabled: bool = True
     knowledge_contribution_opt_in: bool = False
     knowledge_contribution_min_sample_count: int = 3
     doc_export: DocExportConfig = field(default_factory=DocExportConfig)
@@ -485,41 +452,27 @@ class StudyConfig:
         persistence_mode = str(self.ocr_question_persistence_mode or "").strip().lower()
         if persistence_mode not in {"save_when_used", "auto_save_questions"}:
             _LOGGER.warning(
-                "StudyConfig: invalid ocr_question_persistence_mode=%r, "
-                "falling back to 'save_when_used'",
+                "StudyConfig: invalid ocr_question_persistence_mode=%r, falling back to 'save_when_used'",
                 persistence_mode,
             )
             persistence_mode = "save_when_used"
         self.ocr_question_persistence_mode = persistence_mode
-        self.ocr_install_timeout_seconds = self._clamp_float(
-            self.ocr_install_timeout_seconds, 1.0, 3600.0, 300.0
-        )
-        self.ocr_left_inset_ratio = self._clamp_float(
-            self.ocr_left_inset_ratio, 0.0, 1.0, 0.03
-        )
-        self.ocr_right_inset_ratio = self._clamp_float(
-            self.ocr_right_inset_ratio, 0.0, 1.0, 0.03
-        )
+        self.ocr_install_timeout_seconds = self._clamp_float(self.ocr_install_timeout_seconds, 1.0, 3600.0, 300.0)
+        self.ocr_left_inset_ratio = self._clamp_float(self.ocr_left_inset_ratio, 0.0, 1.0, 0.03)
+        self.ocr_right_inset_ratio = self._clamp_float(self.ocr_right_inset_ratio, 0.0, 1.0, 0.03)
         self.ocr_top_ratio = self._clamp_float(self.ocr_top_ratio, 0.0, 1.0, 0.0)
-        self.ocr_bottom_inset_ratio = self._clamp_float(
-            self.ocr_bottom_inset_ratio, 0.0, 1.0, 0.0
-        )
-        self.llm_call_timeout_seconds = self._clamp_float(
-            self.llm_call_timeout_seconds, 1.0, 3600.0, 30.0
-        )
+        self.ocr_bottom_inset_ratio = self._clamp_float(self.ocr_bottom_inset_ratio, 0.0, 1.0, 0.0)
+        self.llm_call_timeout_seconds = self._clamp_float(self.llm_call_timeout_seconds, 1.0, 3600.0, 30.0)
         self.llm_vision_enabled = bool(self.llm_vision_enabled)
-        self.llm_vision_max_image_px = max(
-            64, min(4096, self._coerce_int(self.llm_vision_max_image_px, 768))
-        )
+        self.llm_vision_max_image_px = max(64, min(4096, self._coerce_int(self.llm_vision_max_image_px, 768)))
         self.local_models_enabled = bool(self.local_models_enabled)
-        self.local_models_directory = self._normalize_local_models_directory(
-            self.local_models_directory
-        )
-        self.fsrs_retention_target = self._clamp_float(
-            self.fsrs_retention_target, 0.1, 0.99, 0.90
-        )
-        self.fsrs_auto_optimize_interval_days = max(
-            1, self._coerce_int(self.fsrs_auto_optimize_interval_days, 30)
+        self.local_models_directory = self._normalize_local_models_directory(self.local_models_directory)
+        self.fsrs_retention_target = self._clamp_float(self.fsrs_retention_target, 0.1, 0.99, 0.90)
+        self.fsrs_auto_optimize_interval_days = max(1, self._coerce_int(self.fsrs_auto_optimize_interval_days, 30))
+        self.adaptive_practice_readiness_enabled = (
+            self.adaptive_practice_readiness_enabled
+            if isinstance(self.adaptive_practice_readiness_enabled, bool)
+            else True
         )
         self.knowledge_contribution_opt_in = bool(self.knowledge_contribution_opt_in)
         self.knowledge_contribution_min_sample_count = max(
@@ -528,28 +481,16 @@ class StudyConfig:
         )
         if not isinstance(self.doc_export, DocExportConfig):
             self.doc_export = (
-                DocExportConfig(**self.doc_export)
-                if isinstance(self.doc_export, dict)
-                else DocExportConfig()
+                DocExportConfig(**self.doc_export) if isinstance(self.doc_export, dict) else DocExportConfig()
             )
         if not isinstance(self.pomodoro, PomodoroConfig):
-            self.pomodoro = (
-                PomodoroConfig(**self.pomodoro)
-                if isinstance(self.pomodoro, dict)
-                else PomodoroConfig()
-            )
+            self.pomodoro = PomodoroConfig(**self.pomodoro) if isinstance(self.pomodoro, dict) else PomodoroConfig()
         if not isinstance(self.supervision, SupervisionConfig):
             self.supervision = (
-                SupervisionConfig(**self.supervision)
-                if isinstance(self.supervision, dict)
-                else SupervisionConfig()
+                SupervisionConfig(**self.supervision) if isinstance(self.supervision, dict) else SupervisionConfig()
             )
         if not isinstance(self.checkin, CheckinConfig):
-            self.checkin = (
-                CheckinConfig(**self.checkin)
-                if isinstance(self.checkin, dict)
-                else CheckinConfig()
-            )
+            self.checkin = CheckinConfig(**self.checkin) if isinstance(self.checkin, dict) else CheckinConfig()
         if not isinstance(self.communication, CommunicationConfig):
             self.communication = (
                 CommunicationConfig(**self.communication)
@@ -558,22 +499,14 @@ class StudyConfig:
             )
         if not isinstance(self.awareness, AwarenessConfig):
             self.awareness = (
-                AwarenessConfig(**self.awareness)
-                if isinstance(self.awareness, dict)
-                else AwarenessConfig()
+                AwarenessConfig(**self.awareness) if isinstance(self.awareness, dict) else AwarenessConfig()
             )
         if not isinstance(self.assessment, AssessmentConfig):
             self.assessment = (
-                AssessmentConfig(**self.assessment)
-                if isinstance(self.assessment, dict)
-                else AssessmentConfig()
+                AssessmentConfig(**self.assessment) if isinstance(self.assessment, dict) else AssessmentConfig()
             )
         if not isinstance(self.mastery, MasteryConfig):
-            self.mastery = (
-                MasteryConfig(**self.mastery)
-                if isinstance(self.mastery, dict)
-                else MasteryConfig()
-            )
+            self.mastery = MasteryConfig(**self.mastery) if isinstance(self.mastery, dict) else MasteryConfig()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -586,9 +519,7 @@ class StudyConfig:
             return default
 
     @staticmethod
-    def _clamp_float(
-        value: object, minimum: float, maximum: float, default: float
-    ) -> float:
+    def _clamp_float(value: object, minimum: float, maximum: float, default: float) -> float:
         try:
             number = float(value)
         except (TypeError, ValueError, OverflowError):
@@ -683,9 +614,7 @@ class StudyState:
         # before the next state save removes it from SQLite.
         self.last_ocr_text = ""
         self.last_vision_image_base64 = ""
-        self.last_screen_classification = public_screen_classification_payload(
-            self.last_screen_classification
-        )
+        self.last_screen_classification = public_screen_classification_payload(self.last_screen_classification)
         self.recent_screen_classifications = [
             public_screen_classification_payload(item)
             for item in self.recent_screen_classifications
@@ -718,9 +647,7 @@ class StudyState:
             return False
         captured_at = _parse_utc_iso(self.last_ocr_at)
         current = now or datetime.now(timezone.utc)
-        if captured_at is None or (current - captured_at).total_seconds() >= max(
-            0, int(ttl_seconds)
-        ):
+        if captured_at is None or (current - captured_at).total_seconds() >= max(0, int(ttl_seconds)):
             self.clear_ocr_session()
             return True
         return False
@@ -730,9 +657,7 @@ class StudyState:
         payload.pop("last_ocr_text", None)
         payload.pop("last_vision_image_base64", None)
         payload.pop("last_captured_question_id", None)
-        payload["last_screen_classification"] = public_screen_classification_payload(
-            self.last_screen_classification
-        )
+        payload["last_screen_classification"] = public_screen_classification_payload(self.last_screen_classification)
         payload["recent_screen_classifications"] = [
             public_screen_classification_payload(item)
             for item in self.recent_screen_classifications
@@ -786,78 +711,52 @@ class TutorReply:
 
 def build_config(raw: dict[str, Any]) -> StudyConfig:
     study = raw.get("study") if isinstance(raw.get("study"), dict) else {}
-    study_companion = (
-        raw.get("study_companion")
-        if isinstance(raw.get("study_companion"), dict)
-        else {}
-    )
+    study_companion = raw.get("study_companion") if isinstance(raw.get("study_companion"), dict) else {}
     llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
     ocr = raw.get("ocr_reader") if isinstance(raw.get("ocr_reader"), dict) else {}
     rapidocr = raw.get("rapidocr") if isinstance(raw.get("rapidocr"), dict) else {}
     fsrs = raw.get("fsrs") if isinstance(raw.get("fsrs"), dict) else {}
-    contribution = (
-        raw.get("knowledge_contribution")
-        if isinstance(raw.get("knowledge_contribution"), dict)
-        else {}
-    )
-    doc_export = (
-        raw.get("doc_export") if isinstance(raw.get("doc_export"), dict) else {}
-    )
+    contribution = raw.get("knowledge_contribution") if isinstance(raw.get("knowledge_contribution"), dict) else {}
+    doc_export = raw.get("doc_export") if isinstance(raw.get("doc_export"), dict) else {}
     pomodoro = study.get("pomodoro") if isinstance(study.get("pomodoro"), dict) else {}
-    supervision = (
-        study.get("supervision") if isinstance(study.get("supervision"), dict) else {}
-    )
+    supervision = study.get("supervision") if isinstance(study.get("supervision"), dict) else {}
     checkin = study.get("checkin") if isinstance(study.get("checkin"), dict) else {}
     awareness = (
         study.get("awareness")
         if isinstance(study.get("awareness"), dict)
-        else raw.get("awareness") if isinstance(raw.get("awareness"), dict) else {}
+        else raw.get("awareness")
+        if isinstance(raw.get("awareness"), dict)
+        else {}
     )
-    assessment = (
-        raw.get("assessment") if isinstance(raw.get("assessment"), dict) else {}
-    )
+    assessment = raw.get("assessment") if isinstance(raw.get("assessment"), dict) else {}
     mastery = raw.get("mastery") if isinstance(raw.get("mastery"), dict) else {}
     communication = (
         study_companion.get("communication")
         if isinstance(study_companion.get("communication"), dict)
-        else (
-            raw.get("communication")
-            if isinstance(raw.get("communication"), dict)
-            else {}
-        )
+        else (raw.get("communication") if isinstance(raw.get("communication"), dict) else {})
     )
 
-    def _raw(
-        section: dict[str, Any], key: str, default: Any, flat_key: str | None = None
-    ) -> Any:
+    def _raw(section: dict[str, Any], key: str, default: Any, flat_key: str | None = None) -> Any:
         if key in section:
             return section.get(key, default)
         if flat_key and flat_key in raw:
             return raw.get(flat_key, default)
         return default
 
-    def _str(
-        section: dict[str, Any], key: str, default: str, flat_key: str | None = None
-    ) -> str:
+    def _str(section: dict[str, Any], key: str, default: str, flat_key: str | None = None) -> str:
         return str(_raw(section, key, default, flat_key) or default)
 
-    def _bool(
-        section: dict[str, Any], key: str, default: bool, flat_key: str | None = None
-    ) -> bool:
+    def _bool(section: dict[str, Any], key: str, default: bool, flat_key: str | None = None) -> bool:
         value = _raw(section, key, default, flat_key)
         return value if isinstance(value, bool) else default
 
-    def _int(
-        section: dict[str, Any], key: str, default: int, flat_key: str | None = None
-    ) -> int:
+    def _int(section: dict[str, Any], key: str, default: int, flat_key: str | None = None) -> int:
         try:
             return int(_raw(section, key, default, flat_key))
         except (TypeError, ValueError):
             return default
 
-    def _float(
-        section: dict[str, Any], key: str, default: float, flat_key: str | None = None
-    ) -> float:
+    def _float(section: dict[str, Any], key: str, default: float, flat_key: str | None = None) -> float:
         try:
             return float(_raw(section, key, default, flat_key))
         except (TypeError, ValueError):
@@ -912,21 +811,13 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             "save_when_used",
             "ocr_question_persistence_mode",
         ),
-        ocr_backend_selection=_str(
-            ocr, "backend_selection", "rapidocr", "ocr_backend_selection"
-        ),
+        ocr_backend_selection=_str(ocr, "backend_selection", "rapidocr", "ocr_backend_selection"),
         ocr_capture_backend=_str(ocr, "capture_backend", "auto", "ocr_capture_backend"),
         ocr_tesseract_path=_str(ocr, "tesseract_path", "", "ocr_tesseract_path"),
-        ocr_install_manifest_url=_str(
-            ocr, "install_manifest_url", "", "ocr_install_manifest_url"
-        ),
-        ocr_install_target_dir=_str(
-            ocr, "install_target_dir", "", "ocr_install_target_dir"
-        ),
+        ocr_install_manifest_url=_str(ocr, "install_manifest_url", "", "ocr_install_manifest_url"),
+        ocr_install_target_dir=_str(ocr, "install_target_dir", "", "ocr_install_target_dir"),
         ocr_install_timeout_seconds=_clamp(
-            _float(
-                ocr, "install_timeout_seconds", 300.0, "ocr_install_timeout_seconds"
-            ),
+            _float(ocr, "install_timeout_seconds", 300.0, "ocr_install_timeout_seconds"),
             1.0,
             3600.0,
             300.0,
@@ -944,28 +835,18 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             1.0,
             0.03,
         ),
-        ocr_top_ratio=_clamp(
-            _float(ocr, "top_ratio", 0.0, "ocr_top_ratio"), 0.0, 1.0, 0.0
-        ),
+        ocr_top_ratio=_clamp(_float(ocr, "top_ratio", 0.0, "ocr_top_ratio"), 0.0, 1.0, 0.0),
         ocr_bottom_inset_ratio=_clamp(
             _float(ocr, "bottom_inset_ratio", 0.0, "ocr_bottom_inset_ratio"),
             0.0,
             1.0,
             0.0,
         ),
-        rapidocr_install_target_dir=_str(
-            rapidocr, "install_target_dir", "", "rapidocr_install_target_dir"
-        ),
-        rapidocr_engine_type=_str(
-            rapidocr, "engine_type", "onnxruntime", "rapidocr_engine_type"
-        ),
+        rapidocr_install_target_dir=_str(rapidocr, "install_target_dir", "", "rapidocr_install_target_dir"),
+        rapidocr_engine_type=_str(rapidocr, "engine_type", "onnxruntime", "rapidocr_engine_type"),
         rapidocr_lang_type=_str(rapidocr, "lang_type", "ch", "rapidocr_lang_type"),
-        rapidocr_model_type=_str(
-            rapidocr, "model_type", "mobile", "rapidocr_model_type"
-        ),
-        rapidocr_ocr_version=_str(
-            rapidocr, "ocr_version", "PP-OCRv4", "rapidocr_ocr_version"
-        ),
+        rapidocr_model_type=_str(rapidocr, "model_type", "mobile", "rapidocr_model_type"),
+        rapidocr_ocr_version=_str(rapidocr, "ocr_version", "PP-OCRv4", "rapidocr_ocr_version"),
         llm_call_timeout_seconds=_clamp(
             _float_alias(
                 llm,
@@ -977,9 +858,7 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             3600.0,
             30.0,
         ),
-        llm_vision_enabled=_bool(
-            llm, "llm_vision_enabled", False, "llm_vision_enabled"
-        ),
+        llm_vision_enabled=_bool(llm, "llm_vision_enabled", False, "llm_vision_enabled"),
         llm_vision_max_image_px=max(
             64,
             min(
@@ -987,9 +866,7 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
                 _int(llm, "llm_vision_max_image_px", 768, "llm_vision_max_image_px"),
             ),
         ),
-        local_models_enabled=_bool(
-            llm, "local_models_enabled", False, "local_models_enabled"
-        ),
+        local_models_enabled=_bool(llm, "local_models_enabled", False, "local_models_enabled"),
         local_models_directory=(
             _raw(llm, "local_models_directory", "", "local_models_directory")
             if isinstance(
@@ -1030,30 +907,16 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
         ),
         doc_export=DocExportConfig(
             enabled=_bool(doc_export, "enabled", False, "doc_export_enabled"),
-            pdf_backend=_str(
-                doc_export, "pdf_backend", "reportlab", "doc_export_pdf_backend"
-            ),
-            default_style=_str(
-                doc_export, "default_style", "neko", "doc_export_default_style"
-            ),
-            xmind_enabled=_bool(
-                doc_export, "xmind_enabled", False, "doc_export_xmind_enabled"
-            ),
+            pdf_backend=_str(doc_export, "pdf_backend", "reportlab", "doc_export_pdf_backend"),
+            default_style=_str(doc_export, "default_style", "neko", "doc_export_default_style"),
+            xmind_enabled=_bool(doc_export, "xmind_enabled", False, "doc_export_xmind_enabled"),
         ),
         pomodoro=PomodoroConfig(
             focus_minutes=_int(pomodoro, "focus_minutes", 25, "pomodoro_focus_minutes"),
-            short_break_minutes=_int(
-                pomodoro, "short_break_minutes", 5, "pomodoro_short_break_minutes"
-            ),
-            long_break_minutes=_int(
-                pomodoro, "long_break_minutes", 15, "pomodoro_long_break_minutes"
-            ),
-            long_break_interval=_int(
-                pomodoro, "long_break_interval", 4, "pomodoro_long_break_interval"
-            ),
-            allow_skip_break=_bool(
-                pomodoro, "allow_skip_break", True, "pomodoro_allow_skip_break"
-            ),
+            short_break_minutes=_int(pomodoro, "short_break_minutes", 5, "pomodoro_short_break_minutes"),
+            long_break_minutes=_int(pomodoro, "long_break_minutes", 15, "pomodoro_long_break_minutes"),
+            long_break_interval=_int(pomodoro, "long_break_interval", 4, "pomodoro_long_break_interval"),
+            allow_skip_break=_bool(pomodoro, "allow_skip_break", True, "pomodoro_allow_skip_break"),
             allow_custom_duration=_bool(
                 pomodoro,
                 "allow_custom_duration",
@@ -1089,12 +952,8 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             ),
         ),
         checkin=CheckinConfig(
-            streak_timezone=_str(
-                checkin, "streak_timezone", "local", "checkin_streak_timezone"
-            ),
-            makeup_window_days=_int(
-                checkin, "makeup_window_days", 3, "checkin_makeup_window_days"
-            ),
+            streak_timezone=_str(checkin, "streak_timezone", "local", "checkin_streak_timezone"),
+            makeup_window_days=_int(checkin, "makeup_window_days", 3, "checkin_makeup_window_days"),
             auto_derive_from_session=_bool(
                 checkin,
                 "auto_derive_from_session",
@@ -1174,21 +1033,13 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             ),
         ),
         assessment=AssessmentConfig(
-            exact_short_answer_enabled=_bool(
-                assessment, "exact_short_answer_enabled", False
-            ),
-            numeric_tolerance_enabled=_bool(
-                assessment, "numeric_tolerance_enabled", False
-            ),
-            math_expression_enabled=_bool(
-                assessment, "math_expression_enabled", False
-            ),
+            exact_short_answer_enabled=_bool(assessment, "exact_short_answer_enabled", False),
+            numeric_tolerance_enabled=_bool(assessment, "numeric_tolerance_enabled", False),
+            math_expression_enabled=_bool(assessment, "math_expression_enabled", False),
         ),
         mastery=MasteryConfig(
             v2_shadow_enabled=_bool(mastery, "v2_shadow_enabled", False),
             read_model=_str(mastery, "read_model", "v1"),
-            model_version=_str(
-                mastery, "model_version", "mastery-v2-shadow-1"
-            ),
+            model_version=_str(mastery, "model_version", "mastery-v2-shadow-1"),
         ),
     )

@@ -50,9 +50,7 @@ def _with_question_generation_reservation(function):
 
     @wraps(function)
     async def wrapped(self, *args, **kwargs):
-        active_operation = await reserve_question_lifecycle(
-            self, "question_generation"
-        )
+        active_operation = await reserve_question_lifecycle(self, "question_generation")
         if active_operation:
             code = (
                 "QUESTION_GENERATION_IN_PROGRESS"
@@ -71,6 +69,8 @@ def _with_question_generation_reservation(function):
             await release_question_lifecycle(self, "question_generation")
 
     return wrapped
+
+
 TARGETED_SELECTION_TTL_SECONDS = 10 * 60
 TARGETED_HINT_MAX_CHARS = 240
 TARGETED_GENERATION_TIMEOUT_SECONDS = 125.0
@@ -93,6 +93,17 @@ def _compact_text(value: object, *, limit: int = 120) -> str:
 def _topic_name(topic: dict[str, Any] | None, fallback: str = "") -> str:
     payload = dict(topic or {})
     return str(payload.get("name") or payload.get("title") or fallback or "").strip()
+
+
+def _candidate_evidence_topic_id(candidate: object) -> str:
+    payload = dict(candidate) if isinstance(candidate, dict) else {}
+    for source in (payload.get("payload"), payload.get("payload_summary"), payload):
+        if not isinstance(source, dict):
+            continue
+        topic_id = str(source.get("topic_id") or source.get("id") or "").strip()
+        if topic_id:
+            return topic_id
+    return ""
 
 
 def _safe_hint(payload: dict[str, Any]) -> str:
@@ -121,11 +132,7 @@ def _safe_hint(payload: dict[str, Any]) -> str:
         elif normalized in hint_lower:
             return ""
     for field_name in ("key_points", "solution_steps"):
-        items = [
-            str(item or "").strip()
-            for item in (payload.get(field_name) or [])
-            if str(item or "").strip()
-        ]
+        items = [str(item or "").strip() for item in (payload.get(field_name) or []) if str(item or "").strip()]
         if len(items) >= 2 and all(item.lower() in hint_lower for item in items[:3]):
             return ""
     return hint
@@ -137,9 +144,7 @@ def _targeted_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return public_payload
 
 
-def _question_private_payload(
-    payload: dict[str, Any], context: dict[str, Any]
-) -> dict[str, Any]:
+def _question_private_payload(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     private_payload = dict(payload or {})
     answer = str(private_payload.get("answer") or "").strip()
     reference = str(private_payload.get("reference_answer") or answer).strip()
@@ -157,9 +162,7 @@ def _question_private_payload(
         "key_points": list(private_payload.get("key_points") or []),
         "rubric": dict(private_payload.get("rubric") or {}),
         "solution_steps": list(private_payload.get("solution_steps") or []),
-        "math_equivalence_engine": dict(
-            private_payload.get("math_equivalence_engine") or {"enabled": False}
-        ),
+        "math_equivalence_engine": dict(private_payload.get("math_equivalence_engine") or {"enabled": False}),
     }
     private_payload.update(context)
     private_payload.setdefault("question_id", f"q_{uuid.uuid4().hex}")
@@ -172,15 +175,11 @@ def _question_private_payload(
 def _safe_wrong_question_summary(value: dict[str, Any]) -> dict[str, Any]:
     source = dict(value or {})
     return {
-        key: source.get(key)
-        for key in ("id", "topic_id", "error_type", "verdict")
-        if source.get(key) not in (None, "")
+        key: source.get(key) for key in ("id", "topic_id", "error_type", "verdict") if source.get(key) not in (None, "")
     }
 
 
-def _server_target_binding(
-    targeted_context: dict[str, Any], *, generated_at: str
-) -> dict[str, Any]:
+def _server_target_binding(targeted_context: dict[str, Any], *, generated_at: str) -> dict[str, Any]:
     target_topic_id = str(targeted_context.get("selected_topic_id") or "").strip()
     params = dict(targeted_context.get("question_params") or {})
     retry = dict(params.get("retry_wrong_question") or {})
@@ -232,11 +231,7 @@ def _targeted_model_context(context: dict[str, Any]) -> dict[str, Any]:
         "scope_topic_count",
         "generation_feedback",
     }
-    return {
-        key: _without_learner_answers(value)
-        for key, value in context.items()
-        if key in allowed
-    }
+    return {key: _without_learner_answers(value) for key, value in context.items() if key in allowed}
 
 
 def _question_validation_context(
@@ -250,9 +245,7 @@ def _question_validation_context(
     target_metadata = project_target_topic_evidence(target_topic)
     return {
         "question": payload.get("question") or "",
-        "reference_answer": payload.get("reference_answer")
-        or payload.get("answer")
-        or "",
+        "reference_answer": payload.get("reference_answer") or payload.get("answer") or "",
         "target_topic": target_metadata,
         # Semantic validation must not inherit the generation prompt's graph
         # summary (nor client-supplied blockers).  Its relation evidence is
@@ -261,9 +254,7 @@ def _question_validation_context(
     }
 
 
-async def _canonical_validation_relations_for_target(
-    owner: Any, *, selected_topic_id: str
-) -> dict[str, list[str]]:
+async def _canonical_validation_relations_for_target(owner: Any, *, selected_topic_id: str) -> dict[str, list[str]]:
     """Load canonical records once and safely derive validation evidence.
 
     A missing store/cache is deliberately non-fatal: the validator can still
@@ -286,9 +277,7 @@ async def _canonical_validation_relations_for_target(
                 cache = {}
                 setattr(owner, "_knowledge_guidance_topics_cache", cache)
             cache["all:5000"] = list(topics or [])
-        return _canonical_necessary_relations(
-            topics=list(topics or []), topic_id=topic_id
-        )
+        return _canonical_necessary_relations(topics=list(topics or []), topic_id=topic_id)
     except Exception:
         return {}
 
@@ -332,9 +321,7 @@ class _TutorQuestionEntriesMixin:
         }
         cache[context_id] = stored
         if len(cache) > 32:
-            ordered = sorted(
-                cache.items(), key=lambda item: float(item[1].get("created_at") or 0.0)
-            )
+            ordered = sorted(cache.items(), key=lambda item: float(item[1].get("created_at") or 0.0))
             for old_id, _ in ordered[: max(0, len(cache) - 32)]:
                 cache.pop(old_id, None)
         return stored
@@ -346,17 +333,13 @@ class _TutorQuestionEntriesMixin:
         with context_lock:
             return self._load_targeted_context_locked(selection_context_id)
 
-    def _load_targeted_context_locked(
-        self, selection_context_id: str
-    ) -> dict[str, Any]:
+    def _load_targeted_context_locked(self, selection_context_id: str) -> dict[str, Any]:
         self._prune_targeted_context_cache()
         context_id = str(selection_context_id or "").strip()
         cache = self._targeted_context_cache()
         cached = cache.get(context_id)
         if not cached or cached.get("consumed"):
-            raise SdkError(
-                "selection context expired", code="SELECTION_CONTEXT_EXPIRED"
-            )
+            raise SdkError("selection context expired", code="SELECTION_CONTEXT_EXPIRED")
         cached_revision = int(cached.get("scope_revision") or 0)
         active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
         cached_scope_key = str(cached.get("scope_key") or "").strip()
@@ -371,9 +354,7 @@ class _TutorQuestionEntriesMixin:
         topic_id = str(cached.get("selected_topic_id") or "").strip()
         if topic_id and not self._knowledge_tracker.store.get_topic(topic_id):
             cache.pop(context_id, None)
-            raise SdkError(
-                "selection context expired", code="SELECTION_CONTEXT_EXPIRED"
-            )
+            raise SdkError("selection context expired", code="SELECTION_CONTEXT_EXPIRED")
         if active_scope and topic_id not in set(active_scope.eligible_topic_ids):
             cache.pop(context_id, None)
             raise SdkError(
@@ -406,22 +387,23 @@ class _TutorQuestionEntriesMixin:
         elif due_reviews:
             first_due = dict(due_reviews[0] or {})
             due_topic = dict(first_due.get("topic") or {})
-            selected_topic_id = str(
-                first_due.get("topic_id") or due_topic.get("id") or selected_topic_id
-            ).strip()
+            selected_topic_id = str(first_due.get("topic_id") or due_topic.get("id") or selected_topic_id).strip()
             selected_topic_name = _topic_name(due_topic, selected_topic_id)
             reason = "due_review"
             reason_payload = {"due_review": first_due}
         elif weak_topics:
             first_weak = dict(weak_topics[0] or {})
-            selected_topic_id = str(
-                first_weak.get("topic_id") or first_weak.get("id") or selected_topic_id
-            ).strip()
-            selected_topic_name = str(
-                first_weak.get("name") or first_weak.get("topic") or selected_topic_id
-            ).strip()
+            selected_topic_id = str(first_weak.get("topic_id") or first_weak.get("id") or selected_topic_id).strip()
+            selected_topic_name = str(first_weak.get("name") or first_weak.get("topic") or selected_topic_id).strip()
             reason = "weak_topic"
             reason_payload = {"weak_topic": first_weak}
+        elif params.get("blocked_diagnostic"):
+            diagnostic = dict(params.get("blocked_diagnostic") or {})
+            selected_topic_id = str(diagnostic.get("target_topic_id") or selected_topic_id).strip()
+            diagnostic_topic = self._knowledge_tracker.store.get_topic(selected_topic_id)
+            selected_topic_name = _topic_name(diagnostic_topic, selected_topic_id)
+            reason = "blocked_diagnostic"
+            reason_payload = {"blocked_diagnostic": diagnostic}
         elif candidate_evidence:
             first_candidate = dict(candidate_evidence[0] or {})
             candidate_payload = dict(first_candidate.get("payload") or {})
@@ -478,11 +460,7 @@ class _TutorQuestionEntriesMixin:
             if question_plan is not None and question_plan.selection.reason == "wrong_retry"
             else (question_plan.selection.reason if question_plan is not None else "")
         )
-        if (
-            question_plan is not None
-            and public_reason == reason
-            and question_plan.target_topic.id == selected_topic_id
-        ):
+        if question_plan is not None and public_reason == reason and question_plan.target_topic.id == selected_topic_id:
             selected_topic_id = question_plan.target_topic.id
         return {
             "selected_topic_id": selected_topic_id,
@@ -501,10 +479,7 @@ class _TutorQuestionEntriesMixin:
         if scope.mode == "explicit_topic":
             topic = self._knowledge_tracker.store.get_topic(scope.topic_id)
             topics = (
-                [topic]
-                if topic is not None
-                and practice_scope_matches_topic(scope.to_public_dict(), topic)
-                else []
+                [topic] if topic is not None and practice_scope_matches_topic(scope.to_public_dict(), topic) else []
             )
         else:
             topics = [
@@ -525,40 +500,49 @@ class _TutorQuestionEntriesMixin:
             for item in mastery_overview
             if str(item.get("topic_id") or "") in eligible
         }
-        ordered_topics = ordered_scope_topics(
-            topics, attempted_topic_ids=set(mastery_by_topic)
-        )
+        ordered_topics = ordered_scope_topics(topics, attempted_topic_ids=set(mastery_by_topic))
         if not ordered_topics:
             raise SdkError(
                 "practice scope no longer contains any topics",
                 code="PRACTICE_SCOPE_INVALIDATED",
             )
-        unattempted = [
-            topic
-            for topic in ordered_topics
-            if str(topic.get("id") or "") not in mastery_by_topic
-        ]
+        readiness_reader = getattr(
+            getattr(self._knowledge_tracker, "graph", None),
+            "readiness_in_scope",
+            None,
+        )
+        readiness_enabled = (
+            bool(
+                getattr(
+                    getattr(self, "_cfg", None),
+                    "adaptive_practice_readiness_enabled",
+                    True,
+                )
+            )
+            and scope.mode != "explicit_topic"
+            and callable(readiness_reader)
+        )
+        ready_topic_ids: set[str] = set()
+        blockers_by_topic: dict[str, list[dict[str, Any]]] = {}
+        selectable_topics = ordered_topics
+        if readiness_enabled:
+            ready_topic_ids, blockers_by_topic = readiness_reader(eligible)
+            ready_topics = [topic for topic in ordered_topics if str(topic.get("id") or "") in ready_topic_ids]
+            if ready_topics:
+                selectable_topics = ready_topics
+        unattempted = [topic for topic in selectable_topics if str(topic.get("id") or "") not in mastery_by_topic]
         if unattempted:
             fallback_topic = unattempted[0]
         else:
             fallback_topic = min(
-                ordered_topics,
+                selectable_topics,
                 key=lambda topic: (
-                    float(
-                        mastery_by_topic.get(str(topic.get("id") or ""), {}).get(
-                            "mastery"
-                        )
-                        or 0.0
-                    ),
+                    float(mastery_by_topic.get(str(topic.get("id") or ""), {}).get("mastery") or 0.0),
                     str(topic.get("id") or ""),
                 ),
             )
         target_topic_id = scope.topic_id or str(fallback_topic.get("id") or "")
-        topics_by_id = {
-            str(topic.get("id") or ""): dict(topic)
-            for topic in topics
-            if str(topic.get("id") or "")
-        }
+        topics_by_id = {str(topic.get("id") or ""): dict(topic) for topic in topics if str(topic.get("id") or "")}
         params = self._knowledge_tracker.preview_next_question_params(
             target_topic_id,
             candidate_topic_ids=eligible,
@@ -582,11 +566,26 @@ class _TutorQuestionEntriesMixin:
         if scope.mode == "explicit_topic":
             params["weak_topics"] = []
             params["candidate_evidence"] = []
+        elif readiness_enabled:
+            params["candidate_evidence"] = [
+                item
+                for item in params.get("candidate_evidence") or []
+                if _candidate_evidence_topic_id(item) in ready_topic_ids
+            ]
+            if (
+                not ready_topic_ids
+                and not params.get("retry_wrong_question")
+                and not params.get("due_reviews")
+                and not params.get("weak_topics")
+            ):
+                params["blocked_diagnostic"] = {
+                    "target_topic_id": target_topic_id,
+                    "blockers": blockers_by_topic.get(target_topic_id, []),
+                    "scope_topic_ids": sorted(eligible),
+                }
         if not params.get("target_topic_id"):
             params["target_topic_id"] = target_topic_id
-            params["target_topic"] = (
-                self._knowledge_tracker.store.get_topic(target_topic_id) or {}
-            )
+            params["target_topic"] = self._knowledge_tracker.store.get_topic(target_topic_id) or {}
         params["mastery_overview"] = list(mastery_by_topic.values())
         return params
 
@@ -624,9 +623,7 @@ class _TutorQuestionEntriesMixin:
                 focused["retry_wrong_questions"] = [selected_retry]
                 focused["retry_wrong_question"] = selected_retry
         else:
-            guidance_builder = getattr(
-                self._knowledge_tracker, "_question_guidance", None
-            )
+            guidance_builder = getattr(self._knowledge_tracker, "_question_guidance", None)
             if callable(guidance_builder):
                 mastery = dict(focused.get("mastery") or {})
                 focused["prompt_guidance"] = guidance_builder(
@@ -636,27 +633,36 @@ class _TutorQuestionEntriesMixin:
                 )
             else:
                 focused.pop("prompt_guidance", None)
+        if selection.get("selection_reason") == "blocked_diagnostic":
+            diagnostic = dict(initial_params.get("blocked_diagnostic") or {})
+            focused["blocked_diagnostic"] = diagnostic
+            blocker_names = [
+                str(item.get("name") or item.get("id") or "")
+                for item in diagnostic.get("blockers") or []
+                if isinstance(item, dict)
+            ]
+            foundation_guidance = (
+                "Generate a diagnostic foundation question before advancing. "
+                "Keep the question inside the selected practice scope; do not "
+                "redirect the learner to a prerequisite outside that scope."
+            )
+            if blocker_names:
+                foundation_guidance += f" Diagnose readiness around: {', '.join(blocker_names)}."
+            existing_guidance = str(focused.get("prompt_guidance") or "").strip()
+            focused["prompt_guidance"] = "\n".join(item for item in (existing_guidance, foundation_guidance) if item)
         focused["target_topic_id"] = selected_topic_id
-        focused["target_topic"] = (
-            self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
-        )
+        focused["target_topic"] = self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
         focused["scope_candidates"] = {
             "retry_wrong_questions": initial_params.get("retry_wrong_questions") or [],
             "due_reviews": initial_params.get("due_reviews") or [],
             "weak_topics": initial_params.get("weak_topics") or [],
         }
         selection["question_params"] = focused
-        selection["difficulty"] = (
-            focused.get("suggested_difficulty") or selection["difficulty"]
-        )
+        selection["difficulty"] = focused.get("suggested_difficulty") or selection["difficulty"]
 
     def _build_targeted_question_context(self) -> dict[str, Any]:
         scope = self._resolve_active_practice_scope()
-        params = (
-            self._scoped_question_params(scope)
-            if scope is not None
-            else self._unscoped_question_params()
-        )
+        params = self._scoped_question_params(scope) if scope is not None else self._unscoped_question_params()
         selection = self._selection_from_question_params(params)
         self._focus_selected_question_params(selection, params, scope)
         if scope is not None:
@@ -673,9 +679,7 @@ class _TutorQuestionEntriesMixin:
             selection.update(
                 {
                     "scope_key": "",
-                    "scope_revision": int(
-                        getattr(self._state, "practice_scope_revision", 0) or 0
-                    ),
+                    "scope_revision": int(getattr(self._state, "practice_scope_revision", 0) or 0),
                     "practice_scope": {},
                     "scope_topic_count": 0,
                 }
@@ -714,19 +718,12 @@ class _TutorQuestionEntriesMixin:
                 {
                     "source": "targeted_question",
                     "targeted_question": True,
-                    "selected_topic_id": targeted_context.get("selected_topic_id")
-                    or "",
-                    "selected_topic_name": targeted_context.get("selected_topic_name")
-                    or "",
-                    "selection_context_id": targeted_context.get("selection_context_id")
-                    or "",
+                    "selected_topic_id": targeted_context.get("selected_topic_id") or "",
+                    "selected_topic_name": targeted_context.get("selected_topic_name") or "",
+                    "selection_context_id": targeted_context.get("selection_context_id") or "",
                     "selection_reason": targeted_context.get("selection_reason") or "",
-                    "selection_reason_payload": targeted_context.get(
-                        "selection_reason_payload"
-                    )
-                    or {},
-                    "knowledge_question_params": targeted_context.get("question_params")
-                    or {},
+                    "selection_reason_payload": targeted_context.get("selection_reason_payload") or {},
+                    "knowledge_question_params": targeted_context.get("question_params") or {},
                     "scope_key": targeted_context.get("scope_key") or "",
                     "scope_revision": targeted_context.get("scope_revision") or 0,
                     "practice_scope": targeted_context.get("practice_scope") or {},
@@ -734,9 +731,7 @@ class _TutorQuestionEntriesMixin:
                 }
             )
         if vision_image_payload:
-            extra_context.update(
-                {"vision_enabled": True, "vision_image_base64": vision_image_payload}
-            )
+            extra_context.update({"vision_enabled": True, "vision_image_base64": vision_image_payload})
         tutor_context = await self._build_learning_context(
             LLM_OPERATION_QUESTION_GENERATE,
             input_text=source_text,
@@ -754,9 +749,7 @@ class _TutorQuestionEntriesMixin:
         canonical_relations = (
             await _canonical_validation_relations_for_target(
                 self,
-                selected_topic_id=str(
-                    targeted_context.get("selected_topic_id") or ""
-                ),
+                selected_topic_id=str(targeted_context.get("selected_topic_id") or ""),
             )
             if targeted_context
             else {}
@@ -776,9 +769,7 @@ class _TutorQuestionEntriesMixin:
                 break
             candidate_payload = dict(candidate_reply.payload or {})
             # The binding is authoritative server state, never an LLM claim.
-            candidate_payload["target_topic_id"] = str(
-                targeted_context.get("selected_topic_id") or ""
-            )
+            candidate_payload["target_topic_id"] = str(targeted_context.get("selected_topic_id") or "")
             candidate_reply = TutorReply(
                 operation=candidate_reply.operation,
                 input_text=candidate_reply.input_text,
@@ -792,15 +783,11 @@ class _TutorQuestionEntriesMixin:
             structural = validate_targeted_question(
                 candidate_payload,
                 target_topic_id=str(targeted_context.get("selected_topic_id") or ""),
-                target_topic_name=str(
-                    targeted_context.get("selected_topic_name") or ""
-                ),
+                target_topic_name=str(targeted_context.get("selected_topic_name") or ""),
                 origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
             )
             if not structural.valid:
-                validation_failure = "Structural validation failed: " + ", ".join(
-                    structural.errors
-                )
+                validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
                 continue
             validation_reply = await QuestionFactory.delegate(
                 self._agent.question_validate,
@@ -808,15 +795,11 @@ class _TutorQuestionEntriesMixin:
                     candidate_payload,
                     targeted_context,
                     canonical_relations=canonical_relations,
-                )
+                ),
             )
-            if not semantic_validation_passed(
-                dict(validation_reply.payload or {}), degraded=validation_reply.degraded
-            ):
+            if not semantic_validation_passed(dict(validation_reply.payload or {}), degraded=validation_reply.degraded):
                 validation_failure = "Semantic validation failed: " + str(
-                    (validation_reply.payload or {}).get("reason")
-                    or validation_reply.diagnostic
-                    or "retry"
+                    (validation_reply.payload or {}).get("reason") or validation_reply.diagnostic or "retry"
                 )
                 continue
             candidate_payload.pop("_targeted_difficulty_valid", None)
@@ -838,15 +821,12 @@ class _TutorQuestionEntriesMixin:
             )
         if targeted_context:
             async with self._lock:
-                active_revision = int(
-                    getattr(self._state, "practice_scope_revision", 0) or 0
-                )
+                active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
                 active_scope = self._resolve_active_practice_scope()
                 active_scope_key = active_scope.scope_key if active_scope else ""
             if (
                 int(targeted_context.get("scope_revision") or 0) != active_revision
-                or str(targeted_context.get("scope_key") or "").strip()
-                != active_scope_key
+                or str(targeted_context.get("scope_key") or "").strip() != active_scope_key
             ):
                 raise SdkError(
                     "practice scope changed during question generation",
@@ -862,18 +842,12 @@ class _TutorQuestionEntriesMixin:
                         targeted_context,
                         generated_at=reply.created_at,
                     ),
-                    "selected_topic_id": targeted_context.get("selected_topic_id")
-                    or "",
+                    "selected_topic_id": targeted_context.get("selected_topic_id") or "",
                     "topic": targeted_context.get("selected_topic_id") or "",
-                    "selected_topic_name": targeted_context.get("selected_topic_name")
-                    or "",
-                    "selection_context_id": targeted_context.get("selection_context_id")
-                    or "",
+                    "selected_topic_name": targeted_context.get("selected_topic_name") or "",
+                    "selection_context_id": targeted_context.get("selection_context_id") or "",
                     "selection_reason": targeted_context.get("selection_reason") or "",
-                    "selection_reason_payload": targeted_context.get(
-                        "selection_reason_payload"
-                    )
-                    or {},
+                    "selection_reason_payload": targeted_context.get("selection_reason_payload") or {},
                     "scope_key": targeted_context.get("scope_key") or "",
                     "scope_revision": targeted_context.get("scope_revision") or 0,
                     "practice_scope": targeted_context.get("practice_scope") or {},
@@ -892,9 +866,7 @@ class _TutorQuestionEntriesMixin:
             public_payload = _targeted_public_payload(private_payload)
         if source_question_id:
             reply.payload["source_question_id"] = source_question_id
-        metadata_payload = (
-            public_payload if public_payload is not None else dict(reply.payload or {})
-        )
+        metadata_payload = public_payload if public_payload is not None else dict(reply.payload or {})
         finalize_metadata = {
             "degraded": reply.degraded,
             "diagnostic": reply.diagnostic,
@@ -904,15 +876,12 @@ class _TutorQuestionEntriesMixin:
         if targeted_context:
             async with self._practice_scope_write_lock():
                 async with self._lock:
-                    active_revision = int(
-                        getattr(self._state, "practice_scope_revision", 0) or 0
-                    )
+                    active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
                     active_scope = self._resolve_active_practice_scope()
                     active_scope_key = active_scope.scope_key if active_scope else ""
                 if (
                     int(targeted_context.get("scope_revision") or 0) != active_revision
-                    or str(targeted_context.get("scope_key") or "").strip()
-                    != active_scope_key
+                    or str(targeted_context.get("scope_key") or "").strip() != active_scope_key
                 ):
                     raise SdkError(
                         "practice scope changed during question generation",
@@ -935,20 +904,14 @@ class _TutorQuestionEntriesMixin:
                 extra_context=tutor_context,
                 public_payload=public_payload,
             )
-        payload["screen_classification"] = (
-            tutor_context.get("screen_classification") or {}
-        )
+        payload["screen_classification"] = tutor_context.get("screen_classification") or {}
         if targeted_context:
             # Usage means an accepted question was committed as the current
             # attempt, not merely that a candidate was selected for an LLM.
             tracker = getattr(self, "_knowledge_tracker", None)
-            record_usage = getattr(
-                tracker, "record_prompt_usage_for_question_params", None
-            )
+            record_usage = getattr(tracker, "record_prompt_usage_for_question_params", None)
             if callable(record_usage):
-                await asyncio.to_thread(
-                    record_usage, targeted_context.get("question_params") or {}
-                )
+                await asyncio.to_thread(record_usage, targeted_context.get("question_params") or {})
         return payload
 
     async def _generate_question_payload(
@@ -980,9 +943,7 @@ class _TutorQuestionEntriesMixin:
                 targeted_context=targeted_context,
             )
 
-        active_operation = await reserve_question_lifecycle(
-            self, "question_generation"
-        )
+        active_operation = await reserve_question_lifecycle(self, "question_generation")
         if active_operation:
             code = (
                 "QUESTION_GENERATION_IN_PROGRESS"
@@ -1031,8 +992,7 @@ class _TutorQuestionEntriesMixin:
                     "selected_topic_id": context.get("selected_topic_id") or "",
                     "selected_topic_name": context.get("selected_topic_name") or "",
                     "selection_reason": context.get("selection_reason") or "no_data",
-                    "selection_reason_payload": context.get("selection_reason_payload")
-                    or {},
+                    "selection_reason_payload": context.get("selection_reason_payload") or {},
                     "difficulty": context.get("difficulty") or 3,
                     "weak_topics": context.get("weak_topics") or [],
                     "due_reviews": context.get("due_reviews") or [],
@@ -1083,28 +1043,18 @@ class _TutorQuestionEntriesMixin:
         ],
     )
     @_with_question_generation_reservation
-    async def study_generate_targeted_question(
-        self, selection_context_id: str = "", **_
-    ):
+    async def study_generate_targeted_question(self, selection_context_id: str = "", **_):
         if self._agent is None:
             return Err(SdkError("study tutor agent is not initialized"))
         try:
             context_id = str(selection_context_id or "").strip()
             if context_id:
-                targeted_context = await asyncio.to_thread(
-                    self._load_targeted_context, context_id
-                )
+                targeted_context = await asyncio.to_thread(self._load_targeted_context, context_id)
             else:
-                pending_context = await asyncio.to_thread(
-                    self._build_targeted_question_context
-                )
-                pending_context_id = str(
-                    pending_context.get("selection_context_id") or ""
-                ).strip()
+                pending_context = await asyncio.to_thread(self._build_targeted_question_context)
+                pending_context_id = str(pending_context.get("selection_context_id") or "").strip()
                 targeted_context = (
-                    await asyncio.to_thread(
-                        self._load_targeted_context, pending_context_id
-                    )
+                    await asyncio.to_thread(self._load_targeted_context, pending_context_id)
                     if pending_context_id
                     else pending_context
                 )
@@ -1132,9 +1082,7 @@ class _TutorQuestionEntriesMixin:
         except SdkError as exc:
             return Err(exc)
         except Exception as exc:
-            return _entry_exception_error(
-                self, exc, operation="study_generate_targeted_question"
-            )
+            return _entry_exception_error(self, exc, operation="study_generate_targeted_question")
 
     @ui.action()
     @plugin_entry(
@@ -1213,11 +1161,7 @@ class _TutorQuestionEntriesMixin:
             payload = await self._generate_question_payload(
                 source_text=source_text,
                 topic=topic,
-                source=(
-                    "ocr_snapshot"
-                    if used_ocr_fallback
-                    else ("vision_image" if image_only_source else "manual")
-                ),
+                source=("ocr_snapshot" if used_ocr_fallback else ("vision_image" if image_only_source else "manual")),
                 source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
                 lifecycle_reserved=True,
@@ -1226,6 +1170,4 @@ class _TutorQuestionEntriesMixin:
         except SdkError as exc:
             return Err(exc)
         except Exception as exc:
-            return _entry_exception_error(
-                self, exc, operation="study_generate_question"
-            )
+            return _entry_exception_error(self, exc, operation="study_generate_question")

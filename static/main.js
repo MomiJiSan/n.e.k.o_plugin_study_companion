@@ -201,6 +201,7 @@ let answerInputImageValue = '';
 let pastePendingCount = 0;
 let llmVisionMaxImagePx = DEFAULT_VISION_MAX_IMAGE_PX;
 let currentQuestion = null;
+let canEvaluateCurrentQuestion = false;
 let currentSelectionContext = null;
 let currentPracticeScope=null;
 let learningProfile = readLearningProfile();
@@ -280,7 +281,8 @@ function setLearningProfileStage(stage, options = {}) {
   renderFirstRunGuide(lastStatusPayload);
   const knowledgeMap = window.StudyCompanionKnowledgeMap;
   if (knowledgeMap?.isActive?.()) {
-    knowledgeMap.rerender(lastKnowledgeMapPayload || lastStatusPayload);
+    knowledgeMapStage = '';
+    reloadKnowledgeMapForStage(normalized || 'all');
   }
 }
 
@@ -365,6 +367,12 @@ function setQuestionContext(data = {}) {
 
 function setGeneratedQuestion(data = {}) {
   currentQuestion = data && typeof data === 'object' ? data : null;
+  canEvaluateCurrentQuestion = typeof currentQuestion?.can_evaluate_current_question === 'boolean'
+    ? currentQuestion.can_evaluate_current_question
+    : Boolean(currentQuestion?.question_id && currentQuestion?.attempt_id);
+  if (evaluateAnswerBtn) {
+    evaluateAnswerBtn.disabled = !canEvaluateCurrentQuestion;
+  }
   if (questionText) {
     questionText.textContent = currentQuestion?.question || t('ui.practice.empty_question', 'Generate a practice question to begin.');
   }
@@ -445,6 +453,9 @@ function formatPluginError(error) {
   }
   if (code === 'EVALUATION_INCONSISTENT') {
     return t('ui.error.evaluation_inconsistent', 'The answer evaluation was inconsistent. Please try evaluating again.');
+  }
+  if (code === 'ATTEMPT_ALREADY_EVALUATED') {
+    return t('ui.error.attempt_already_evaluated', 'This question has already been submitted. Please generate the next question.');
   }
   if (code === 'QUESTION_GENERATION_IN_PROGRESS' || code === 'ANSWER_EVALUATION_IN_PROGRESS') {
     return t('ui.error.question_operation_in_progress', 'Another question operation is already running. Please wait a moment and retry.');
@@ -1346,6 +1357,17 @@ function setStatusLine(data) {
   updateWorkspaceCardStatuses(data);
   renderNekoCoach(data);
   setModeButtons(modeValue, false);
+  if (data?.current_question && typeof data.current_question === 'object') {
+    setGeneratedQuestion({
+      ...data.current_question,
+      can_evaluate_current_question: data.can_evaluate_current_question === true,
+    });
+    if (data.current_question_state === 'evaluated' && data.last_answer_evaluation) {
+      renderFeedback(data.last_answer_evaluation);
+    }
+  } else if (data?.current_question_state === 'none') {
+    setGeneratedQuestion({});
+  }
   setStudyState(data);
 }
 
@@ -1552,19 +1574,111 @@ function mountKnowledgeFullscreenHost() {
 }
 
 async function loadKnowledgeMap(requestId) {
-  try {
-    let payload;
-    try {
-      payload = await callPlugin('study_query_knowledge_map', {
-        scope: { stage: '', subject: '', chapter: '', unit: '' },
-        page_size: 100,
-        include_boundary: true,
-      });
-    } catch {
-      const knowledgeMap = studyKnowledgeMap();
-      if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
-      payload = await callPlugin('study_knowledge_map', { limit: 1000 });
+  const requestedStage = arguments.length > 1 ? arguments[1] : (knowledgeMapStage || learningProfile.stage || 'all');
+  const normalizedStage = requestedStage === 'all' ? '' : normalizeLearningStage(requestedStage);
+  const scope = { stage: normalizedStage, subject: '', chapter: '', unit: '' };
+  const errorCode = (error) => String(error?.code || '').trim().toUpperCase();
+  const errorMessage = (error) => String(error?.message || error || '');
+  const isCursorStale = (error) => errorCode(error) === 'KNOWLEDGE_MAP_CURSOR_STALE'
+    || /knowledge_map_cursor_stale/i.test(errorMessage(error));
+  const isV2Unavailable = (error) => (
+    ['ENTRY_NOT_FOUND', 'UNKNOWN_ENTRY', 'NOT_IMPLEMENTED', 'UNSUPPORTED_ENTRY'].includes(errorCode(error))
+    || /study_query_knowledge_map.*(?:not found|unknown|unavailable|not implemented)/i.test(errorMessage(error))
+  );
+  const dedupeNodes = (nodes) => {
+    const byId = new Map();
+    nodes.forEach((node) => {
+      const id = String(node?.id || '').trim();
+      if (id && !byId.has(id)) byId.set(id, node);
+    });
+    return [...byId.values()];
+  };
+  const dedupeEdges = (edges) => {
+    const byKey = new Map();
+    edges.forEach((edge) => {
+      const from = String(edge?.from || '').trim();
+      const to = String(edge?.to || '').trim();
+      const relation = String(edge?.relation || '').trim();
+      if (from && to) byKey.set(`${from}\u0000${to}\u0000${relation}`, edge);
+    });
+    return [...byKey.values()];
+  };
+  const loadV2Pages = async () => {
+    let retriedAfterStaleCursor = false;
+    while (true) {
+      const nodes = [];
+      const edges = [];
+      const seenCursors = new Set(['']);
+      let cursor = '';
+      let pageCount = 0;
+      let catalogRevision = null;
+      let firstPage = null;
+      let relationshipsIncomplete = false;
+      try {
+        while (true) {
+          if (pageCount >= 20) throw new Error('Knowledge map pagination stopped after 20 pages.');
+          let page;
+          try {
+            page = await callPlugin('study_query_knowledge_map', {
+              scope,
+              page_size: 100,
+              cursor,
+              include_boundary: true,
+            });
+          } catch (error) {
+            // V1 is a first-page compatibility path only. Never mix a V1
+            // response with already-loaded V2 pages.
+            if (pageCount === 0 && isV2Unavailable(error)) {
+              return await callPlugin('study_knowledge_map', { limit: 1000 });
+            }
+            throw error;
+          }
+          if (page?.error) {
+            if (pageCount === 0 && isV2Unavailable(page.error)) {
+              return await callPlugin('study_knowledge_map', { limit: 1000 });
+            }
+            throw page.error;
+          }
+          const pageRevision = String(page?.catalog_revision || '');
+          if (catalogRevision === null) catalogRevision = pageRevision;
+          else if (catalogRevision !== pageRevision) {
+            throw new Error('Knowledge map catalog revision changed while loading.');
+          }
+          if (!firstPage) firstPage = page;
+          nodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
+          edges.push(...(Array.isArray(page?.edges) ? page.edges : []));
+          relationshipsIncomplete = relationshipsIncomplete
+            || page?.edge_truncated === true
+            || page?.boundary?.truncated === true;
+          pageCount += 1;
+          if (page?.has_more !== true) break;
+          const nextCursor = String(page?.next_cursor || '').trim();
+          if (!nextCursor || seenCursors.has(nextCursor)) {
+            throw new Error('Knowledge map pagination returned a repeated cursor.');
+          }
+          seenCursors.add(nextCursor);
+          cursor = nextCursor;
+        }
+      } catch (error) {
+        if (!retriedAfterStaleCursor && isCursorStale(error)) {
+          retriedAfterStaleCursor = true;
+          continue;
+        }
+        throw error;
+      }
+      return {
+        ...(firstPage || {}),
+        catalog_revision: catalogRevision || undefined,
+        nodes: dedupeNodes(nodes),
+        edges: dedupeEdges(edges),
+        has_more: false,
+        next_cursor: '',
+        relationships_incomplete: relationshipsIncomplete,
+      };
     }
+  };
+  try {
+    const payload = await loadV2Pages();
     const knowledgeMap = studyKnowledgeMap();
     if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
     lastKnowledgeMapPayload = payload;
@@ -1576,6 +1690,16 @@ async function loadKnowledgeMap(requestId) {
     setKnowledgeMapLoadState('error', formatPluginError(error));
     syncKnowledgeMapContent();
   }
+}
+
+function reloadKnowledgeMapForStage(stage) {
+  const knowledgeMap = studyKnowledgeMap();
+  if (!knowledgeMap.isActive()) return false;
+  const requestId = mapRequestId += 1;
+  setKnowledgeMapLoadState('loading');
+  syncKnowledgeMapContent();
+  void loadKnowledgeMap(requestId, stage);
+  return true;
 }
 
 async function activateKnowledgePracticeWorkspace() {
@@ -2524,12 +2648,18 @@ async function generateQuestion() {
 }
 
 async function evaluateAnswer() {
+  if (!currentQuestion?.question_id || !currentQuestion?.attempt_id) {
+    throw new Error(t('ui.error.question_missing', 'Please generate a practice question first.'));
+  }
+  if (!canEvaluateCurrentQuestion) {
+    throw Object.assign(
+      new Error('ATTEMPT_ALREADY_EVALUATED'),
+      { code: 'ATTEMPT_ALREADY_EVALUATED' },
+    );
+  }
   const answer = answerInput ? answerInput.value.trim() : '';
   if (!answer && !answerInputImageValue) {
     throw new Error(t('ui.error.missing_answer', 'Please enter an answer first.'));
-  }
-  if (!currentQuestion?.question_id || !currentQuestion?.attempt_id) {
-    throw new Error(t('ui.error.question_missing', 'Please generate a practice question first.'));
   }
   setStatus(t('ui.status.evaluating_answer', 'Evaluating answer...'));
   const args = {
@@ -2559,6 +2689,8 @@ async function evaluateAnswer() {
     data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
   ].filter(Boolean);
   setReply(replyLines.join('\n\n') || data.summary || '');
+  canEvaluateCurrentQuestion = false;
+  if (evaluateAnswerBtn) evaluateAnswerBtn.disabled = true;
   await refreshStatus({ updateReply: false });
 }
 
@@ -2689,7 +2821,7 @@ function bindButton(button, handler) {
       setStatus(t('ui.status.error', 'Error'));
       setReply([error?.n,formatPluginError(error)].filter(Boolean).join('\n\n'));
     } finally {
-      button.disabled = false;
+      button.disabled = button === evaluateAnswerBtn && !canEvaluateCurrentQuestion;
     }
   });
 }

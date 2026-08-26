@@ -13,6 +13,7 @@ from .models import (
     StudyConfig,
     StudyState,
     TutorReply,
+    public_current_question_payload,
     public_screen_classification_payload,
 )
 
@@ -29,6 +30,16 @@ def build_status_payload(
 ) -> dict[str, Any]:
     knowledge_payload = knowledge or {}
     state.clear_expired_ocr_session()
+    current_question = public_current_question_payload(state.current_question)
+    if not current_question:
+        current_question_state = "none"
+        can_evaluate_current_question = False
+    elif bool((state.current_question or {}).get("attempt_evaluated")):
+        current_question_state = "evaluated"
+        can_evaluate_current_question = False
+    else:
+        current_question_state = "pending"
+        can_evaluate_current_question = bool(current_question.get("question_id") and current_question.get("attempt_id"))
     return {
         "status": state.status,
         "is_first_run": bool(is_first_run),
@@ -41,13 +52,14 @@ def build_status_payload(
         "session_suggestions": copy.deepcopy(state.session_suggestions),
         "mode_lock_until": state.mode_lock_until,
         "last_error": state.last_error,
+        "current_question": current_question,
+        "current_question_state": current_question_state,
+        "can_evaluate_current_question": can_evaluate_current_question,
         "last_started_at": state.last_started_at,
         "has_ocr_text": bool(state.last_ocr_text.strip()),
         "last_ocr_at": state.last_ocr_at,
         "last_captured_question_id": state.last_captured_question_id,
-        "screen_classification": public_screen_classification_payload(
-            state.last_screen_classification
-        ),
+        "screen_classification": public_screen_classification_payload(state.last_screen_classification),
         "recent_screen_classifications": [
             public_screen_classification_payload(item)
             for item in state.recent_screen_classifications
@@ -62,12 +74,8 @@ def build_status_payload(
         "last_session_summary_at": state.last_session_summary_at,
         "checkpoint": copy.deepcopy(state.checkpoint),
         "dependencies": copy.deepcopy(state.dependency_status),
-        "knowledge_summary": copy.deepcopy(
-            knowledge_payload.get("knowledge_summary") or {}
-        ),
-        "knowledge_quality_summary": copy.deepcopy(
-            knowledge_payload.get("knowledge_quality_summary") or {}
-        ),
+        "knowledge_summary": copy.deepcopy(knowledge_payload.get("knowledge_summary") or {}),
+        "knowledge_quality_summary": copy.deepcopy(knowledge_payload.get("knowledge_quality_summary") or {}),
         "anonymous_knowledge_stats_summary": copy.deepcopy(
             knowledge_payload.get("anonymous_knowledge_stats_summary") or {}
         ),
@@ -75,9 +83,7 @@ def build_status_payload(
         "review_queue": copy.deepcopy(knowledge_payload.get("review_queue") or []),
         "memory_deck": copy.deepcopy(knowledge_payload.get("memory_deck") or {}),
         "weak_topics": copy.deepcopy(knowledge_payload.get("weak_topics") or []),
-        "mastery_overview": copy.deepcopy(
-            knowledge_payload.get("mastery_overview") or []
-        ),
+        "mastery_overview": copy.deepcopy(knowledge_payload.get("mastery_overview") or []),
         "config": config.to_dict(),
         "history": list(history or []),
     }
@@ -94,9 +100,7 @@ def build_dependency_status(config: StudyConfig) -> dict[str, Any]:
             "tesseract": tesseract,
             "dxcam": dxcam,
         }.items()
-        if isinstance(status, dict)
-        and status.get("installed") is False
-        and status.get("can_install")
+        if isinstance(status, dict) and status.get("installed") is False and status.get("can_install")
     ]
     return {
         "rapidocr": rapidocr,
@@ -141,9 +145,7 @@ def _build_ocr_readiness(
     else:
         selected_status = None
 
-    selected_backend_ready = bool(
-        selected_status is not None and selected_status.get("installed") is True
-    )
+    selected_backend_ready = bool(selected_status is not None and selected_status.get("installed") is True)
     ready = enabled and selected_backend_ready and capture_ready
 
     if not enabled:
@@ -158,11 +160,7 @@ def _build_ocr_readiness(
                 "broken_runtime": "rapidocr_runtime_broken",
             }.get(detail, "rapidocr_runtime_missing")
         else:
-            diagnostic = (
-                "tesseract_languages_missing"
-                if detail == "missing_languages"
-                else "tesseract_missing"
-            )
+            diagnostic = "tesseract_languages_missing" if detail == "missing_languages" else "tesseract_missing"
     elif capture_backend not in {"dxcam", "mss", "pyautogui", "printwindow"}:
         diagnostic = "unsupported_capture_backend"
     elif not capture_ready:
@@ -205,9 +203,7 @@ def _inspect_tesseract(config: StudyConfig) -> dict[str, Any]:
     )
 
 
-def _available_tesseract_languages(
-    detected: Path | None, target_dir: Path | None
-) -> set[str]:
+def _available_tesseract_languages(detected: Path | None, target_dir: Path | None) -> set[str]:
     tessdata_dirs = []
     if detected is not None:
         try:
@@ -219,14 +215,11 @@ def _available_tesseract_languages(
                 timeout=5.0,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            output = "\n".join(
-                part for part in (completed.stdout, completed.stderr) if part
-            )
+            output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
             languages = {
                 line.strip()
                 for line in output.splitlines()
-                if line.strip()
-                and not line.lower().startswith("list of available languages")
+                if line.strip() and not line.lower().startswith("list of available languages")
             }
             if completed.returncode != 0:
                 _LOGGER.warning(
@@ -269,9 +262,7 @@ def _inspect_dxcam() -> dict[str, Any]:
         "detected_path": origin,
         "package_name": "dxcam",
         "target_dir": "current_python_environment",
-        "detail": "installed"
-        if installed
-        else ("missing" if supported else "unsupported_platform"),
+        "detail": "installed" if installed else ("missing" if supported else "unsupported_platform"),
         "runtime_error": "",
     }
 

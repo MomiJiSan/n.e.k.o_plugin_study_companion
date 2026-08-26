@@ -78,6 +78,13 @@ def _write_topics(store) -> None:
     )
 
 
+def _projection_is_dirty(store) -> bool:
+    row = store._require_conn().execute(
+        "SELECT dirty FROM knowledge_edge_projection_state WHERE projection_key = 'active'"
+    ).fetchone()
+    return bool(row and int(row["dirty"] or 0))
+
+
 def test_projection_rebuild_persists_canonical_edges_and_active_revision(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -153,6 +160,143 @@ def test_failed_rebuild_keeps_previous_active_revision_and_edges(
             store.rebuild_knowledge_edge_projection()
         assert store.get_knowledge_edge_revision() == previous
         assert store.list_knowledge_edges() == previous_edges
+    finally:
+        store.close()
+
+
+def test_dirty_runtime_topic_rebuilds_before_map_read_and_stales_old_cursor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, edges_module = _load_store(monkeypatch, "_knowledge_edges_dirty_runtime")
+    store = _store(tmp_path, Store)
+    try:
+        _write_topics(store)
+        store.rebuild_knowledge_edge_projection()
+        first = store.query_knowledge_map_page(stage="senior_high", subject="math", page_size=1)
+        assert first["next_cursor"]
+        prior_revision = first["catalog_revision"]
+
+        store.upsert_topic(
+            {
+                "id": "runtime-dependent",
+                "name": "Runtime dependent",
+                "subject": "math",
+                "stage": "senior_high",
+                "chapter": "algebra",
+                "unit": "one",
+                "prerequisites": [{"id": "base", "reason": "needs base"}],
+                "related": [{"id": "application", "relation": "application"}],
+            }
+        )
+        assert _projection_is_dirty(store) is True
+
+        rebuild_calls = 0
+        original_build = edges_module.build_topic_edges
+
+        def count_build(topics):
+            nonlocal rebuild_calls
+            rebuild_calls += 1
+            return original_build(topics)
+
+        monkeypatch.setattr(edges_module, "build_topic_edges", count_build)
+        with pytest.raises(ValueError, match="knowledge_map_cursor_stale"):
+            store.query_knowledge_map_page(
+                stage="senior_high",
+                subject="math",
+                page_size=1,
+                cursor=first["next_cursor"],
+            )
+        assert rebuild_calls == 1
+        assert _projection_is_dirty(store) is False
+        assert store.get_knowledge_edge_revision()["catalog_revision"] != prior_revision
+
+        complete = store.query_knowledge_map_page(stage="senior_high", subject="math", page_size=100)
+        assert rebuild_calls == 1
+        assert {
+            (edge["from"], edge["to"], edge["relation"])
+            for edge in complete["edges"]
+        } >= {
+            ("base", "runtime-dependent", "prerequisite"),
+            ("runtime-dependent", "application", "application"),
+        }
+    finally:
+        store.close()
+
+
+def test_dirty_projection_failure_keeps_active_edges_and_rejects_map_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, edges_module = _load_store(monkeypatch, "_knowledge_edges_dirty_failure")
+    store = _store(tmp_path, Store)
+    try:
+        _write_topics(store)
+        previous = store.rebuild_knowledge_edge_projection()
+        previous_edges = store.list_knowledge_edges()
+        store.upsert_topic(
+            {
+                "id": "runtime-dependent",
+                "name": "Runtime dependent",
+                "subject": "math",
+                "stage": "senior_high",
+                "chapter": "algebra",
+                "prerequisites": [{"id": "base"}],
+            }
+        )
+        monkeypatch.setattr(
+            edges_module,
+            "build_topic_edges",
+            lambda _topics: (_ for _ in ()).throw(RuntimeError("injected projection failure")),
+        )
+        with pytest.raises(ValueError, match="knowledge_edge_projection_rebuild_failed"):
+            store.query_knowledge_map_page(stage="senior_high", subject="math")
+        current = store.get_knowledge_edge_revision()
+        assert current["catalog_revision"] == previous["catalog_revision"]
+        assert _projection_is_dirty(store) is True
+        assert store.list_knowledge_edges() == previous_edges
+    finally:
+        store.close()
+
+
+def test_many_batch_topic_writes_trigger_one_lazy_projection_rebuild(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, edges_module = _load_store(monkeypatch, "_knowledge_edges_batch_dirty")
+    store = _store(tmp_path, Store)
+    try:
+        _write_topics(store)
+        store.rebuild_knowledge_edge_projection()
+        conn = store._require_conn()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for index in range(3):
+                store._batch_upsert_topic(
+                    conn,
+                    {
+                        "id": f"batch-{index}",
+                        "name": f"Batch {index}",
+                        "subject": "math",
+                        "stage": "senior_high",
+                        "chapter": "algebra",
+                        "prerequisites": [{"id": "base"}],
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+        rebuild_calls = 0
+        original_build = edges_module.build_topic_edges
+
+        def count_build(topics):
+            nonlocal rebuild_calls
+            rebuild_calls += 1
+            return original_build(topics)
+
+        monkeypatch.setattr(edges_module, "build_topic_edges", count_build)
+        store.query_knowledge_map_page(stage="senior_high", subject="math")
+        store.query_knowledge_map_page(stage="senior_high", subject="math")
+        assert rebuild_calls == 1
     finally:
         store.close()
 

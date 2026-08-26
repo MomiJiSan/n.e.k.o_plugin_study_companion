@@ -61,9 +61,7 @@ def test_state_serialization_keeps_ocr_runtime_only_and_sanitizes_classification
         "screen_type": "question",
         "signals": {"question_hits": ["question"]},
     }
-    assert persisted["recent_screen_classifications"] == [
-        {"screen_type": "reading"}
-    ]
+    assert persisted["recent_screen_classifications"] == [{"screen_type": "reading"}]
 
 
 def test_state_initialization_clears_legacy_ocr_payloads(
@@ -94,9 +92,7 @@ def test_status_payload_never_returns_ocr_text_or_classifier_identifiers(
         },
     )
     captured_at = datetime.now(timezone.utc).isoformat()
-    state.set_ocr_session_text(
-        "private OCR question", captured_at=captured_at
-    )
+    state.set_ocr_session_text("private OCR question", captured_at=captured_at)
     state.last_captured_question_id = "captured-1"
 
     payload = service.build_status_payload(config=models.StudyConfig(), state=state)
@@ -108,13 +104,55 @@ def test_status_payload_never_returns_ocr_text_or_classifier_identifiers(
     assert payload["screen_classification"] == {"screen_type": "question"}
 
 
+def test_status_payload_restores_only_safe_current_question_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package = _load_models(monkeypatch, "_status_current_question")
+    service = importlib.import_module(f"{package}.service")
+    state = models.StudyState(
+        current_question={
+            "question": "2 + 2 = ?",
+            "question_id": "question-1",
+            "attempt_id": "attempt-1",
+            "answer": "4",
+            "reference_answer": "4",
+            "accepted_answers": ["4"],
+            "rubric": "private",
+            "solution_steps": ["private"],
+            "target_binding": {"topic_id": "addition"},
+        }
+    )
+
+    payload = service.build_status_payload(config=models.StudyConfig(), state=state)
+
+    assert payload["current_question"] == {
+        "question": "2 + 2 = ?",
+        "question_id": "question-1",
+        "attempt_id": "attempt-1",
+    }
+    assert payload["current_question_state"] == "pending"
+    assert payload["can_evaluate_current_question"] is True
+    for private_field in (
+        "answer",
+        "reference_answer",
+        "accepted_answers",
+        "rubric",
+        "solution_steps",
+        "target_binding",
+    ):
+        assert private_field not in payload["current_question"]
+
+    state.current_question["attempt_evaluated"] = True
+    evaluated = service.build_status_payload(config=models.StudyConfig(), state=state)
+    assert evaluated["current_question_state"] == "evaluated"
+    assert evaluated["can_evaluate_current_question"] is False
+
+
 def test_ocr_buffer_expires_after_thirty_minutes(monkeypatch: pytest.MonkeyPatch) -> None:
     models, _package_name = _load_models(monkeypatch, "_ocr_privacy_ttl")
     captured_at = datetime.now(timezone.utc) - timedelta(minutes=31)
     state = models.StudyState()
-    state.set_ocr_session_text(
-        "private OCR question", captured_at=captured_at.isoformat()
-    )
+    state.set_ocr_session_text("private OCR question", captured_at=captured_at.isoformat())
 
     assert state.clear_expired_ocr_session() is True
     assert state.last_ocr_text == ""

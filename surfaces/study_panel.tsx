@@ -44,6 +44,9 @@ type StudyStatus = {
     next_action?: string;
   };
   last_session_summary?: string;
+  current_question?: GeneratedQuestion;
+  current_question_state?: 'pending' | 'evaluated' | 'none';
+  can_evaluate_current_question?: boolean;
   config?: {
     llm_vision_max_image_px?: number;
   };
@@ -1028,6 +1031,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [activePracticeScope, setActivePracticeScope] = useState<PracticeScope | null>(null);
   const [practiceScopeReviewing, setPracticeScopeReviewing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<GeneratedQuestion | null>(null);
+  const [canEvaluateCurrentQuestion, setCanEvaluateCurrentQuestion] = useState(false);
   const [answer, setAnswer] = useState('');
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1160,6 +1164,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     const config = data.config && typeof data.config === 'object'
       ? data.config as Record<string, unknown>
       : undefined;
+    const currentQuestion = data.current_question && typeof data.current_question === 'object'
+      ? data.current_question as Record<string, unknown>
+      : undefined;
+    const currentQuestionState = String(data.current_question_state || '').trim();
     return {
       status: typeof data.status === 'string' ? data.status : undefined,
       active_mode: typeof data.active_mode === 'string' ? data.active_mode : undefined,
@@ -1178,6 +1186,21 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         next_action: typeof evaluation.next_action === 'string' ? evaluation.next_action : undefined,
       } : undefined,
       last_session_summary: typeof data.last_session_summary === 'string' ? data.last_session_summary : undefined,
+      current_question: currentQuestion ? {
+        question: typeof currentQuestion.question === 'string' ? currentQuestion.question : undefined,
+        hint: typeof currentQuestion.hint === 'string' ? currentQuestion.hint : undefined,
+        difficulty: typeof currentQuestion.difficulty === 'number' ? currentQuestion.difficulty : undefined,
+        question_id: typeof currentQuestion.question_id === 'string' ? currentQuestion.question_id : undefined,
+        attempt_id: typeof currentQuestion.attempt_id === 'string' ? currentQuestion.attempt_id : undefined,
+        selected_topic_id: typeof currentQuestion.selected_topic_id === 'string' ? currentQuestion.selected_topic_id : undefined,
+        selected_topic_name: typeof currentQuestion.selected_topic_name === 'string' ? currentQuestion.selected_topic_name : undefined,
+      } : undefined,
+      current_question_state: currentQuestionState === 'pending' || currentQuestionState === 'evaluated' || currentQuestionState === 'none'
+        ? currentQuestionState
+        : undefined,
+      can_evaluate_current_question: typeof data.can_evaluate_current_question === 'boolean'
+        ? data.can_evaluate_current_question
+        : undefined,
       config: config ? {
         llm_vision_max_image_px: typeof config.llm_vision_max_image_px === 'number'
           ? config.llm_vision_max_image_px
@@ -1199,6 +1222,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       return t(
         'ui.error.evaluation_inconsistent',
         'The answer evaluation was inconsistent. Please try evaluating again.',
+      );
+    }
+    if (code === 'ATTEMPT_ALREADY_EVALUATED') {
+      return t(
+        'ui.error.attempt_already_evaluated',
+        'This question has already been submitted. Please generate the next question.',
       );
     }
     if (code === 'QUESTION_GENERATION_IN_PROGRESS' || code === 'ANSWER_EVALUATION_IN_PROGRESS') {
@@ -1317,6 +1346,17 @@ export default function StudyPanel(props: PluginSurfaceProps) {
 
   function setStatusLine(data: StudyStatus) {
     setStatus({ ...data, active_mode: String(data.active_mode || data.mode || 'companion') });
+    if (data.current_question?.question) {
+      setCurrentQuestion(data.current_question);
+      setQuestion(data.current_question.question);
+      setCanEvaluateCurrentQuestion(data.can_evaluate_current_question === true);
+      if (data.current_question_state === 'evaluated' && data.last_answer_evaluation?.feedback) {
+        setReply(data.last_answer_evaluation.feedback);
+      }
+    } else if (data.current_question_state === 'none') {
+      setCurrentQuestion(null);
+      setCanEvaluateCurrentQuestion(false);
+    }
   }
 
   function setTextImageValue(value: string) {
@@ -2168,6 +2208,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       }
       setQuestion(data.question || '');
       setCurrentQuestion(data);
+      setCanEvaluateCurrentQuestion(true);
       setPracticeScopeReviewing(false);
       if (context.practice_scope?.display_path) {
         applyActivePracticeScope(context.practice_scope);
@@ -2193,6 +2234,13 @@ export default function StudyPanel(props: PluginSurfaceProps) {
 
   async function evaluateAnswer() {
     if (isInteractionBusy()) {
+      return;
+    }
+    if (!canEvaluateCurrentQuestion) {
+      setReply(t(
+        'ui.error.attempt_already_evaluated',
+        'This question has already been submitted. Please generate the next question.',
+      ));
       return;
     }
     if (!answer.trim() && !answerImage) {
@@ -2253,6 +2301,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
       ].filter(Boolean);
       setReply(replyParts.join('\n\n') || data.summary || '');
+      setCanEvaluateCurrentQuestion(false);
       await refresh(controller.signal, { updateReply: false });
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -2848,7 +2897,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         <div className="study-panel__paste-error" role="alert">{answerPasteError}</div>
       ) : null}
       <div className="study-panel__actions">
-        <button type="button" disabled={interactionBusy} onClick={interactionBusy ? undefined : evaluateAnswer}>
+        <button type="button" disabled={interactionBusy || !canEvaluateCurrentQuestion} onClick={interactionBusy || !canEvaluateCurrentQuestion ? undefined : evaluateAnswer}>
           {interactionBusy ? t('ui.button.loading', 'Loading...') : t('ui.button.evaluate_answer', 'Evaluate Answer')}
         </button>
         <button type="button" disabled={interactionBusy} onClick={interactionBusy ? undefined : summarizeSession}>
