@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Mapping
+from types import SimpleNamespace
 
+from .adaptive_learning.assessment import AssessmentEngine, AssessmentRequest
+from .adaptive_learning.deterministic_evaluators import (
+    ExactShortAnswerEvaluator,
+    MathExpressionEvaluator,
+    NumericToleranceEvaluator,
+)
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
     Err,
@@ -26,6 +33,97 @@ from .tutor_lifecycle import (
 
 
 class _TutorAnswerEntriesMixin:
+    def _deterministic_assessment_flags(self) -> dict[str, bool]:
+        """Read only explicit opt-in assessment switches from runtime config."""
+
+        assessment = getattr(getattr(self, "_cfg", None), "assessment", None)
+        return {
+            "exact_short_answer_enabled": getattr(
+                assessment, "exact_short_answer_enabled", False
+            )
+            is True,
+            "numeric_tolerance_enabled": getattr(
+                assessment, "numeric_tolerance_enabled", False) is True,
+            "math_expression_enabled": getattr(
+                assessment, "math_expression_enabled", False) is True,
+        }
+
+    async def _try_deterministic_assessment(
+        self,
+        *,
+        question: str,
+        answer: str,
+        expected_answer: str,
+        mode: str,
+        question_payload: Mapping[str, object],
+    ) -> object | None:
+        """Return a certain private-answer assessment, otherwise keep the LLM path.
+
+        The request context contains only server-held question fields.  The
+        deterministic decision is intentionally generic so neither expected
+        answers nor parser inputs can enter the public evaluator payload.
+        """
+
+        flags = self._deterministic_assessment_flags()
+        if not any(flags.values()):
+            return None
+        answer_spec = question_payload.get("answer_spec")
+        equivalence_engine = question_payload.get("math_equivalence_engine")
+        decision = await AssessmentEngine(
+            deterministic_evaluators=(
+                ExactShortAnswerEvaluator(),
+                NumericToleranceEvaluator(),
+                MathExpressionEvaluator(),
+            ),
+            feature_flags=flags,
+        ).try_assess(
+            AssessmentRequest(
+                question=question,
+                answer=answer,
+                expected_answer=expected_answer,
+                mode=mode,
+                context={
+                    "question_type": str(
+                        question_payload.get("question_type")
+                        or question_payload.get("type")
+                        or ""
+                    ),
+                    "accepted_answers": question_payload.get("accepted_answers"),
+                    "answer_spec": (
+                        dict(answer_spec)
+                        if isinstance(answer_spec, Mapping)
+                        else {}
+                    ),
+                    "closed_world": question_payload.get("closed_world") is True,
+                    "math_equivalence_engine": (
+                        dict(equivalence_engine)
+                        if isinstance(equivalence_engine, Mapping)
+                        else {}
+                    ),
+                },
+            )
+        )
+        if decision is None:
+            return None
+        payload = decision.as_payload()
+        payload.update(
+            {
+                "evaluator_type": decision.evaluator_type,
+                "evaluator_version": decision.evaluator_version,
+                "confidence": decision.confidence,
+                "fallback_reason": decision.fallback_reason or "",
+            }
+        )
+        return SimpleNamespace(
+            operation=LLM_OPERATION_ANSWER_EVALUATE,
+            input_text=answer,
+            reply=str(payload.get("feedback") or ""),
+            payload=payload,
+            degraded=False,
+            diagnostic="",
+            created_at="",
+        )
+
     def _load_practice_mastery_evidence(
         self, topic_id: str
     ) -> tuple[dict | None, bool]:
@@ -217,7 +315,12 @@ class _TutorAnswerEntriesMixin:
     async def _study_evaluate_answer_impl(
         self, answer: str = "", question: str = "", expected_answer: str = "", **kwargs
     ):
-        if self._agent is None:
+        # Preserve the legacy unavailable-agent result whenever every new
+        # evaluator is disabled.  With an explicit opt-in flag enabled we
+        # continue far enough to allow a certain local assessment.
+        if self._agent is None and not any(
+            self._deterministic_assessment_flags().values()
+        ):
             return Err(SdkError("study tutor agent is not initialized"))
         target_lanlan = self._resolve_study_target_lanlan(kwargs)
         async with self._lock:
@@ -394,6 +497,18 @@ class _TutorAnswerEntriesMixin:
         run_id = self._resolve_current_run_id(kwargs)
         session_id = str(kwargs.get("session_id") or "").strip()
         try:
+            deterministic_reply = await self._try_deterministic_assessment(
+                question=resolved_question,
+                answer=answer_text,
+                expected_answer=resolved_expected,
+                mode=active_mode,
+                question_payload=question_payload,
+            )
+            if deterministic_reply is None and self._agent is None:
+                if reserved_attempt:
+                    await self._clear_attempt_evaluation_reservation(state_attempt_id)
+                    await self._persist_state()
+                return Err(SdkError("study tutor agent is not initialized"))
             tutor_context = await self._build_learning_context(
                 LLM_OPERATION_ANSWER_EVALUATE,
                 input_text=answer_text,
@@ -430,13 +545,15 @@ class _TutorAnswerEntriesMixin:
                     ),
                 },
             )
-            reply = await self._agent.answer_evaluate(
-                question=resolved_question,
-                answer=answer_text,
-                expected_answer=resolved_expected,
-                mode=active_mode,
-                context=tutor_context,
-            )
+            reply = deterministic_reply
+            if reply is None:
+                reply = await self._agent.answer_evaluate(
+                    question=resolved_question,
+                    answer=answer_text,
+                    expected_answer=resolved_expected,
+                    mode=active_mode,
+                    context=tutor_context,
+                )
             evaluation_validation = validate_evaluation(
                 dict(reply.payload or {}), learner_answer=answer_text
             )

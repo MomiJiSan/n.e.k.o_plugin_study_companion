@@ -367,6 +367,41 @@ class AwarenessConfig:
 
 
 @dataclass(slots=True)
+class AssessmentConfig:
+    """Opt-in deterministic assessment routing switches.
+
+    All switches intentionally default to ``False``.  Parsing this section is
+    side-effect free: it neither changes an evaluator nor adjusts any model
+    gateway policy until the answer entry explicitly consults the flags.
+    """
+
+    exact_short_answer_enabled: bool = False
+    numeric_tolerance_enabled: bool = False
+    math_expression_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        # Do not treat strings such as ``"false"`` as truthy configuration.
+        self.exact_short_answer_enabled = (
+            self.exact_short_answer_enabled
+            if isinstance(self.exact_short_answer_enabled, bool)
+            else False
+        )
+        self.numeric_tolerance_enabled = (
+            self.numeric_tolerance_enabled
+            if isinstance(self.numeric_tolerance_enabled, bool)
+            else False
+        )
+        self.math_expression_enabled = (
+            self.math_expression_enabled
+            if isinstance(self.math_expression_enabled, bool)
+            else False
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class StudyConfig:
     mode: StudyMode = MODE_COMPANION
     default_mode: StudyMode = MODE_COMPANION
@@ -411,6 +446,7 @@ class StudyConfig:
     checkin: CheckinConfig = field(default_factory=CheckinConfig)
     communication: CommunicationConfig = field(default_factory=CommunicationConfig)
     awareness: AwarenessConfig = field(default_factory=AwarenessConfig)
+    assessment: AssessmentConfig = field(default_factory=AssessmentConfig)
 
     def __post_init__(self) -> None:
         self.mode = normalize_mode(self.mode)
@@ -497,6 +533,12 @@ class StudyConfig:
                 AwarenessConfig(**self.awareness)
                 if isinstance(self.awareness, dict)
                 else AwarenessConfig()
+            )
+        if not isinstance(self.assessment, AssessmentConfig):
+            self.assessment = (
+                AssessmentConfig(**self.assessment)
+                if isinstance(self.assessment, dict)
+                else AssessmentConfig()
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -736,6 +778,9 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
         study.get("awareness")
         if isinstance(study.get("awareness"), dict)
         else raw.get("awareness") if isinstance(raw.get("awareness"), dict) else {}
+    )
+    assessment = (
+        raw.get("assessment") if isinstance(raw.get("assessment"), dict) else {}
     )
     communication = (
         study_companion.get("communication")
@@ -1091,6 +1136,17 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
                 "distraction_detection",
                 True,
                 "awareness_distraction_detection",
+            ),
+        ),
+        assessment=AssessmentConfig(
+            exact_short_answer_enabled=_bool(
+                assessment, "exact_short_answer_enabled", False
+            ),
+            numeric_tolerance_enabled=_bool(
+                assessment, "numeric_tolerance_enabled", False
+            ),
+            math_expression_enabled=_bool(
+                assessment, "math_expression_enabled", False
             ),
         ),
     )

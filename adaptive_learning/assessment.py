@@ -9,7 +9,7 @@ inputs, outputs, errors, or model-routing behaviour.
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeAlias
 
@@ -45,6 +45,22 @@ class Assessor(Protocol):
     """Protocol used by ``AssessmentEngine``; no evaluator policy is implied."""
 
     async def assess(self, request: AssessmentRequest) -> AssessmentDecision: ...
+
+
+class DeterministicAssessor(Protocol):
+    """An optional evaluator that must decline uncertain inputs.
+
+    Deterministic evaluators are deliberately separate from ``Assessor``.  A
+    ``None`` result is a normal, safe fall-through to the existing LLM rubric
+    rather than an assessment error or a negative verdict.
+    """
+
+    async def try_assess(
+        self,
+        request: AssessmentRequest,
+        *,
+        feature_flags: Mapping[str, Any],
+    ) -> AssessmentDecision | None: ...
 
 
 AssessmentDelegate: TypeAlias = Callable[
@@ -92,9 +108,20 @@ class AssessmentEngine:
     becomes active only when a future entry explicitly calls ``assess``.
     """
 
-    def __init__(self, default_evaluator: Assessor | None = None) -> None:
+    def __init__(
+        self,
+        default_evaluator: Assessor | None = None,
+        *,
+        deterministic_evaluators: Sequence[DeterministicAssessor] = (),
+        feature_flags: Mapping[str, Any] | None = None,
+    ) -> None:
         self._evaluators: dict[str, Assessor] = {}
         self._default_evaluator = default_evaluator
+        # Keep a private copy so later caller mutations cannot silently turn a
+        # feature on during an evaluation.  Absence means every deterministic
+        # evaluator is disabled.
+        self._deterministic_evaluators = tuple(deterministic_evaluators)
+        self._feature_flags = dict(feature_flags or {})
 
     def register(self, name: str, evaluator: Assessor) -> None:
         normalized_name = str(name or "").strip()
@@ -110,6 +137,24 @@ class AssessmentEngine:
     ) -> AssessmentDecision:
         evaluator = self._resolve(evaluator_name)
         return await evaluator.assess(request)
+
+    async def try_assess(self, request: AssessmentRequest) -> AssessmentDecision | None:
+        """Return the first certain deterministic result, else ``None``.
+
+        This intentionally never invokes the default evaluator: the answer
+        entry owns the existing LLM call, repair, lifecycle, and error path.
+        Consequently an engine with no deterministic evaluators (the default)
+        is a strict no-op.
+        """
+
+        for evaluator in self._deterministic_evaluators:
+            decision = await evaluator.try_assess(
+                request,
+                feature_flags=self._feature_flags,
+            )
+            if decision is not None:
+                return decision
+        return None
 
     def _resolve(self, evaluator_name: str | None) -> Assessor:
         if evaluator_name is not None:
