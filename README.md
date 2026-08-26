@@ -55,7 +55,12 @@ Frontend DOM tests additionally require Node.js 22 and the locked test dependenc
 cd tests/frontend
 npm ci
 cd ../..
-uv run python -m pytest tests/test_workspace_frontend.py tests/test_notebook_frontend.py -q
+uv run python -m pytest \
+  tests/test_workspace_frontend.py \
+  tests/test_notebook_frontend.py \
+  tests/test_scanned_pdf_frontend.py \
+  tests/test_scanned_pdf_surface.py \
+  -q
 ```
 
 From the N.E.K.O repository root:
