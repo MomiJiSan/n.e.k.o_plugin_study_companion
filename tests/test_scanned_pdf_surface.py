@@ -19,17 +19,9 @@ def _resolve_sucrase() -> Path | None:
     override = os.environ.get("STUDY_COMPANION_SUCRASE_PATH", "").strip()
     if override:
         return Path(override)
-    relative_candidates = (
-        Path("node_modules/sucrase"),
-        Path("frontend/plugin-manager/node_modules/sucrase"),
-        Path("N.E.K.O/frontend/plugin-manager/node_modules/sucrase"),
-        Path("neko/frontend/plugin-manager/node_modules/sucrase"),
-    )
-    for base in (ROOT, *ROOT.parents):
-        for relative in relative_candidates:
-            candidate = base / relative
-            if candidate.is_dir():
-                return candidate
+    candidate = ROOT / "tests" / "frontend" / "node_modules" / "sucrase"
+    if candidate.is_dir():
+        return candidate
     return None
 
 
