@@ -225,7 +225,14 @@ async def test_gateway_uses_sync_config_and_quota_fallbacks(
     allowed, reservation = await gateway.reserve_optional_agent_call("optional")
     assert allowed is False
     assert reservation is not None and reservation.remaining_calls == 1
-    await gateway._reserve_agent_quota("required")
+    runtime = await gateway.resolve_runtime("agent")
+    result = await gateway.call(
+        [{"role": "user", "content": "hello"}],
+        operation="required",
+        deadline=time.monotonic() + 1,
+        runtime=runtime,
+    )
+    assert result.text == "native result"
 
 
 class _GenericClient:
@@ -246,8 +253,26 @@ class _GenericClient:
             raise self.close_error
 
 
+class _BlockingClient:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.closed = 0
+
+    async def ainvoke(self, _messages: Any) -> Any:
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
 @pytest.mark.asyncio
-async def test_gateway_generic_success_quota_reservation_and_cleanup(
+async def test_gateway_generic_success_consumes_quota_and_cleans_up(
     gateway_env: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = gateway_env.module
@@ -272,13 +297,11 @@ async def test_gateway_generic_success_quota_reservation_and_cleanup(
 
     monkeypatch.setattr(module, "create_chat_llm_async", factory)
     gateway = module.StudyModelGateway(logger=_Logger())
-    reservation = module.AgentQuotaReservation(1)
     result = await gateway.call(
         [{"role": "user", "content": "hello"}],
         operation="explain",
         deadline=time.monotonic() + 1,
         runtime=_runtime(module),
-        quota_reservation=reservation,
     )
 
     assert result.text == "model answer"
@@ -286,8 +309,7 @@ async def test_gateway_generic_success_quota_reservation_and_cleanup(
     assert result.reasoning_tokens == 2
     assert result.output_limit_reached is True
     assert result.termination_unknown is False
-    assert reservation.remaining_calls == 0
-    assert gateway_env.manager.consumed == []
+    assert gateway_env.manager.consumed == [("study_companion:explain", 1)]
     assert factory_calls[0]["max_completion_tokens"] == 123
     assert factory_calls[0]["max_retries"] == 0
     assert gateway_env.token_tracker.entered == ["agent"]
@@ -335,7 +357,7 @@ async def test_gateway_native_success_and_error_mapping(gateway_env: Any) -> Non
 
 
 @pytest.mark.asyncio
-async def test_gateway_dependency_validation_timeout_cancellation_and_degradation(
+async def test_gateway_dependency_validation_timeout_cancellation_and_cleanup(
     gateway_env: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = gateway_env.module
@@ -378,10 +400,9 @@ async def test_gateway_dependency_validation_timeout_cancellation_and_degradatio
         )
     assert raised.value.diagnostic == "provider_unavailable"
 
-    timeout_client = _GenericClient(error=asyncio.TimeoutError())
-    monkeypatch.setattr(module, "create_chat_llm_async", lambda **_kwargs: None)
+    timeout_client = _BlockingClient()
 
-    async def timeout_factory(**_kwargs: Any) -> _GenericClient:
+    async def timeout_factory(**_kwargs: Any) -> _BlockingClient:
         return timeout_client
 
     monkeypatch.setattr(module, "create_chat_llm_async", timeout_factory)
@@ -389,27 +410,35 @@ async def test_gateway_dependency_validation_timeout_cancellation_and_degradatio
         await gateway.call(
             messages,
             operation="explain",
-            deadline=time.monotonic() + 1,
+            deadline=time.monotonic() + 0.05,
             runtime=_runtime(module),
             quota_reservation=module.AgentQuotaReservation(1),
         )
     assert raised.value.diagnostic == "timeout"
+    assert timeout_client.started.is_set()
+    assert timeout_client.cancelled.is_set()
     assert timeout_client.closed == 1
 
-    canceled_client = _GenericClient(error=asyncio.CancelledError())
+    canceled_client = _BlockingClient()
 
-    async def canceled_factory(**_kwargs: Any) -> _GenericClient:
+    async def canceled_factory(**_kwargs: Any) -> _BlockingClient:
         return canceled_client
 
     monkeypatch.setattr(module, "create_chat_llm_async", canceled_factory)
-    with pytest.raises(asyncio.CancelledError):
-        await gateway.call(
+    call_task = asyncio.create_task(
+        gateway.call(
             messages,
             operation="explain",
             deadline=time.monotonic() + 1,
             runtime=_runtime(module),
             quota_reservation=module.AgentQuotaReservation(1),
         )
+    )
+    await asyncio.wait_for(canceled_client.started.wait(), timeout=1.0)
+    call_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call_task
+    assert canceled_client.cancelled.is_set()
     assert canceled_client.closed == 1
 
 
@@ -460,7 +489,12 @@ async def test_gateway_maps_provider_errors_empty_response_and_quota_exhaustion(
 
     gateway_env.manager.allow_quota = False
     with pytest.raises(module.StudyModelError) as raised:
-        await gateway._reserve_agent_quota("required")
+        await gateway.call(
+            [{"role": "user", "content": "hello"}],
+            operation="required",
+            deadline=time.monotonic() + 1,
+            runtime=_runtime(module),
+        )
     assert raised.value.diagnostic == "agent_quota_exceeded"
 
     gateway_env.manager.reserve_count = 0
@@ -479,7 +513,12 @@ async def test_gateway_reports_missing_configuration_manager(
         await gateway.resolve_runtime("agent")
     assert raised.value.diagnostic == "provider_unavailable"
     with pytest.raises(module.StudyModelError) as raised:
-        await gateway._reserve_agent_quota("required")
+        await gateway.call(
+            [{"role": "user", "content": "hello"}],
+            operation="required",
+            deadline=time.monotonic() + 1,
+            runtime=_runtime(module),
+        )
     assert raised.value.diagnostic == "provider_unavailable"
 
 
@@ -490,6 +529,24 @@ def transport_module(monkeypatch: pytest.MonkeyPatch) -> Any:
     package.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, package_name, package)
     return importlib.import_module(f"{package_name}.qwen_compatible_transport")
+
+
+class _BlockingHttpTransport(httpx.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.closed = 0
+
+    async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+    async def aclose(self) -> None:
+        self.closed += 1
 
 
 @pytest.mark.asyncio
@@ -652,21 +709,29 @@ async def test_compatible_transport_invalid_json_empty_timeout_and_cancellation(
         await empty.chat_completions(**kwargs)
     assert raised.value.diagnostic == "provider_unavailable"
 
-    async def timeout_handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ReadTimeout("fake timeout", request=request)
-
+    blocking_timeout_port = _BlockingHttpTransport()
     timeout_transport = transport_module.QwenCompatibleTransport(
-        transport=httpx.MockTransport(timeout_handler)
+        transport=blocking_timeout_port
     )
     with pytest.raises(transport_module.QwenCompatibleTransportError) as raised:
-        await timeout_transport.chat_completions(**kwargs)
+        await timeout_transport.chat_completions(
+            **{**kwargs, "timeout_seconds": 0.05}
+        )
     assert raised.value.diagnostic == "timeout"
+    assert blocking_timeout_port.started.is_set()
+    assert blocking_timeout_port.cancelled.is_set()
+    assert blocking_timeout_port.closed == 1
 
-    async def cancel_handler(_request: httpx.Request) -> httpx.Response:
-        raise asyncio.CancelledError
-
+    blocking_cancel_port = _BlockingHttpTransport()
     cancel_transport = transport_module.QwenCompatibleTransport(
-        transport=httpx.MockTransport(cancel_handler)
+        transport=blocking_cancel_port
     )
+    transport_task = asyncio.create_task(
+        cancel_transport.chat_completions(**kwargs)
+    )
+    await asyncio.wait_for(blocking_cancel_port.started.wait(), timeout=1.0)
+    transport_task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await cancel_transport.chat_completions(**kwargs)
+        await transport_task
+    assert blocking_cancel_port.cancelled.is_set()
+    assert blocking_cancel_port.closed == 1

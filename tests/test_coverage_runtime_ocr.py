@@ -4,6 +4,7 @@ import importlib
 import importlib.machinery
 import sys
 import time
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -225,25 +226,25 @@ def test_lightweight_capture_success_change_detection_and_activity(ocr_module: A
         pipeline.close()
 
 
-class _TimeoutFuture:
-    def __init__(self) -> None:
-        self.cancelled = False
+class _TrackedFuture(Future[Any]):
+    def __init__(self, *, running: bool) -> None:
+        super().__init__()
+        self.cancel_attempts = 0
+        if running:
+            assert self.set_running_or_notify_cancel() is True
 
-    def result(self, timeout: float) -> Any:
-        assert timeout in {3.0, 5.0}
-        raise TimeoutError("fake port timeout")
-
-    def cancel(self) -> None:
-        self.cancelled = True
+    def cancel(self) -> bool:
+        self.cancel_attempts += 1
+        return super().cancel()
 
 
 class _TimeoutExecutor:
     def __init__(self) -> None:
-        self.futures: list[_TimeoutFuture] = []
+        self.futures: list[_TrackedFuture] = []
         self.shutdown_calls: list[bool] = []
 
-    def submit(self, _function: Any, *_args: Any, **_kwargs: Any) -> _TimeoutFuture:
-        future = _TimeoutFuture()
+    def submit(self, _function: Any, *_args: Any, **_kwargs: Any) -> _TrackedFuture:
+        future = _TrackedFuture(running=not self.futures)
         self.futures.append(future)
         return future
 
@@ -270,7 +271,14 @@ def test_lightweight_timeout_degrades_to_jpeg_only(ocr_module: Any) -> None:
         assert snapshot.jpeg_bytes
         assert snapshot.ocr_text_snippet == ""
         assert "ocr_status=ocr_failed" in snapshot.diagnostic
-        assert all(future.cancelled for future in fake_executor.futures)
+        running_future, pending_future = fake_executor.futures
+        assert running_future.cancel_attempts == 1
+        assert running_future.running() is True
+        assert running_future.cancelled() is False
+        assert pending_future.cancel_attempts == 1
+        assert pending_future.cancelled() is True
+        assert pipeline._executor is None
+        assert pipeline._retired_executors == [fake_executor]
         assert fake_executor.shutdown_calls == [False]
     finally:
         pipeline.close()

@@ -188,7 +188,9 @@ def test_chunking_rejects_invalid_budgets(document_modules: Any) -> None:
 
 
 async def _wait_for_terminal(manager: Any, job_id: str, owner_id: str = "owner") -> dict[str, Any]:
-    for _ in range(200):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 1.0
+    while loop.time() < deadline:
         payload = await manager.status(job_id, owner_id=owner_id)
         if payload["status"] != "running":
             return payload
@@ -197,7 +199,7 @@ async def _wait_for_terminal(manager: Any, job_id: str, owner_id: str = "owner")
 
 
 @pytest.mark.asyncio
-async def test_document_job_success_busy_acknowledge_and_callback_degradation(
+async def test_document_job_success_busy_acknowledge_and_callback_failure_isolated(
     document_modules: Any,
 ) -> None:
     jobs = document_modules.jobs
@@ -305,9 +307,15 @@ async def test_document_job_timeout_failure_expiry_and_shutdown(
     assert timed_out["status"] == "failed"
     assert timed_out["diagnostic"] == "timeout"
     assert timed_out["cancellation_source"] == "job_timeout"
-    await asyncio.sleep(0.02)
-    with pytest.raises(jobs.DocumentAnalysisJobError):
-        await manager.status(started["job_id"], owner_id="owner")
+    expiry_deadline = asyncio.get_running_loop().time() + 1.0
+    while True:
+        try:
+            await manager.status(started["job_id"], owner_id="owner")
+        except jobs.DocumentAnalysisJobError:
+            break
+        if asyncio.get_running_loop().time() >= expiry_deadline:
+            raise AssertionError("document job result did not expire")
+        await asyncio.sleep(0.001)
 
     monkeypatch.setattr(jobs, "DOCUMENT_JOB_TIMEOUT_SECONDS", 1.0)
 
