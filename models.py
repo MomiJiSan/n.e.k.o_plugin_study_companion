@@ -427,6 +427,9 @@ class StudyConfig:
     # Empty means that the local asset manager chooses its application default.
     # This field never selects a model, cache policy, or execution device.
     local_models_directory: str = ""
+    # Opt-in relationship evidence for concept explanations only.  The
+    # retrieval implementation remains fail-closed unless this is enabled.
+    knowledge_relation_retrieval_v2_enabled: bool = False
     fsrs_retention_target: float = 0.90
     fsrs_auto_optimize_interval_days: int = 30
     # Applies only to automatic recommended/default targeted-question choices.
@@ -717,6 +720,7 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
     rapidocr = raw.get("rapidocr") if isinstance(raw.get("rapidocr"), dict) else {}
     fsrs = raw.get("fsrs") if isinstance(raw.get("fsrs"), dict) else {}
     contribution = raw.get("knowledge_contribution") if isinstance(raw.get("knowledge_contribution"), dict) else {}
+    knowledge_retrieval = raw.get("knowledge_retrieval") if isinstance(raw.get("knowledge_retrieval"), dict) else {}
     doc_export = raw.get("doc_export") if isinstance(raw.get("doc_export"), dict) else {}
     pomodoro = study.get("pomodoro") if isinstance(study.get("pomodoro"), dict) else {}
     supervision = study.get("supervision") if isinstance(study.get("supervision"), dict) else {}
@@ -874,6 +878,12 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
                 str,
             )
             else ""
+        ),
+        knowledge_relation_retrieval_v2_enabled=_bool(
+            knowledge_retrieval,
+            "relationship_v2_enabled",
+            False,
+            "knowledge_relation_retrieval_v2_enabled",
         ),
         fsrs_retention_target=_clamp(
             _float(fsrs, "retention_target", 0.90, "fsrs_retention_target"),

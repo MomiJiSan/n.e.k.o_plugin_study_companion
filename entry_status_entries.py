@@ -31,6 +31,9 @@ def _settings_config_payload(config: StudyConfig) -> dict:
             "local_models_enabled": config.local_models_enabled,
             "local_models_directory": config.local_models_directory,
         },
+        "knowledge_retrieval": {
+            "relationship_v2_enabled": config.knowledge_relation_retrieval_v2_enabled,
+        },
         "communication": config.communication.to_dict(),
         "doc_export": config.doc_export.to_dict(),
     }
@@ -91,6 +94,11 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
     study = raw.get("study") if isinstance(raw.get("study"), dict) else {}
     ocr = raw.get("ocr_reader") if isinstance(raw.get("ocr_reader"), dict) else {}
     llm = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
+    knowledge_retrieval = (
+        raw.get("knowledge_retrieval")
+        if isinstance(raw.get("knowledge_retrieval"), dict)
+        else {}
+    )
     communication = (
         raw.get("communication")
         if isinstance(raw.get("communication"), dict)
@@ -134,6 +142,11 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         )
     if "local_models_directory" in llm:
         next_values["local_models_directory"] = llm.get("local_models_directory")
+    if "relationship_v2_enabled" in knowledge_retrieval:
+        next_values["knowledge_relation_retrieval_v2_enabled"] = _coerce_bool(
+            knowledge_retrieval.get("relationship_v2_enabled"),
+            current.knowledge_relation_retrieval_v2_enabled,
+        )
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
         next_communication["enabled"] = _coerce_bool(
