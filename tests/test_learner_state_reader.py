@@ -4,6 +4,8 @@ from typing import Any
 
 import pytest
 
+# isort: split
+
 from adaptive_learning.learner_state import (
     DEFAULT_MASTERY_V2_MODEL_VERSION,
     LearnerStateReader,

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+# isort: split
+
 from adaptive_learning.mastery_v2 import (
     DEFAULT_MASTERY_V2_POLICY,
     MASTERY_V2_MODEL_VERSION,
