@@ -115,7 +115,8 @@ def test_shadow_metrics_identify_an_unrelated_cross_subject_edge(monkeypatch) ->
     # The legacy gate stays intentionally unchanged for this PR.
     assert result["passed"] is True
     assert result["expected_link_hit"] is False
-    assert result["unrelated_cross_edge_only"] is True
+    assert result["legacy_unrelated_cross_edge_only"] is True
+    assert result["unrelated_cross_edge_only"] is False
 
 
 def test_direct_script_cli_imports_from_the_repository_root(tmp_path: Path) -> None:

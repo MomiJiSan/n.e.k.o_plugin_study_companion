@@ -898,6 +898,66 @@ def _focused_context_summary(
     }
 
 
+def _build_relationship_model_context(evidence: dict[str, Any] | None) -> dict[str, Any]:
+    """Reduce bounded relationship evidence to the generation contract.
+
+    Relationship retrieval is deliberately separate from focused-topic context:
+    its path may cross subjects and may include intermediary topics.  This
+    adapter only accepts the resolver's bounded path, preserves stored edge
+    direction, and never expands it with graph neighbours or seed records.
+    """
+    source = evidence if isinstance(evidence, dict) else {}
+    if (
+        not source
+        or not bool(source.get("resolved"))
+        or bool(source.get("relationship_unresolved"))
+    ):
+        return {"relationship_unresolved": True}
+
+    endpoints: list[dict[str, str]] = []
+    seen_endpoint_ids: set[str] = set()
+    for endpoint in list(source.get("endpoints") or []):
+        if not isinstance(endpoint, dict) or len(endpoints) >= 2:
+            continue
+        endpoint_id = _text(endpoint.get("id"))
+        label = _text(endpoint.get("label"))
+        subject = _text(endpoint.get("subject"))
+        if not endpoint_id or not label or endpoint_id in seen_endpoint_ids:
+            continue
+        seen_endpoint_ids.add(endpoint_id)
+        endpoints.append({"id": endpoint_id, "label": label, "subject": subject})
+    if len(endpoints) != 2:
+        return {"relationship_unresolved": True}
+
+    path: list[dict[str, str]] = []
+    for edge in list(source.get("path") or []):
+        if not isinstance(edge, dict) or len(path) >= 3:
+            continue
+        from_id = _text(edge.get("from_id") or edge.get("from"))
+        to_id = _text(edge.get("to_id") or edge.get("to"))
+        relation = _normalized_relation(edge.get("relation"))
+        if not from_id or not to_id or from_id == to_id or relation not in _ALLOWED_RELATIONS:
+            continue
+        path.append(
+            {
+                "from_id": from_id,
+                "to_id": to_id,
+                "relation": relation,
+                "reason": _text(edge.get("reason")),
+            }
+        )
+    if not path:
+        return {"relationship_unresolved": True}
+
+    return {
+        "relationship": {
+            "endpoints": endpoints,
+            "path": path,
+            "hop_count": len(path),
+        }
+    }
+
+
 def _build_focused_model_context(
     *,
     selected_id: str,

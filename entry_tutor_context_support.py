@@ -35,7 +35,12 @@ from .entry_common import (
     time,
     utc_now_iso,
 )
-from .knowledge_graph_guidance import build_knowledge_guidance_payload, match_topics
+from .knowledge_graph_guidance import (
+    _build_relationship_model_context,
+    build_knowledge_guidance_payload,
+    match_topics,
+)
+from .knowledge_relation_retrieval import resolve_relationship_evidence
 from .models import public_current_question_payload
 from .target_binding import resolve_existing_target_topic_id
 
@@ -466,6 +471,33 @@ class _TutorContextSupportMixin:
                     semantics=semantics,
                     semantic_status="available",
                 )
+            relationship_evidence: dict[str, Any] | None = None
+            try:
+                relationship_evidence = await asyncio.to_thread(
+                    resolve_relationship_evidence,
+                    topics=topic_items,
+                    query=query,
+                    retrieval_concepts=semantics.retrieval_concepts,
+                    primary_subject=semantics.subject,
+                )
+            except Exception:
+                # Shadow retrieval must never make the established semantic
+                # route unavailable.  The resolver has no user-visible effect
+                # until the opt-in flag below is enabled.
+                relationship_evidence = None
+            relationship_active = (
+                bool(
+                    getattr(
+                        getattr(self, "_cfg", None),
+                        "knowledge_relation_retrieval_v2_enabled",
+                        False,
+                    )
+                )
+                and bool(
+                    isinstance(relationship_evidence, dict)
+                    and relationship_evidence.get("is_relationship_query")
+                )
+            )
             semantic_query = " ".join(
                 part
                 for part in (
@@ -483,29 +515,61 @@ class _TutorContextSupportMixin:
                 limit=5,
             )
             if not matches or int(matches[0].get("score") or 0) < 10:
-                return {}, _knowledge_guidance_outcome(
-                    status="not_matched",
-                    semantics=semantics,
-                    semantic_status="available",
-                )
+                if not relationship_active:
+                    return {}, _knowledge_guidance_outcome(
+                        status="not_matched",
+                        semantics=semantics,
+                        semantic_status="available",
+                    )
+            relationship_endpoints = (
+                relationship_evidence.get("endpoints")
+                if isinstance(relationship_evidence, dict)
+                else []
+            )
+            v2_topic_id = ""
+            if isinstance(relationship_endpoints, list) and relationship_endpoints:
+                first_endpoint = relationship_endpoints[0]
+                if isinstance(first_endpoint, dict):
+                    v2_topic_id = str(first_endpoint.get("id") or "").strip()
+            selected_topic_id = (
+                str(matches[0].get("id") or "")
+                if matches and int(matches[0].get("score") or 0) >= 10
+                else v2_topic_id
+            )
             guidance = await asyncio.to_thread(
                 build_knowledge_guidance_payload,
                 # Match selection remains subject-scoped above.  Build the
                 # selected topic's graph from the complete server-side set so
                 # incident cross-subject edges retain both endpoints.
                 topics=topic_items,
-                topic_id=str(matches[0].get("id") or ""),
+                topic_id=selected_topic_id,
                 query=semantic_query,
                 response_mode=semantics.response_mode,
                 max_depth=3,
                 match_limit=5,
             )
             if not guidance.get("summary", {}).get("matched"):
-                return {}, _knowledge_guidance_outcome(
-                    status="not_matched",
-                    semantics=semantics,
-                    semantic_status="available",
+                if not relationship_active:
+                    return {}, _knowledge_guidance_outcome(
+                        status="not_matched",
+                        semantics=semantics,
+                        semantic_status="available",
+                    )
+                guidance = dict(guidance)
+                summary = dict(guidance.get("summary") or {})
+                summary["matched"] = True
+                guidance["summary"] = summary
+            if relationship_active:
+                relationship_context = _build_relationship_model_context(
+                    relationship_evidence
                 )
+                # Keep the public retrieval payload intact, but mark a compact
+                # generation-only context.  _build_learning_context consumes
+                # this marker only for concept explanation, so selected-topic
+                # practice and every non-explain operation stay on their old
+                # context contract.
+                guidance = dict(guidance)
+                guidance["_relationship_model_context"] = relationship_context
             return guidance, _knowledge_guidance_outcome(
                 status="applied",
                 semantics=semantics,
@@ -752,7 +816,12 @@ class _TutorContextSupportMixin:
         if guidance.get("summary", {}).get("matched"):
             context.public_knowledge_guidance = guidance
             if operation == LLM_OPERATION_CONCEPT_EXPLAIN:
-                context["knowledge_guidance"] = guidance
+                relationship_context = guidance.get("_relationship_model_context")
+                context["knowledge_guidance"] = (
+                    dict(relationship_context)
+                    if isinstance(relationship_context, dict)
+                    else guidance
+                )
             else:
                 model_context = guidance.get("model_context")
                 context["knowledge_guidance"] = (
