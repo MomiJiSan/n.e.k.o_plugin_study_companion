@@ -95,6 +95,7 @@ def _load_document_runtime(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, model_gateway.__name__, model_gateway)
 
     document_analysis = importlib.import_module(f"{PACKAGE_NAME}.document_analysis")
+    document_chunking = importlib.import_module(f"{PACKAGE_NAME}.document_chunking")
     tutor_document = importlib.import_module(
         f"{PACKAGE_NAME}.tutor_llm_agent_document"
     )
@@ -107,21 +108,58 @@ def _load_document_runtime(monkeypatch: pytest.MonkeyPatch):
     return SimpleNamespace(
         context_support=context_support,
         document_analysis=document_analysis,
+        document_chunking=document_chunking,
         document_entries=document_entries,
         tutor_document=tutor_document,
     )
 
 
+def _private_source(analysis_mode: str, sentinel: str) -> str:
+    if analysis_mode == "direct":
+        return (
+            f"{sentinel} direct private source prefix. "
+            "This text must remain runtime-only."
+        )
+    paragraph = (
+        f"{sentinel} chunk-private paragraph. "
+        "Every possible persisted chunk must carry the sentinel. "
+        + "x" * 60
+    )
+    return "\n\n".join(paragraph for _ in range(2_000))
+
+
+def _assert_private_probes_absent(
+    value: object, *, sentinel: str, source: str
+) -> None:
+    serialized = (
+        value
+        if isinstance(value, str)
+        else json.dumps(value, ensure_ascii=False, sort_keys=True)
+    )
+    for probe in (sentinel, source[:32], source[:64]):
+        assert probe not in serialized
+
+
+@pytest.mark.parametrize(
+    ("analysis_mode", "sentinel"),
+    (("direct", "ZXQ-DIR-91"), ("chunked", "ZXQ-CHK-91")),
+)
 def test_document_source_is_absent_from_sqlite_state_and_json_export(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    analysis_mode: str,
+    sentinel: str,
 ) -> None:
     runtime = _load_document_runtime(monkeypatch)
-    source = (
-        "PRIVATE-DOCUMENT-SENTINEL-7f91: This exact source paragraph must remain "
-        "runtime-only and must never enter durable storage or exports."
-    )
-    summary = "A privacy-safe summary of the imported document."
+    source = _private_source(analysis_mode, sentinel)
+    summary = f"A privacy-safe {analysis_mode} analysis result."
+    chunks = runtime.document_chunking.split_document(source, "text/markdown")
+    if analysis_mode == "direct":
+        assert _count_tokens(source) <= runtime.document_chunking.DOCUMENT_DIRECT_MAX_TOKENS
+    else:
+        assert _count_tokens(source) > runtime.document_chunking.DOCUMENT_DIRECT_MAX_TOKENS
+        assert len(chunks) > 1
+        assert all(sentinel in chunk.text for chunk in chunks)
 
     store = StudyStore(tmp_path / "study.db", tmp_path / "seed.json", _Logger())
     store.open()
@@ -129,17 +167,29 @@ def test_document_source_is_absent_from_sqlite_state_and_json_export(
     class Agent:
         def __init__(self) -> None:
             self._logger = _Logger()
-            self.model_messages: list[dict[str, Any]] = []
+            self.model_calls: list[dict[str, Any]] = []
 
         def _new_operation_deadline(self, _operation, _messages) -> float:
             return time.monotonic() + 10
 
-        async def _call_model_result(self, messages, **_kwargs):
-            self.model_messages = list(messages)
-            return SimpleNamespace(text=summary, output_limit_reached=False)
+        async def _call_model_result(self, messages, *, operation, **_kwargs):
+            self.model_calls.append(
+                {"operation": operation, "messages": list(messages)}
+            )
+            text = (
+                f"Privacy-safe chunk memo {len(self.model_calls)}."
+                if operation == "document_chunk_analyze"
+                else summary
+            )
+            return SimpleNamespace(text=text, output_limit_reached=False)
 
         async def document_analyze(self, document):
             return await runtime.tutor_document.document_analyze(self, document)
+
+        def build_document_merge_messages(self, document, chunks, memos):
+            return runtime.tutor_document.build_document_merge_messages(
+                document, chunks, memos
+            )
 
     class Harness(
         runtime.document_entries._DocumentAnalysisJobsEntriesMixin,
@@ -165,47 +215,70 @@ def test_document_source_is_absent_from_sqlite_state_and_json_export(
         async def _persist_state(self) -> None:
             await asyncio.to_thread(self._store.save_state, self._state)
 
-    async def run_document_path() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    async def run_document_path() -> tuple[
+        dict[str, Any], dict[str, Any], list[dict[str, Any]]
+    ]:
         harness = Harness()
-        started = await harness.study_start_document_analysis(
-            document_name="private.md",
-            document_type="text/markdown",
-            document_text=source,
-            analysis_instruction="Summarize without quoting the source.",
-            analysis_kind="general_notes",
-            locale="en",
-        )
-        assert isinstance(started, _Ok)
-        job_id = started.value["job_id"]
-        completed: dict[str, Any] = {}
-        for _ in range(100):
-            status = await harness.study_document_analysis_status(job_id)
-            assert isinstance(status, _Ok)
-            completed = status.value
-            if completed["status"] != "running":
-                break
-            await asyncio.sleep(0.01)
-        await harness._document_job_manager().shutdown()
-        assert completed["status"] == "completed"
-        return completed, harness._agent.model_messages
+        manager = harness._document_job_manager()
+        try:
+            started = await harness.study_start_document_analysis(
+                document_name=f"private-{analysis_mode}.md",
+                document_type="text/markdown",
+                document_text=source,
+                analysis_instruction="Summarize without quoting the source.",
+                analysis_kind="general_notes",
+                locale="en",
+            )
+            assert isinstance(started, _Ok)
+            assert started.value["analysis_mode"] == analysis_mode
+            job_id = started.value["job_id"]
+            job = manager._jobs[job_id]
+            job_task = job.task
+            assert job_task is not None
+            deadline = time.monotonic() + 5.0
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(job_task),
+                    timeout=max(0.0, deadline - time.monotonic()),
+                )
+            except TimeoutError:
+                pytest.fail(
+                    "document analysis job exceeded monotonic deadline: "
+                    f"{job.public_payload()}"
+                )
+            job_state = job.public_payload()
+            if job_state["status"] != "completed":
+                pytest.fail(f"document analysis job did not complete: {job_state}")
+            return dict(job.result), job_state, list(harness._agent.model_calls)
+        finally:
+            await manager.shutdown()
 
     try:
-        completed, model_messages = asyncio.run(run_document_path())
-        model_input = json.dumps(model_messages, ensure_ascii=False)
-        assert source in model_input
-        assert source not in json.dumps(completed, ensure_ascii=False)
+        completed, job_state, model_calls = asyncio.run(run_document_path())
+        model_input = json.dumps(model_calls, ensure_ascii=False)
+        assert sentinel in model_input
+        _assert_private_probes_absent(
+            completed, sentinel=sentinel, source=source
+        )
+        _assert_private_probes_absent(
+            job_state, sentinel=sentinel, source=source
+        )
 
         store.close()
         store.open()
         persisted_state = json.dumps(
             store.get_raw("state"), ensure_ascii=False, sort_keys=True
         )
-        assert source not in persisted_state
+        _assert_private_probes_absent(
+            persisted_state, sentinel=sentinel, source=source
+        )
         exported = store.export_json()
         exported_text = json.dumps(exported, ensure_ascii=False, sort_keys=True)
-        assert source not in exported_text
+        _assert_private_probes_absent(
+            exported_text, sentinel=sentinel, source=source
+        )
         assert exported["interactions"][0]["input_text"].startswith(
-            "[document] private.md"
+            f"[document] private-{analysis_mode}.md"
         )
         assert exported["interactions"][0]["output_text"] == summary
         assert exported["interactions"][0]["metadata"]["source_retained"] is False
@@ -215,4 +288,5 @@ def test_document_source_is_absent_from_sqlite_state_and_json_export(
     sqlite_bytes = b"".join(
         path.read_bytes() for path in sorted(tmp_path.glob("study.db*"))
     )
-    assert source.encode("utf-8") not in sqlite_bytes
+    for probe in (sentinel, source[:32], source[:64]):
+        assert probe.encode("utf-8") not in sqlite_bytes
