@@ -107,6 +107,9 @@ auto_optimize_interval_days = 30
 opt_in = false
 min_sample_count = 3
 
+[knowledge_retrieval]
+relationship_v2_enabled = false
+
 [doc_export]
 enabled = false
 pdf_backend = "reportlab"
