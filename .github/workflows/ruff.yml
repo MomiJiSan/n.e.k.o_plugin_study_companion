@@ -27,4 +27,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Check lint baseline
-        run: uvx ruff==0.12.4 check --ignore-noqa --config ruff.toml .
+        working-directory: ${{ github.workspace }}/..
+        run: >-
+          uvx ruff==0.12.4 check --ignore-noqa --isolated --target-version py311
+          --line-length 120 --select E4,E7,E9,F,I --exclude vendor
+          "${{ github.event.repository.name }}"

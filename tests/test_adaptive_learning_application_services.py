@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from adaptive_learning.answer_application import (
     AnswerAssessmentService,
     AssessmentValidationResult,
