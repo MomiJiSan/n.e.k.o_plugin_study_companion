@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .question_type_mapping import MACHINE_QUESTION_TYPES
 from .tutor_llm_agent_common import (
     LLM_OPERATION_QUESTION_GENERATE,
     MODE_COMPANION,
@@ -74,6 +75,25 @@ def _normalize_question(
     # provenance to reject conflicting model output rather than silently
     # choosing one value.
     answer = raw_answer or raw_reference_answer
+    if answer and not accepted_answers:
+        # The canonical answer is always an accepted answer.  This keeps older
+        # generation callers compatible while the targeted contract enforces a
+        # non-empty, explicit accepted-answer list.
+        accepted_answers = [answer]
+    generated_question_type = (
+        _as_str(raw.get("question_type")).strip()
+        or _as_str(raw.get("type")).strip()
+        or "short_answer"
+    )
+    raw_question_params = context.get("knowledge_question_params")
+    question_params = (
+        dict(raw_question_params) if isinstance(raw_question_params, dict) else {}
+    )
+    required_question_type = _as_str(
+        question_params.get("required_question_type")
+    ).strip()
+    if bool(context.get("targeted_question")) and required_question_type in MACHINE_QUESTION_TYPES:
+        generated_question_type = required_question_type
     normalized = {
         "question": question,
         "answer": answer,
@@ -82,9 +102,7 @@ def _normalize_question(
         "key_points": key_points,
         "rubric": _as_dict(raw.get("rubric")),
         "solution_steps": solution_steps,
-        "question_type": _as_str(raw.get("question_type")).strip()
-        or _as_str(raw.get("type")).strip()
-        or "short_answer",
+        "question_type": generated_question_type,
         "math_equivalence_engine": {"enabled": False},
         "hint": _as_str(raw.get("hint")).strip(),
         "difficulty": _clamp_int(raw.get("difficulty"), 1, 5, 3),
