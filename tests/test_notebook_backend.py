@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import re
 import sys
 from pathlib import Path
@@ -9,8 +10,8 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MOUNTED_NEKO_ROOT = ROOT.parents[2]
-if (MOUNTED_NEKO_ROOT / "plugin" / "sdk").is_dir():
+MOUNTED_NEKO_ROOT = Path(os.environ.get("NEKO_ROOT", ""))
+if MOUNTED_NEKO_ROOT.is_dir() and (MOUNTED_NEKO_ROOT / "plugin" / "sdk").is_dir():
     sys.path.insert(0, str(MOUNTED_NEKO_ROOT))
 
 try:
