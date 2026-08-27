@@ -1026,8 +1026,13 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
                         ):
                             prerequisite_difficulty_reverse_count += 1
                     elif relation == "procedure_step":
+                        # A procedure edge describes the next instructional or
+                        # problem-solving step: current topic -> next topic.
+                        # Target-context coverage therefore belongs to the
+                        # current/source topic, consistent with the runtime
+                        # focused-context contract.
                         target_context_relations.setdefault(
-                            canonical_target_id, set()
+                            canonical_source_id, set()
                         ).add("procedure_step")
                     elif relation in {"application", "extends"}:
                         target_context_relations.setdefault(
@@ -1159,6 +1164,10 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
     subject_target_context_gap_counts: dict[str, int] = {
         subject: 0 for subject in standard_subjects
     }
+    subject_target_context_excused_root_counts: dict[str, int] = {
+        subject: 0 for subject in standard_subjects
+    }
+    subject_target_context_excused_roots: dict[str, list[dict[str, Any]]] = {}
     subject_target_relation_gap_counts: dict[str, dict[str, int]] = {
         subject: {} for subject in standard_subjects
     }
@@ -1174,6 +1183,21 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         )
         if not missing_relations:
             subject_target_context_ready_counts[subject] += 1
+            continue
+        excused_relations = _excused_taxonomy_root_relations(
+            topic,
+            prerequisite_inbound_count=prerequisite_inbound_counts.get(topic_id, 0),
+            missing_relations=sorted(missing_relations),
+            missing_fields=(),
+        )
+        if excused_relations:
+            subject_target_context_excused_root_counts[subject] += 1
+            subject_target_context_excused_roots.setdefault(subject, []).append(
+                {
+                    "id": topic_id,
+                    "excused_relations": list(excused_relations),
+                }
+            )
             continue
         subject_target_context_gap_counts[subject] += 1
         relation_gaps = subject_target_relation_gap_counts[subject]

@@ -49,10 +49,12 @@ SEMANTIC_RELATIONS = frozenset(
 
 # Which endpoint a focused topic must occupy for a directional relation.  The
 # relation names intentionally retain their seed semantics rather than being
-# collapsed into an undirected "related" link.
+# collapsed into an undirected "related" link.  In particular,
+# ``procedure_step`` follows the stored learning/action order: current topic
+# (``from``) -> next step (``to``).
 FOCUSED_RELATION_DIRECTION = {
     "prerequisite": "incoming",
-    "procedure_step": "incoming",
+    "procedure_step": "outgoing",
     "application": "outgoing",
     "extends": "outgoing",
     "supports": "incoming",
