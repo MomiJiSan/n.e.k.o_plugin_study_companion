@@ -16,10 +16,14 @@ PACKAGE.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
 sys.modules[PACKAGE_NAME] = PACKAGE
 
 LocalRuntimeClient = importlib.import_module(
-    f"{PACKAGE_NAME}.local_runtime_client"
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_client"
 ).LocalRuntimeClient
-protocol = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_protocol")
-supervisor_module = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_supervisor")
+protocol = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_protocol"
+)
+supervisor_module = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_supervisor"
+)
 
 LocalRuntimeSupervisor = supervisor_module.LocalRuntimeSupervisor
 LOCAL_MODELS_NOT_INSTALLED = protocol.LOCAL_MODELS_NOT_INSTALLED

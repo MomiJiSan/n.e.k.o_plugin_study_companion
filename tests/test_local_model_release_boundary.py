@@ -10,13 +10,18 @@ FORBIDDEN_MODEL_SUFFIXES = {".gguf", ".onnx", ".safetensors", ".bin", ".partial"
 def _is_release_source(path: Path) -> bool:
     relative = path.relative_to(ROOT)
     return not any(
-        part == "tests" or part in {".git", ".venv", "node_modules", "__pycache__"} or part.startswith(".pytest-")
+        part in {"tests", "experimental", ".git", ".venv", "node_modules", "__pycache__"}
+        or part.startswith(".pytest-")
         for part in relative.parts
     )
 
 
-def test_production_catalog_is_empty_until_real_models_are_selected() -> None:
-    catalog = json.loads((ROOT / "local_models" / "catalog.v1.json").read_text(encoding="utf-8"))
+def test_local_model_catalog_is_archived_outside_the_release_boundary() -> None:
+    catalog = json.loads(
+        (ROOT / "experimental" / "local_models" / "catalog.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
     assert catalog == {"catalog_version": 1, "allowed_hosts": [], "packages": []}
 

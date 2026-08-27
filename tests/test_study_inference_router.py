@@ -176,11 +176,12 @@ async def test_disabled_local_status_does_not_touch_client(
     status = await router.describe_local_runtime()
 
     assert status == {
-        "state": "stopped",
+        "available": False,
+        "state": "unavailable",
         "models": [],
         "capabilities": [],
         "active_job": None,
-        "error_code": "",
+        "error_code": "local_model_store_unavailable",
     }
     assert local.status_calls == 0
 
@@ -195,11 +196,12 @@ async def test_paused_local_status_does_not_touch_a_legacy_enabled_config(
     status = await router.describe_local_runtime()
 
     assert status == {
-        "state": "stopped",
+        "available": False,
+        "state": "unavailable",
         "models": [],
         "capabilities": [],
         "active_job": None,
-        "error_code": "",
+        "error_code": "local_model_store_unavailable",
     }
     assert local.status_calls == 0
 

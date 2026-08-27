@@ -361,9 +361,8 @@ class StudyCompanionPlugin(
             )
             await asyncio.to_thread(self._store.open)
             self._cfg = await asyncio.to_thread(self._store.load_config, self._cfg)
-            # Asset management is file-only at startup.  It may create and
-            # catalog-scan its private directory, but never downloads or
-            # starts the local inference runtime.
+            # The paused local-model product must not touch disk or create a
+            # runtime during normal plugin startup.
             await self._initialize_local_model_manager()
             self._knowledge_tracker = KnowledgeTracker(
                 self._store,

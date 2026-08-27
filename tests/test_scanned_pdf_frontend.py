@@ -86,7 +86,7 @@ def test_vendored_pdfjs_assets_match_manifest_and_have_no_cdn_imports() -> None:
 def test_market_package_excludes_worktree_and_test_artifacts() -> None:
     pyproject = PYPROJECT.read_text(encoding="utf-8")
     assert '[tool.neko.build]' in pyproject
-    assert 'exclude_dirs = ["tests"]' in pyproject
+    assert 'exclude_dirs = ["tests", "experimental"]' in pyproject
     assert 'exclude_files = [".git", ".coverage", "coverage.xml"]' in pyproject
 
 
