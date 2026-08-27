@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -121,6 +123,8 @@ TAXONOMY_ROOT_POLICIES: dict[str, dict[str, Any]] = {
 SUBJECT_MINIMUM_GAP_SAMPLE_LIMIT = 10
 QUALITY_ACTION_LIST_LIMIT = 12
 LEGACY_EDGE_SAMPLE_LIMIT = 20
+CONTENT_REUSE_LIMIT = 20
+EXPLICIT_STYLE_MAPPING_TARGET = 0.95
 
 
 @dataclass(frozen=True)
@@ -847,6 +851,162 @@ def _topic_schema_ready(topic: KnowledgeSeedTopic) -> bool:
     return True
 
 
+def _audit_text(value: object) -> str:
+    """Normalize seed prose for deterministic, report-only comparisons."""
+
+    return re.sub(r"\s+", "", str(value or "")).casefold()
+
+
+def _audit_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for raw in value if (item := _audit_text(raw))]
+
+
+def _content_quality_audit(
+    topics: tuple[KnowledgeSeedTopic, ...],
+) -> dict[str, Any]:
+    """Build non-blocking content quality signals for future subject PRs.
+
+    These signals deliberately do not become validation errors in this PR.  The
+    seed corpus is large and content repair must stay separate from runtime
+    behavior changes, but the report gives each future subject PR a stable,
+    reproducible starting point.
+    """
+
+    misconception_groups: Counter[tuple[str, ...]] = Counter()
+    answer_outline_groups: Counter[tuple[str, ...]] = Counter()
+    misconception_topic_counts: Counter[str] = Counter()
+    subject_style_totals: Counter[str] = Counter()
+    subject_style_mapped: Counter[str] = Counter()
+    subject_style_unmapped: dict[str, list[str]] = {}
+    keyword_inputs: dict[str, dict[str, Any]] = {}
+    keyword_coverage: dict[str, dict[str, Any]] = {}
+
+    try:
+        from .question_type_mapping import _STYLE_TO_MACHINE_TYPE, _style_key
+    except ImportError:  # pragma: no cover - standalone validator execution.
+        from question_type_mapping import _STYLE_TO_MACHINE_TYPE, _style_key
+
+    for topic in topics:
+        topic_id = str(topic.data.get("id") or "").strip()
+        subject = topic.subject or "<missing>"
+        misconceptions = _audit_string_list(topic.data.get("typical_misconceptions"))
+        if misconceptions:
+            misconception_groups[tuple(sorted(misconceptions))] += 1
+            misconception_topic_counts.update(set(misconceptions))
+
+        examples = topic.data.get("examples")
+        example_text_parts: list[str] = []
+        if isinstance(examples, list):
+            for example in examples:
+                if not isinstance(example, dict):
+                    continue
+                outline = _audit_string_list(example.get("answer_outline"))
+                if outline:
+                    answer_outline_groups[tuple(outline)] += 1
+                example_text_parts.append(_audit_text(example.get("prompt")))
+                example_text_parts.extend(outline)
+
+        styles = _audit_string_list(topic.data.get("question_types"))
+        if styles:
+            subject_style_totals[subject] += 1
+            preferred_style = styles[0]
+            if _STYLE_TO_MACHINE_TYPE.get(_style_key(preferred_style)):
+                subject_style_mapped[subject] += 1
+            else:
+                subject_style_unmapped.setdefault(subject, []).append(topic_id)
+
+        skills = _audit_string_list(topic.data.get("skills"))
+        example_text = "".join(example_text_parts)
+        misconception_text = "".join(misconceptions)
+        useful_skills = [skill for skill in skills if len(skill) >= 2]
+        example_skill_hit = any(skill in example_text for skill in useful_skills)
+        misconception_skill_hit = any(
+            skill in misconception_text for skill in useful_skills
+        )
+        keyword_inputs[topic_id] = {
+            "subject": subject,
+            "misconceptions": misconceptions,
+            "has_skills": bool(useful_skills),
+            "example_skill_hit": example_skill_hit,
+            "misconception_skill_hit": misconception_skill_hit,
+        }
+
+    for topic_id, row in keyword_inputs.items():
+        misconceptions = row.pop("misconceptions")
+        keyword_coverage[topic_id] = {
+            **row,
+            "topic_specific_misconception": any(
+                misconception_topic_counts[misconception] == 1
+                for misconception in misconceptions
+            ),
+        }
+
+    def _reuse_samples(counter: Counter[tuple[str, ...]]) -> list[dict[str, Any]]:
+        return [
+            {"items": list(items), "reuse_count": count}
+            for items, count in sorted(
+                counter.items(), key=lambda item: (-item[1], item[0])
+            )[:QUALITY_ACTION_LIST_LIMIT]
+        ]
+
+    by_subject: dict[str, dict[str, Any]] = {}
+    all_subjects = sorted({topic.subject or "<missing>" for topic in topics})
+    for subject in all_subjects:
+        subject_rows = [
+            row for row in keyword_coverage.values() if row["subject"] == subject
+        ]
+        total = len(subject_rows)
+        style_total = subject_style_totals[subject]
+        explicit_mapped = subject_style_mapped[subject]
+        by_subject[subject] = {
+            "preferred_style_topic_count": style_total,
+            "explicit_preferred_style_mapping_count": explicit_mapped,
+            "explicit_preferred_style_mapping_rate": (
+                explicit_mapped / style_total if style_total else 0.0
+            ),
+            "preferred_style_unmapped_topic_count": style_total - explicit_mapped,
+            "preferred_style_unmapped_topic_samples": sorted(
+                subject_style_unmapped.get(subject, [])
+            )[:QUALITY_ACTION_LIST_LIMIT],
+            "topic_count": total,
+            "topics_with_example_skill_hit": sum(
+                bool(row["example_skill_hit"]) for row in subject_rows
+            ),
+            "topics_with_misconception_skill_hit": sum(
+                bool(row["misconception_skill_hit"]) for row in subject_rows
+            ),
+            "topics_with_topic_specific_misconception": sum(
+                bool(row["topic_specific_misconception"]) for row in subject_rows
+            ),
+        }
+
+    return {
+        "thresholds": {
+            "maximum_complete_misconception_group_reuse": CONTENT_REUSE_LIMIT,
+            "requires_topic_specific_misconception": True,
+            "requires_example_answer_outline_skill_hit": True,
+            "minimum_explicit_preferred_style_mapping_rate": EXPLICIT_STYLE_MAPPING_TARGET,
+        },
+        "typical_misconception_group_reuse": {
+            "unique_group_count": len(misconception_groups),
+            "maximum_reuse_count": max(misconception_groups.values(), default=0),
+            "groups_over_limit": sum(
+                count > CONTENT_REUSE_LIMIT
+                for count in misconception_groups.values()
+            ),
+            "top_groups": _reuse_samples(misconception_groups),
+        },
+        "answer_outline_reuse": {
+            "unique_outline_count": len(answer_outline_groups),
+            "maximum_reuse_count": max(answer_outline_groups.values(), default=0),
+            "top_outlines": _reuse_samples(answer_outline_groups),
+        },
+        "subject_content_quality": by_subject,
+    }
+
+
 def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, Any]:
     topic_ids = {str(topic.data.get("id") or "").strip() for topic in topics}
     topic_ids.discard("")
@@ -1252,6 +1412,19 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         subject: [str(item["id"]) for item in items[:QUALITY_ACTION_LIST_LIMIT]]
         for subject, items in top_gap_topics_by_subject.items()
     }
+    content_quality_audit = _content_quality_audit(topics)
+    subject_target_context_complete_rates = {
+        subject: (
+            (
+                subject_target_context_ready_counts.get(subject, 0)
+                + subject_target_context_excused_root_counts.get(subject, 0)
+            )
+            / subject_minimum_standard_topic_counts[subject]
+            if subject_minimum_standard_topic_counts.get(subject, 0)
+            else 0.0
+        )
+        for subject in standard_subjects
+    }
 
     return {
         "topic_count": len(topics),
@@ -1336,6 +1509,10 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
             subject: roots
             for subject, roots in sorted(subject_target_context_excused_roots.items())
         },
+        "subject_target_context_complete_rates": dict(
+            sorted(subject_target_context_complete_rates.items())
+        ),
+        "content_quality_audit": content_quality_audit,
         "subject_target_relation_gap_counts": {
             subject: dict(sorted(counts.items()))
             for subject, counts in sorted(subject_target_relation_gap_counts.items())
@@ -1570,6 +1747,37 @@ def _format_quality_report(report: dict[str, Any] | None) -> list[str]:
                 f"{target}: {count}" for target, count in list(counts.items())[:5]
             )
             lines.append(f"  {subject}: {summary}")
+    content_audit = report.get("content_quality_audit")
+    if isinstance(content_audit, dict):
+        misconception_reuse = content_audit.get("typical_misconception_group_reuse")
+        if isinstance(misconception_reuse, dict):
+            lines.append(
+                "typical_misconception_group_reuse: "
+                f"max={int(misconception_reuse.get('maximum_reuse_count', 0) or 0)}, "
+                f"over_limit={int(misconception_reuse.get('groups_over_limit', 0) or 0)}"
+            )
+        outline_reuse = content_audit.get("answer_outline_reuse")
+        if isinstance(outline_reuse, dict):
+            lines.append(
+                "answer_outline_reuse: "
+                f"max={int(outline_reuse.get('maximum_reuse_count', 0) or 0)}"
+            )
+        subject_content = content_audit.get("subject_content_quality")
+        if isinstance(subject_content, dict) and subject_content:
+            lines.append("subject_content_quality:")
+            for subject, metrics in subject_content.items():
+                if not isinstance(metrics, dict):
+                    continue
+                lines.append(
+                    f"  {subject}: preferred_style_mapping="
+                    f"{float(metrics.get('explicit_preferred_style_mapping_rate', 0.0) or 0.0):.2%}, "
+                    f"example_skill_hits="
+                    f"{int(metrics.get('topics_with_example_skill_hit', 0) or 0)}/"
+                    f"{int(metrics.get('topic_count', 0) or 0)}, "
+                    f"topic_specific_misconceptions="
+                    f"{int(metrics.get('topics_with_topic_specific_misconception', 0) or 0)}/"
+                    f"{int(metrics.get('topic_count', 0) or 0)}"
+                )
     return lines
 
 
