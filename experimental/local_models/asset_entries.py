@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
-from .entry_common import Err, Ok, SdkError, plugin_entry, tr, ui
-from .models import StudyConfig
+from ...entry_common import Err, Ok, SdkError, plugin_entry, tr, ui
+from ...models import StudyConfig
 
 
 def _directory_argument(config: StudyConfig) -> Path | None:

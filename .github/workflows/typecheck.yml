@@ -1,0 +1,35 @@
+name: Study Companion Type Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyright:
+    name: Pyright (adaptive learning)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install locked development dependencies
+        run: uv sync --locked --group dev
+
+      - name: Type-check existing adaptive learning baseline
+        run: uv run --locked python -m pyright
+
+      - name: Strictly type-check new adaptive learning services
+        run: uv run --locked python -m pyright --project pyrightconfig.services.json

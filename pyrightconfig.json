@@ -1,0 +1,13 @@
+{
+  "include": ["adaptive_learning"],
+  "exclude": ["**/__pycache__"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportArgumentType": "none",
+  "reportReturnType": "none",
+  "strict": [
+    "adaptive_learning/question_application.py",
+    "adaptive_learning/answer_application.py",
+    "adaptive_learning/production_adapters.py"
+  ]
+}
