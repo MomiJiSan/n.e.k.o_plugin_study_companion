@@ -32,7 +32,7 @@ from .practice_scope import (
 )
 from .question_type_mapping import (
     enforce_mapped_question_type,
-    resolve_target_question_type,
+    select_question_style,
 )
 from .targeted_question_contract import (
     project_target_topic_evidence,
@@ -730,8 +730,19 @@ class _TutorQuestionEntriesMixin:
             extra_context["source_question_id"] = source_question_id
         if targeted_context:
             question_params = dict(targeted_context.get("question_params") or {})
-            question_type_mapping = resolve_target_question_type(
-                dict(question_params.get("target_topic") or {})
+            retry = dict(question_params.get("retry_wrong_question") or {})
+            previous_question = dict(retry.get("question") or {})
+            mastery = dict(question_params.get("mastery") or {})
+            try:
+                attempt_count = max(0, int(mastery.get("attempts") or 0))
+            except (TypeError, ValueError):
+                attempt_count = 0
+            question_type_mapping = select_question_style(
+                dict(question_params.get("target_topic") or {}),
+                attempt_count=attempt_count,
+                selection_reason=str(targeted_context.get("selection_reason") or ""),
+                previous_question_style=str(previous_question.get("question_style") or ""),
+                error_type=str(retry.get("error_type") or ""),
             )
             question_params.update(question_type_mapping.to_context())
             extra_context.update(
