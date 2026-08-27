@@ -1589,7 +1589,13 @@ async function loadKnowledgeMap(requestId) {
     const byId = new Map();
     nodes.forEach((node) => {
       const id = String(node?.id || '').trim();
-      if (id && !byId.has(id)) byId.set(id, node);
+      if (!id) return;
+      const current = byId.get(id);
+      const isScopeNode = (candidate) => candidate?.boundary !== true && candidate?.in_scope !== false;
+      // A topic can be a one-hop boundary on an early page before it is
+      // returned as an in-scope topic on a later page. Keep the canonical
+      // in-scope payload instead of preserving the first temporary copy.
+      if (!current || (isScopeNode(node) && !isScopeNode(current))) byId.set(id, node);
     });
     return [...byId.values()];
   };
@@ -1603,17 +1609,39 @@ async function loadKnowledgeMap(requestId) {
     });
     return [...byKey.values()];
   };
+  const dedupeItems = (items, key) => {
+    const byKey = new Map();
+    const unkeyed = [];
+    items.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        unkeyed.push(item);
+        return;
+      }
+      const value = String(item?.[key] || '').trim();
+      if (!value) {
+        unkeyed.push(item);
+        return;
+      }
+      byKey.set(value, item);
+    });
+    return [...byKey.values(), ...unkeyed];
+  };
   const loadV2Pages = async () => {
     let retriedAfterStaleCursor = false;
     while (true) {
       const nodes = [];
       const edges = [];
+      const masteryOverview = [];
+      const weakTopics = [];
+      const wrongQuestions = [];
       const seenCursors = new Set(['']);
       let cursor = '';
       let pageCount = 0;
       let catalogRevision = null;
       let firstPage = null;
-      let relationshipsIncomplete = false;
+      let edgeTruncated = false;
+      let boundaryTruncated = false;
+      let omittedEdgeCount = 0;
       try {
         while (true) {
           if (pageCount >= 20) throw new Error('Knowledge map pagination stopped after 20 pages.');
@@ -1647,9 +1675,12 @@ async function loadKnowledgeMap(requestId) {
           if (!firstPage) firstPage = page;
           nodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
           edges.push(...(Array.isArray(page?.edges) ? page.edges : []));
-          relationshipsIncomplete = relationshipsIncomplete
-            || page?.edge_truncated === true
-            || page?.boundary?.truncated === true;
+          masteryOverview.push(...(Array.isArray(page?.mastery_overview) ? page.mastery_overview : []));
+          weakTopics.push(...(Array.isArray(page?.weak_topics) ? page.weak_topics : []));
+          wrongQuestions.push(...(Array.isArray(page?.wrong_questions) ? page.wrong_questions : []));
+          edgeTruncated = edgeTruncated || page?.edge_truncated === true || page?.edges_truncated === true;
+          boundaryTruncated = boundaryTruncated || page?.boundary?.truncated === true;
+          omittedEdgeCount += Math.max(0, Number(page?.omitted_edge_count || 0) || 0);
           pageCount += 1;
           if (page?.has_more !== true) break;
           const nextCursor = String(page?.next_cursor || '').trim();
@@ -1666,14 +1697,43 @@ async function loadKnowledgeMap(requestId) {
         }
         throw error;
       }
+      const mergedNodes = dedupeNodes(nodes);
+      const mergedEdges = dedupeEdges(edges);
+      const mergedMasteryOverview = dedupeItems(masteryOverview, 'topic_id');
+      const mergedWeakTopics = dedupeItems(weakTopics, 'topic_id');
+      const mergedWrongQuestions = dedupeItems(wrongQuestions, 'id');
+      const scopeReturnedCount = mergedNodes.filter((node) => node?.boundary !== true && node?.in_scope !== false).length;
+      const boundaryReturnedCount = mergedNodes.length - scopeReturnedCount;
+      const base = firstPage || {};
+      const baseSummary = base.summary && typeof base.summary === 'object' ? base.summary : {};
       return {
-        ...(firstPage || {}),
+        ...base,
         catalog_revision: catalogRevision || undefined,
-        nodes: dedupeNodes(nodes),
-        edges: dedupeEdges(edges),
+        nodes: mergedNodes,
+        edges: mergedEdges,
+        mastery_overview: mergedMasteryOverview,
+        weak_topics: mergedWeakTopics,
+        wrong_questions: mergedWrongQuestions,
+        scope_returned_count: scopeReturnedCount,
+        boundary: {
+          ...(base.boundary && typeof base.boundary === 'object' ? base.boundary : {}),
+          returned_count: boundaryReturnedCount,
+          truncated: boundaryTruncated,
+        },
+        summary: {
+          ...baseSummary,
+          topic_count: scopeReturnedCount,
+          scope_topic_count: scopeReturnedCount,
+          boundary_node_count: boundaryReturnedCount,
+          edge_count: mergedEdges.length,
+          weak_topic_count: mergedWeakTopics.length,
+          wrong_question_count: mergedWrongQuestions.length,
+        },
+        edge_truncated: edgeTruncated,
+        omitted_edge_count: omittedEdgeCount,
         has_more: false,
         next_cursor: '',
-        relationships_incomplete: relationshipsIncomplete,
+        relationships_incomplete: edgeTruncated || boundaryTruncated,
       };
     }
   };

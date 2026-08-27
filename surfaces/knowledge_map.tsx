@@ -61,7 +61,7 @@ type KnowledgeMapPage = {
   has_more?: boolean;
   next_cursor?: string;
   edge_truncated?: boolean;
-  boundary?: { truncated?: boolean; [key: string]: unknown };
+  boundary?: { truncated?: boolean; returned_count?: number; [key: string]: unknown };
   [key: string]: unknown;
 };
 
@@ -138,11 +138,22 @@ function isKnowledgeMapV2Unavailable(error: unknown) {
     .test(knowledgeMapErrorMessage(error));
 }
 
+function isScopeKnowledgeNode(node: KnowledgeNode) {
+  return node?.boundary !== true && node?.in_scope !== false;
+}
+
 function uniqueKnowledgeNodes(nodes: KnowledgeNode[]) {
   const byId = new Map<string, KnowledgeNode>();
   nodes.forEach((node) => {
     const id = String(node?.id || '').trim();
-    if (id && !byId.has(id)) byId.set(id, node);
+    if (!id) return;
+    const current = byId.get(id);
+    // A topic can appear as a boundary on an earlier page and then arrive as
+    // an in-scope topic on its own page. The canonical in-scope payload must
+    // replace the temporary boundary payload in that case.
+    if (!current || (isScopeKnowledgeNode(node) && !isScopeKnowledgeNode(current))) {
+      byId.set(id, node);
+    }
   });
   return Array.from(byId.values());
 }
@@ -158,17 +169,40 @@ function uniqueKnowledgeEdges(edges: KnowledgeEdge[]) {
   return Array.from(byKey.values());
 }
 
+function uniqueKnowledgeItems(items: unknown[], key: string) {
+  const byKey = new Map<string, unknown>();
+  const unkeyed: unknown[] = [];
+  items.forEach((item) => {
+    if (!item || typeof item !== 'object') {
+      unkeyed.push(item);
+      return;
+    }
+    const value = String((item as Record<string, unknown>)[key] || '').trim();
+    if (!value) {
+      unkeyed.push(item);
+      return;
+    }
+    byKey.set(value, item);
+  });
+  return [...byKey.values(), ...unkeyed];
+}
+
 async function loadCompleteKnowledgeMap(api: PluginSurfaceProps['api'], stage: string): Promise<KnowledgeMapPage> {
   let retriedAfterStaleCursor = false;
   while (true) {
     const collectedNodes: KnowledgeNode[] = [];
     const collectedEdges: KnowledgeEdge[] = [];
+    const collectedMastery: unknown[] = [];
+    const collectedWeakTopics: unknown[] = [];
+    const collectedWrongQuestions: unknown[] = [];
     const seenCursors = new Set<string>(['']);
     let cursor = '';
     let pageCount = 0;
     let catalogRevision: string | null = null;
     let firstPage: KnowledgeMapPage | null = null;
-    let relationshipsIncomplete = false;
+    let edgeTruncated = false;
+    let boundaryTruncated = false;
+    let omittedEdgeCount = 0;
 
     try {
       while (true) {
@@ -206,9 +240,12 @@ async function loadCompleteKnowledgeMap(api: PluginSurfaceProps['api'], stage: s
         if (!firstPage) firstPage = page;
         collectedNodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
         collectedEdges.push(...(Array.isArray(page?.edges) ? page.edges : []));
-        relationshipsIncomplete = relationshipsIncomplete
-          || page?.edge_truncated === true
-          || page?.boundary?.truncated === true;
+        collectedMastery.push(...(Array.isArray(page?.mastery_overview) ? page.mastery_overview : []));
+        collectedWeakTopics.push(...(Array.isArray(page?.weak_topics) ? page.weak_topics : []));
+        collectedWrongQuestions.push(...(Array.isArray(page?.wrong_questions) ? page.wrong_questions : []));
+        edgeTruncated = edgeTruncated || page?.edge_truncated === true || page?.edges_truncated === true;
+        boundaryTruncated = boundaryTruncated || page?.boundary?.truncated === true;
+        omittedEdgeCount += Math.max(0, Number(page?.omitted_edge_count || 0) || 0);
         pageCount += 1;
 
         if (page?.has_more !== true) break;
@@ -228,14 +265,42 @@ async function loadCompleteKnowledgeMap(api: PluginSurfaceProps['api'], stage: s
     }
 
     const base = firstPage || {};
+    const nodes = uniqueKnowledgeNodes(collectedNodes);
+    const edges = uniqueKnowledgeEdges(collectedEdges);
+    const masteryOverview = uniqueKnowledgeItems(collectedMastery, 'topic_id');
+    const weakTopics = uniqueKnowledgeItems(collectedWeakTopics, 'topic_id');
+    const wrongQuestions = uniqueKnowledgeItems(collectedWrongQuestions, 'id');
+    const scopeReturnedCount = nodes.filter(isScopeKnowledgeNode).length;
+    const boundaryReturnedCount = nodes.length - scopeReturnedCount;
+    const baseSummary = base.summary && typeof base.summary === 'object' ? base.summary : {};
     return {
       ...base,
       catalog_revision: catalogRevision || undefined,
-      nodes: uniqueKnowledgeNodes(collectedNodes),
-      edges: uniqueKnowledgeEdges(collectedEdges),
+      nodes,
+      edges,
+      mastery_overview: masteryOverview,
+      weak_topics: weakTopics,
+      wrong_questions: wrongQuestions,
+      scope_returned_count: scopeReturnedCount,
+      boundary: {
+        ...(base.boundary && typeof base.boundary === 'object' ? base.boundary : {}),
+        returned_count: boundaryReturnedCount,
+        truncated: boundaryTruncated,
+      },
+      summary: {
+        ...(baseSummary as Record<string, unknown>),
+        topic_count: scopeReturnedCount,
+        scope_topic_count: scopeReturnedCount,
+        boundary_node_count: boundaryReturnedCount,
+        edge_count: edges.length,
+        weak_topic_count: weakTopics.length,
+        wrong_question_count: wrongQuestions.length,
+      },
+      edge_truncated: edgeTruncated,
+      omitted_edge_count: omittedEdgeCount,
       has_more: false,
       next_cursor: '',
-      relationships_incomplete: relationshipsIncomplete,
+      relationships_incomplete: edgeTruncated || boundaryTruncated,
     };
   }
 }

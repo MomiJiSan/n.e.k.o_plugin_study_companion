@@ -366,23 +366,45 @@ if (pagedRequests[0]?.args?.page_size !== 100 || pagedRequests[0]?.args?.scope?.
 }
 pagedRequests[0].resolve({
   catalog_revision: 'revision-1', has_more: true, next_cursor: 'cursor-1', edge_truncated: true,
-  nodes: [{ id: 'a' }, { id: 'a' }],
+  scope_total_count: 205,
+  summary: { topic_count: 1, scope_topic_count: 1, boundary_node_count: 1, edge_count: 1 },
+  nodes: [
+    { id: 'a', in_scope: true, boundary: false },
+    { id: 'b', label: 'temporary boundary', in_scope: false, boundary: true },
+  ],
   edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }],
+  mastery_overview: [{ topic_id: 'a' }],
+  weak_topics: [{ topic_id: 'a' }],
+  wrong_questions: [{ id: 'wrong-a', topic_id: 'a' }],
 });
 await new Promise((resolve) => setTimeout(resolve, 0));
 if (pagedRequests[1]?.args?.cursor !== 'cursor-1') throw new Error('the loader did not consume the next cursor');
 pagedRequests[1].resolve({
   catalog_revision: 'revision-1', has_more: false, next_cursor: '', boundary: { truncated: true },
-  nodes: [{ id: 'b' }, { id: 'a' }],
+  scope_total_count: 205,
+  nodes: [
+    { id: 'b', label: 'canonical scope topic', mastery: 0.8, in_scope: true, boundary: false },
+    { id: 'c', in_scope: false, boundary: true },
+  ],
   edges: [
     { from: 'a', to: 'b', relation: 'prerequisite' },
     { from: 'b', to: 'c', relation: 'application' },
   ],
+  mastery_overview: [{ topic_id: 'a', refreshed: true }, { topic_id: 'b' }],
+  weak_topics: [{ topic_id: 'a', refreshed: true }, { topic_id: 'b' }],
+  wrong_questions: [{ id: 'wrong-a', refreshed: true }, { id: 'wrong-b', topic_id: 'b' }],
 });
 await loadPaged;
 const pagedPayload = paged.getPayload();
-if (pagedPayload.nodes.length !== 2 || pagedPayload.edges.length !== 2 || pagedPayload.relationships_incomplete !== true) {
-  throw new Error(`paged graph was not deduplicated or marked incomplete: ${JSON.stringify(pagedPayload)}`);
+const canonicalB = pagedPayload.nodes.find((node) => node.id === 'b');
+if (pagedPayload.nodes.length !== 3 || pagedPayload.edges.length !== 2 || pagedPayload.relationships_incomplete !== true
+    || canonicalB?.label !== 'canonical scope topic' || canonicalB?.boundary !== false || canonicalB?.in_scope !== true
+    || pagedPayload.scope_returned_count !== 2 || pagedPayload.boundary?.returned_count !== 1
+    || pagedPayload.summary?.topic_count !== 2 || pagedPayload.summary?.scope_topic_count !== 2
+    || pagedPayload.summary?.boundary_node_count !== 1 || pagedPayload.summary?.edge_count !== 2
+    || pagedPayload.mastery_overview?.length !== 2 || pagedPayload.weak_topics?.length !== 2
+    || pagedPayload.wrong_questions?.length !== 2) {
+  throw new Error(`paged graph did not preserve canonical nodes or recompute merged metadata: ${JSON.stringify(pagedPayload)}`);
 }
 
 const restartPaged = paged.load(1);
