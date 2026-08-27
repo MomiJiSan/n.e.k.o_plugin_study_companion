@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+
+# isort: split
 from adaptive_learning.answer_application import (
     AnswerAssessmentService,
     AssessmentValidationResult,
