@@ -232,6 +232,7 @@ def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
 
 def test_knowledge_map_loader_ignores_stale_success_failure_and_inactive_host() -> None:
     main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+    contracts = (STATIC_ROOT / "study-ui-contracts.js").read_text(encoding="utf-8")
     load_start = main.index("async function loadKnowledgeMap(requestId)")
     load_end = main.index("async function activateKnowledgePracticeWorkspace", load_start)
     load_function = main[load_start:load_end]
@@ -247,6 +248,8 @@ window.formatPluginError = (error) => error?.message === 'plugin_call_timeout'
   ? 'Localized plugin timeout'
   : error?.message || String(error);
 const loadFunction = """ + json.dumps(load_function) + r""";
+const contractsSource = """ + json.dumps(contracts) + r""";
+window.eval(contractsSource);
 window.eval(`
 window.__knowledgeLoadHarness = (() => {
   let mapRequestId = 0;
@@ -324,14 +327,9 @@ harness.setActive(true);
 const currentFailure = harness.load(6);
 await Promise.resolve();
 requests[4].reject({ code: 'ENTRY_NOT_FOUND', message: 'study_query_knowledge_map not found' });
-await new Promise((resolve) => setTimeout(resolve, 0));
-if (requests[5]?.entryId !== 'study_knowledge_map' || requests[5]?.args?.limit !== 1000) {
-  throw new Error('knowledge loader did not fall back to the V1 map entry');
-}
-requests[5].reject(new Error('plugin_call_timeout'));
 await currentFailure;
 const currentError = harness.states.find((state) => state.state === 'error');
-if (currentError?.error !== 'Localized plugin timeout') {
+if (currentError?.error !== 'study_query_knowledge_map not found') {
   throw new Error(`knowledge failure was not localized: ${JSON.stringify(currentError)}`);
 }
 if (harness.states.at(-1)?.state !== 'sync') {
@@ -377,8 +375,13 @@ pagedRequests[0].resolve({
   weak_topics: [{ topic_id: 'a' }],
   wrong_questions: [{ id: 'wrong-a', topic_id: 'a' }],
 });
-await new Promise((resolve) => setTimeout(resolve, 0));
-if (pagedRequests[1]?.args?.cursor !== 'cursor-1') throw new Error('the loader did not consume the next cursor');
+await loadPaged;
+if (paged.getPayload()?.nodes?.length !== 2 || paged.getPayload()?.has_more !== true) {
+  throw new Error('the first V2 page was not committed for incremental loading');
+}
+const loadMore = paged.load(1, { append: true });
+await Promise.resolve();
+if (pagedRequests[1]?.args?.cursor !== 'cursor-1') throw new Error('the load-more request did not consume the next cursor');
 pagedRequests[1].resolve({
   catalog_revision: 'revision-1', has_more: false, next_cursor: '', boundary: { truncated: true },
   scope_total_count: 205,
@@ -394,7 +397,7 @@ pagedRequests[1].resolve({
   weak_topics: [{ topic_id: 'a', refreshed: true }, { topic_id: 'b' }],
   wrong_questions: [{ id: 'wrong-a', refreshed: true }, { id: 'wrong-b', topic_id: 'b' }],
 });
-await loadPaged;
+await loadMore;
 const pagedPayload = paged.getPayload();
 const canonicalB = pagedPayload.nodes.find((node) => node.id === 'b');
 if (pagedPayload.nodes.length !== 3 || pagedPayload.edges.length !== 2 || pagedPayload.relationships_incomplete !== true
@@ -410,13 +413,29 @@ if (pagedPayload.nodes.length !== 3 || pagedPayload.edges.length !== 2 || pagedP
 const restartPaged = paged.load(1);
 await Promise.resolve();
 pagedRequests[2].resolve({ catalog_revision: 'revision-2', has_more: true, next_cursor: 'stale-cursor', nodes: [], edges: [] });
+await restartPaged;
+const restartMore = paged.load(1, { append: true });
 await new Promise((resolve) => setTimeout(resolve, 0));
 pagedRequests[3].reject({ code: 'KNOWLEDGE_MAP_CURSOR_STALE', message: 'knowledge_map_cursor_stale' });
 await new Promise((resolve) => setTimeout(resolve, 0));
 if (pagedRequests[4]?.args?.cursor !== '') throw new Error('a stale cursor did not restart once from page one');
 pagedRequests[4].resolve({ catalog_revision: 'revision-2', has_more: false, next_cursor: '', nodes: [{ id: 'restarted' }], edges: [] });
-await restartPaged;
+await restartMore;
 if (paged.getPayload()?.nodes?.[0]?.id !== 'restarted') throw new Error('the stale-cursor restart was not committed');
+
+let tenThousandTopics = null;
+for (let page = 0; page < 100; page += 1) {
+  tenThousandTopics = window.StudyCompanionUiContracts.mergeKnowledgeMapPage(tenThousandTopics, {
+    catalog_revision: 'revision-10k',
+    has_more: page < 99,
+    next_cursor: page < 99 ? `cursor-${page + 1}` : '',
+    nodes: Array.from({ length: 100 }, (_, index) => ({ id: `topic-${page * 100 + index}`, in_scope: true })),
+    edges: [],
+  });
+}
+if (tenThousandTopics.nodes.length !== 10000 || tenThousandTopics.has_more !== false) {
+  throw new Error('the shared V2 merger imposed a topic-count ceiling');
+}
 """
     _run_frontend_script(script)
 

@@ -1585,182 +1585,79 @@ function mountKnowledgeFullscreenHost() {
 }
 
 async function loadKnowledgeMap(requestId) {
-  const requestedStage = arguments.length > 1 ? arguments[1] : (knowledgeMapStage || learningProfile.stage || 'all');
+  const options = arguments.length > 1 && typeof arguments[1] === 'object' ? arguments[1] : {};
+  const requestedStage = typeof arguments[1] === 'string'
+    ? arguments[1]
+    : (options.stage || knowledgeMapStage || learningProfile.stage || 'all');
+  const append = options.append === true;
   const normalizedStage = requestedStage === 'all' ? '' : normalizeLearningStage(requestedStage);
   const scope = { stage: normalizedStage, subject: '', chapter: '', unit: '' };
-  const errorCode = (error) => String(error?.code || '').trim().toUpperCase();
-  const errorMessage = (error) => String(error?.message || error || '');
-  const isCursorStale = (error) => errorCode(error) === 'KNOWLEDGE_MAP_CURSOR_STALE'
-    || /knowledge_map_cursor_stale/i.test(errorMessage(error));
-  const isV2Unavailable = (error) => (
-    ['ENTRY_NOT_FOUND', 'UNKNOWN_ENTRY', 'NOT_IMPLEMENTED', 'UNSUPPORTED_ENTRY'].includes(errorCode(error))
-    || /study_query_knowledge_map.*(?:not found|unknown|unavailable|not implemented)/i.test(errorMessage(error))
-  );
-  const dedupeNodes = (nodes) => {
-    const byId = new Map();
-    nodes.forEach((node) => {
-      const id = String(node?.id || '').trim();
-      if (!id) return;
-      const current = byId.get(id);
-      const isScopeNode = (candidate) => candidate?.boundary !== true && candidate?.in_scope !== false;
-      // A topic can be a one-hop boundary on an early page before it is
-      // returned as an in-scope topic on a later page. Keep the canonical
-      // in-scope payload instead of preserving the first temporary copy.
-      if (!current || (isScopeNode(node) && !isScopeNode(current))) byId.set(id, node);
-    });
-    return [...byId.values()];
-  };
-  const dedupeEdges = (edges) => {
-    const byKey = new Map();
-    edges.forEach((edge) => {
-      const from = String(edge?.from || '').trim();
-      const to = String(edge?.to || '').trim();
-      const relation = String(edge?.relation || '').trim();
-      if (from && to) byKey.set(`${from}\u0000${to}\u0000${relation}`, edge);
-    });
-    return [...byKey.values()];
-  };
-  const dedupeItems = (items, key) => {
-    const byKey = new Map();
-    const unkeyed = [];
-    items.forEach((item) => {
-      if (!item || typeof item !== 'object') {
-        unkeyed.push(item);
-        return;
-      }
-      const value = String(item?.[key] || '').trim();
-      if (!value) {
-        unkeyed.push(item);
-        return;
-      }
-      byKey.set(value, item);
-    });
-    return [...byKey.values(), ...unkeyed];
-  };
-  const loadV2Pages = async () => {
-    let retriedAfterStaleCursor = false;
+  const contracts = window.StudyCompanionUiContracts;
+  if (!contracts?.mergeKnowledgeMapPage || !contracts?.isCursorStale) {
+    throw new Error('StudyCompanionUiContracts failed to load');
+  }
+  try {
+    let restartedFromFirstPage = false;
+    let current = append ? lastKnowledgeMapPayload : null;
     while (true) {
-      const nodes = [];
-      const edges = [];
-      const masteryOverview = [];
-      const weakTopics = [];
-      const wrongQuestions = [];
-      const seenCursors = new Set(['']);
-      let cursor = '';
-      let pageCount = 0;
-      let catalogRevision = null;
-      let firstPage = null;
-      let edgeTruncated = false;
-      let boundaryTruncated = false;
-      let omittedEdgeCount = 0;
+      const cursor = current ? String(current.next_cursor || '').trim() : '';
+      if (current?.has_more === true && !cursor) {
+        throw new Error('Knowledge map pagination returned a repeated cursor.');
+      }
       try {
-        while (true) {
-          if (pageCount >= 20) throw new Error('Knowledge map pagination stopped after 20 pages.');
-          let page;
-          try {
-            page = await callPlugin('study_query_knowledge_map', {
-              scope,
-              page_size: 100,
-              cursor,
-              include_boundary: true,
-            });
-          } catch (error) {
-            // V1 is a first-page compatibility path only. Never mix a V1
-            // response with already-loaded V2 pages.
-            if (pageCount === 0 && isV2Unavailable(error)) {
-              return await callPlugin('study_knowledge_map', { limit: 1000 });
-            }
-            throw error;
-          }
-          if (page?.error) {
-            if (pageCount === 0 && isV2Unavailable(page.error)) {
-              return await callPlugin('study_knowledge_map', { limit: 1000 });
-            }
-            throw page.error;
-          }
-          const pageRevision = String(page?.catalog_revision || '');
-          if (catalogRevision === null) catalogRevision = pageRevision;
-          else if (catalogRevision !== pageRevision) {
-            throw new Error('Knowledge map catalog revision changed while loading.');
-          }
-          if (!firstPage) firstPage = page;
-          nodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
-          edges.push(...(Array.isArray(page?.edges) ? page.edges : []));
-          masteryOverview.push(...(Array.isArray(page?.mastery_overview) ? page.mastery_overview : []));
-          weakTopics.push(...(Array.isArray(page?.weak_topics) ? page.weak_topics : []));
-          wrongQuestions.push(...(Array.isArray(page?.wrong_questions) ? page.wrong_questions : []));
-          edgeTruncated = edgeTruncated || page?.edge_truncated === true || page?.edges_truncated === true;
-          boundaryTruncated = boundaryTruncated || page?.boundary?.truncated === true;
-          omittedEdgeCount += Math.max(0, Number(page?.omitted_edge_count || 0) || 0);
-          pageCount += 1;
-          if (page?.has_more !== true) break;
+        const page = await callPlugin('study_query_knowledge_map', {
+          scope,
+          page_size: 100,
+          cursor,
+          include_boundary: true,
+        });
+        if (page?.error) throw page.error;
+        const expectedRevision = String(current?.catalog_revision || '').trim();
+        const pageRevision = String(page?.catalog_revision || '').trim();
+        if (current && expectedRevision && pageRevision && expectedRevision !== pageRevision) {
+          if (restartedFromFirstPage) throw new Error('Knowledge map catalog revision changed while loading.');
+          restartedFromFirstPage = true;
+          current = null;
+          continue;
+        }
+        if (page?.has_more === true) {
           const nextCursor = String(page?.next_cursor || '').trim();
-          if (!nextCursor || seenCursors.has(nextCursor)) {
+          if (!nextCursor || nextCursor === cursor) {
             throw new Error('Knowledge map pagination returned a repeated cursor.');
           }
-          seenCursors.add(nextCursor);
-          cursor = nextCursor;
         }
+        const payload = contracts.mergeKnowledgeMapPage(current, page);
+        const knowledgeMap = studyKnowledgeMap();
+        if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
+        lastKnowledgeMapPayload = payload;
+        setKnowledgeMapLoadState('ready');
+        knowledgeMap.rerender(payload);
+        return;
       } catch (error) {
-        if (!retriedAfterStaleCursor && isCursorStale(error)) {
-          retriedAfterStaleCursor = true;
+        if (!restartedFromFirstPage && contracts.isCursorStale(error)) {
+          restartedFromFirstPage = true;
+          current = null;
           continue;
         }
         throw error;
       }
-      const mergedNodes = dedupeNodes(nodes);
-      const mergedEdges = dedupeEdges(edges);
-      const mergedMasteryOverview = dedupeItems(masteryOverview, 'topic_id');
-      const mergedWeakTopics = dedupeItems(weakTopics, 'topic_id');
-      const mergedWrongQuestions = dedupeItems(wrongQuestions, 'id');
-      const scopeReturnedCount = mergedNodes.filter((node) => node?.boundary !== true && node?.in_scope !== false).length;
-      const boundaryReturnedCount = mergedNodes.length - scopeReturnedCount;
-      const base = firstPage || {};
-      const baseSummary = base.summary && typeof base.summary === 'object' ? base.summary : {};
-      return {
-        ...base,
-        catalog_revision: catalogRevision || undefined,
-        nodes: mergedNodes,
-        edges: mergedEdges,
-        mastery_overview: mergedMasteryOverview,
-        weak_topics: mergedWeakTopics,
-        wrong_questions: mergedWrongQuestions,
-        scope_returned_count: scopeReturnedCount,
-        boundary: {
-          ...(base.boundary && typeof base.boundary === 'object' ? base.boundary : {}),
-          returned_count: boundaryReturnedCount,
-          truncated: boundaryTruncated,
-        },
-        summary: {
-          ...baseSummary,
-          topic_count: scopeReturnedCount,
-          scope_topic_count: scopeReturnedCount,
-          boundary_node_count: boundaryReturnedCount,
-          edge_count: mergedEdges.length,
-          weak_topic_count: mergedWeakTopics.length,
-          wrong_question_count: mergedWrongQuestions.length,
-        },
-        edge_truncated: edgeTruncated,
-        omitted_edge_count: omittedEdgeCount,
-        has_more: false,
-        next_cursor: '',
-        relationships_incomplete: edgeTruncated || boundaryTruncated,
-      };
     }
-  };
-  try {
-    const payload = await loadV2Pages();
-    const knowledgeMap = studyKnowledgeMap();
-    if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
-    lastKnowledgeMapPayload = payload;
-    setKnowledgeMapLoadState('ready');
-    knowledgeMap.rerender(payload);
   } catch (error) {
     const knowledgeMap = studyKnowledgeMap();
     if (requestId !== mapRequestId || !knowledgeMap.isActive()) return;
     setKnowledgeMapLoadState('error', formatPluginError(error));
     syncKnowledgeMapContent();
   }
+}
+
+function loadMoreKnowledgeMap() {
+  if (knowledgeMapLoadState === 'loading' || lastKnowledgeMapPayload?.has_more !== true) return false;
+  const knowledgeMap = studyKnowledgeMap();
+  if (!knowledgeMap.isActive()) return false;
+  setKnowledgeMapLoadState('loading');
+  syncKnowledgeMapContent();
+  void loadKnowledgeMap(mapRequestId, { append: true });
+  return true;
 }
 
 function reloadKnowledgeMapForStage(stage) {
