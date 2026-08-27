@@ -40,6 +40,8 @@ except ImportError:  # Direct imports in isolated tests.
 
 _READY_TIMEOUT_SECONDS = 8.0
 _MAX_START_ATTEMPTS = 2
+_STARTUP_DIAGNOSTIC_LIMIT_BYTES = 512
+_STARTUP_DIAGNOSTIC_READ_TIMEOUT_SECONDS = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,8 +164,15 @@ class LocalRuntimeSupervisor:
                 await self._clear_process_locked()
                 if attempt + 1 == _MAX_START_ATTEMPTS:
                     self._state = LocalRuntimeState.UNAVAILABLE
+                    diagnostic = (
+                        exc.diagnostic
+                        if isinstance(exc, LocalRuntimeError)
+                        else str(exc)
+                    )[-_STARTUP_DIAGNOSTIC_LIMIT_BYTES:].strip()
                     raise LocalRuntimeError(
-                        LOCAL_RUNTIME_START_FAILED, "local runtime could not start"
+                        LOCAL_RUNTIME_START_FAILED,
+                        "local runtime could not start",
+                        diagnostic=diagnostic or LOCAL_RUNTIME_START_FAILED,
                     ) from exc
         connection = LocalRuntimeConnection(
             base_url=f"http://127.0.0.1:{port}", token=token
@@ -213,8 +222,17 @@ class LocalRuntimeSupervisor:
         if not raw:
             diagnostic = ""
             if process.stderr is not None:
-                stderr = await process.stderr.read()
-                diagnostic = stderr.decode("utf-8", errors="replace")[-512:].strip()
+                try:
+                    stderr = await asyncio.wait_for(
+                        process.stderr.read(_STARTUP_DIAGNOSTIC_LIMIT_BYTES),
+                        timeout=min(
+                            self._startup_timeout_seconds,
+                            _STARTUP_DIAGNOSTIC_READ_TIMEOUT_SECONDS,
+                        ),
+                    )
+                except TimeoutError:
+                    stderr = b""
+                diagnostic = stderr.decode("utf-8", errors="replace").strip()
             detail = f": {diagnostic}" if diagnostic else ""
             raise ValueError(f"runtime stopped before becoming ready{detail}")
         event: Any = json.loads(raw.decode("utf-8"))
