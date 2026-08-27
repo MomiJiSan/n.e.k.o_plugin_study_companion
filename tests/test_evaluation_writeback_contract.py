@@ -218,16 +218,11 @@ def test_wrong_question_attempt_updates_only_bound_id_without_schema_change(
         )
         assert store.get_wrong_question(second)["retry_count"] == 0
 
-        with store._lock:
-            store._require_conn().execute(
-                "UPDATE wrong_questions SET last_error_at = datetime('now', '-2 days') WHERE id = ?",
-                (first,),
-            )
-            store._require_conn().commit()
-        for _ in range(3):
-            _write_attempt(store, origin_id=first, verdict="correct", difficulty=3)
-        assert store.get_wrong_question(first)["status"] == "resolved"
-        assert store.get_wrong_question(first)["consecutive_correct"] == 3
+        first_correct = _write_attempt(
+            store, origin_id=first, verdict="correct", difficulty=3
+        )
+        assert first_correct["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(first)["consecutive_correct"] == 1
         assert store.get_wrong_question(second)["status"] == "active"
     finally:
         store.close()
@@ -311,7 +306,6 @@ def test_auto_retry_candidates_apply_cooldowns_and_oldest_retry_first(
             active,
             oldest_ready,
             newer_ready,
-            day_old_correct,
         ]
         assert cooling_wrong not in {item["id"] for item in candidates}
         assert cooling_correct not in {item["id"] for item in candidates}
@@ -354,7 +348,8 @@ def test_correct_retry_reenters_automatic_candidates_one_day_after_error(
             store._require_conn().execute(
                 """
                 UPDATE wrong_questions
-                SET last_error_at = datetime('now', '-25 hours')
+                SET last_error_at = datetime('now', '-25 hours'),
+                    last_retry_at = datetime('now', '-25 hours')
                 WHERE id = ?
                 """,
                 (origin,),
@@ -363,6 +358,72 @@ def test_correct_retry_reenters_automatic_candidates_one_day_after_error(
         assert [
             item["id"] for item in store.list_auto_retry_candidates(limit=None)
         ] == [origin]
+    finally:
+        store.close()
+
+
+def test_correct_retries_require_one_day_between_each_counted_attempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, _, _ = _load_store_runtime(monkeypatch, "_correct_retry_spacing_runtime")
+    store = _make_store(tmp_path, Store)
+    try:
+        origin = store.add_wrong_question(
+            topic_id="topic-a",
+            question={"question": "original"},
+            user_answer="bad",
+            expected_answer="good",
+            error_type="misconception",
+            verdict="wrong",
+        )
+
+        first = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert first["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 1
+
+        second_immediate = _write_attempt(store, origin_id=origin, verdict="correct")
+        third_immediate = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert second_immediate["wrong_question_attempt"]["status"] == "cooling"
+        assert third_immediate["wrong_question_attempt"]["status"] == "cooling"
+        assert store.get_wrong_question(origin)["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 1
+
+        with store._lock:
+            conn = store._require_conn()
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET last_error_at = datetime('now', '-2 days'),
+                    last_retry_at = datetime('now', '-25 hours')
+                WHERE id = ?
+                """,
+                (origin,),
+            )
+            conn.commit()
+        second = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert second["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 2
+
+        immediate_after_second = _write_attempt(
+            store, origin_id=origin, verdict="correct"
+        )
+        assert immediate_after_second["wrong_question_attempt"]["status"] == "cooling"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 2
+
+        with store._lock:
+            conn = store._require_conn()
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET last_retry_at = datetime('now', '-25 hours')
+                WHERE id = ?
+                """,
+                (origin,),
+            )
+            conn.commit()
+        third = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert third["wrong_question_attempt"]["status"] == "resolved"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 3
     finally:
         store.close()
 
