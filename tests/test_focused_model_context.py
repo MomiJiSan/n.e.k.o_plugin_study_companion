@@ -78,8 +78,8 @@ def test_focused_model_context_is_exactly_one_hop_for_every_bundled_topic(
         )
         expected_procedure = _labels(
             graph,
-            [edge for edge in incoming if edge.get("relation") == "procedure_step"],
-            incoming=True,
+            [edge for edge in outgoing if edge.get("relation") == "procedure_step"],
+            incoming=False,
         )
         expected_applications = _labels(
             graph,
@@ -147,6 +147,7 @@ def test_focused_model_context_drops_nonincident_self_and_wrong_direction_edges(
         "target": {"id": "target", "name": "Target"},
         "pre": {"id": "pre", "name": "Prerequisite"},
         "app": {"id": "app", "name": "Application"},
+        "procedure-next": {"id": "procedure-next", "name": "Next procedure step"},
     }
     context = guidance._build_focused_model_context(
         selected_id="target",
@@ -154,6 +155,7 @@ def test_focused_model_context_drops_nonincident_self_and_wrong_direction_edges(
         incoming_edges={
             "target": [
                 {"from": "pre", "to": "target", "relation": "prerequisite"},
+                {"from": "pre", "to": "target", "relation": "procedure_step"},
                 {"from": "target", "to": "target", "relation": "confusable"},
                 {"from": "pre", "to": "app", "relation": "application"},
             ]
@@ -162,18 +164,20 @@ def test_focused_model_context_drops_nonincident_self_and_wrong_direction_edges(
             "target": [
                 {"from": "target", "to": "app", "relation": "application"},
                 {"from": "target", "to": "pre", "relation": "prerequisite"},
+                {"from": "target", "to": "procedure-next", "relation": "procedure_step"},
             ]
         },
         relevant_subgraph={},
     )
 
     assert context["prerequisites"] == ["Prerequisite"]
+    assert context["procedure"] == ["Next procedure step"]
     assert context["applications"] == ["Application"]
     assert context["confusions"] == []
     assert context["summary"]["diagnostics"] == {
         "guidance_self_relation_dropped": 1,
         "guidance_nonincident_edge_dropped": 1,
-        "guidance_direction_mismatch_dropped": 1,
+        "guidance_direction_mismatch_dropped": 2,
     }
 
 
@@ -183,6 +187,7 @@ def test_focused_context_and_semantic_evidence_share_all_relation_contracts(
     guidance, index_module = _modules(monkeypatch, "_focused_relation_contract_test")
     topics = [
         {"id": "target", "name": "Target", "prerequisites": [{"id": "pre"}], "related": [
+            {"id": "procedure", "relation": "procedure_step"},
             {"id": "app", "relation": "application"},
             {"id": "extension", "relation": "extends"},
             {"id": "next", "relation": "next"},
@@ -192,7 +197,7 @@ def test_focused_context_and_semantic_evidence_share_all_relation_contracts(
             {"id": "nearby", "relation": "nearby"},
         ]},
         {"id": "pre", "name": "Prerequisite"},
-        {"id": "procedure", "name": "Procedure", "related": [{"id": "target", "relation": "procedure_step"}]},
+        {"id": "procedure", "name": "Procedure"},
         {"id": "app", "name": "Application"},
         {"id": "extension", "name": "Extension"},
         {"id": "next", "name": "Next"},

@@ -614,6 +614,11 @@ def _learning_path_for_topic(
         if depth >= max_depth:
             continue
         for edge in sorted(incoming.get(current_id, []), key=_relation_priority):
+            # ``procedure_step`` is current step -> next step.  This traversal
+            # follows incoming prerequisite ancestry, so including it would
+            # incorrectly present a previous procedure step as a dependency.
+            if _normalized_relation(edge.get("relation")) == "procedure_step":
+                continue
             parent_id = _text(edge.get("from"))
             if not parent_id or parent_id in seen:
                 continue
@@ -774,9 +779,9 @@ def _direct_diagnosis_edges(
         if not source_id or not target_id or source_id == target_id:
             continue
         # Diagnostics only use a relation in the direction its wording claims.
-        if relation in {"prerequisite", "procedure_step"} and target_id != selected_id:
+        if relation == "prerequisite" and target_id != selected_id:
             continue
-        if relation in {"application", "extends", "next"} and source_id != selected_id:
+        if relation in {"procedure_step", "application", "extends", "next"} and source_id != selected_id:
             continue
         if relation not in {
             "prerequisite",
@@ -888,8 +893,7 @@ def _build_diagnosis_questions(
                     topic_id=topic_id,
                     topic_label=topic_label,
                     question=(
-                        f"你是卡在“{topic_label or topic_id}”这一步，"
-                        f"还是不知道它在“{selected_label}”里该放到哪里？"
+                        f"完成“{selected_label}”后，是否知道下一步该做“{topic_label or topic_id}”？"
                     ),
                     edge=edge,
                 )
@@ -1120,6 +1124,7 @@ def _build_focused_model_context(
     # Keep direction checks explicit rather than inferring semantics from an
     # arbitrary subgraph edge.  Symmetric relations are allowed from either
     # side; all other supported relations have a single canonical direction.
+    # A procedure step is specifically current topic -> next step.
     supported_relations = _ALLOWED_RELATIONS
     indexed_edges = [
         *(incoming_edges.get(selected_id) or []),
@@ -1425,7 +1430,13 @@ def build_knowledge_guidance_payload(
     direct_public_path_items: list[dict[str, Any]] = []
     for edge in direct_diagnosis_edges:
         relation = _normalized_relation(edge.get("relation"))
-        if relation not in {"application", "confusable", "co_occurs", "next"}:
+        if relation not in {
+            "procedure_step",
+            "application",
+            "confusable",
+            "co_occurs",
+            "next",
+        }:
             continue
         other_id, _other_label = _other_topic_for_edge(edge, selected_id)
         other_topic = by_id.get(other_id)

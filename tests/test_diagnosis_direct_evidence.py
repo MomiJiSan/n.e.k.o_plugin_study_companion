@@ -37,7 +37,12 @@ def _topics() -> list[dict[str, object]]:
         {"id": "pre-b", "name": "B prerequisite"},
         {"id": "pre-c", "name": "C prerequisite"},
         {"id": "pre-d", "name": "D prerequisite"},
-        {"id": "procedure", "name": "Procedure", "related": [{"id": "target", "relation": "procedure_step"}]},
+        {"id": "procedure", "name": "Procedure"},
+        {
+            "id": "prior-procedure",
+            "name": "Prior procedure",
+            "related": [{"id": "target", "relation": "procedure_step"}],
+        },
         {"id": "application", "name": "Application"},
         {"id": "extension", "name": "Extension"},
         {"id": "confusion", "name": "Confusion"},
@@ -51,6 +56,7 @@ def _topics() -> list[dict[str, object]]:
             "related": [
                 {"id": "application", "relation": "application"},
                 {"id": "extension", "relation": "extends"},
+                {"id": "procedure", "relation": "procedure_step"},
                 {"id": "confusion", "relation": "confusable"},
                 {"id": "review", "relation": "co_occurs"},
                 {"id": "next", "relation": "next"},
@@ -90,6 +96,7 @@ def test_public_diagnosis_uses_only_direct_canonical_evidence(
     }
     assert "ancestor" not in {item["topic_id"] for item in diagnosis}
     assert "wrong-way" not in {item["topic_id"] for item in diagnosis}
+    assert "prior-procedure" not in {item["topic_id"] for item in diagnosis}
     assert "target" not in {item["topic_id"] for item in diagnosis}
     assert {(item["kind"], item["relation"]) for item in diagnosis} == {
         ("prerequisite_probe", "prerequisite"),
@@ -100,6 +107,10 @@ def test_public_diagnosis_uses_only_direct_canonical_evidence(
         ("related_review", "co_occurs"),
         ("next_step", "next"),
     }
+    procedure_probe = next(item for item in diagnosis if item["kind"] == "procedure_probe")
+    assert procedure_probe["topic_id"] == "procedure"
+    assert "下一步" in procedure_probe["question"]
+    assert "Procedure" in procedure_probe["question"]
 
 
 def test_public_diagnosis_order_is_stable_when_seed_order_changes(
@@ -159,7 +170,9 @@ def test_direct_diagnosis_evidence_respects_incidence_and_direction_globally(
                 or selected_id not in {source_id, target_id}
             ):
                 continue
-            if relation in {"prerequisite", "procedure_step"} and target_id != selected_id:
+            if relation == "prerequisite" and target_id != selected_id:
+                continue
+            if relation == "procedure_step" and source_id != selected_id:
                 continue
             if relation in {"application", "extends", "next"} and source_id != selected_id:
                 continue
