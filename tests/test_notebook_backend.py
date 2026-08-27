@@ -8,6 +8,11 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+ROOT = Path(__file__).resolve().parents[1]
+MOUNTED_NEKO_ROOT = ROOT.parents[2]
+if (MOUNTED_NEKO_ROOT / "plugin" / "sdk").is_dir():
+    sys.path.insert(0, str(MOUNTED_NEKO_ROOT))
+
 try:
     from plugin.sdk.plugin import Ok
 except ModuleNotFoundError:
@@ -16,8 +21,6 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-
-ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "_study_companion_notebook_backend_test"
 PACKAGE = ModuleType(PACKAGE_NAME)
 PACKAGE.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
