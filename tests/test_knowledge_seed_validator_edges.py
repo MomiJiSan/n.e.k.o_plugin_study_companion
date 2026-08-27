@@ -268,6 +268,8 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     assert sum(report["missing_required_mastery_by_subject"].values()) == 0
     assert sum(report["subject_target_context_ready_counts"].values()) + sum(
         report["subject_target_context_gap_counts"].values()
+    ) + sum(
+        report["subject_target_context_excused_root_counts"].values()
     ) == report["topic_count"]
     assert report["subject_minimum_standard_gap_counts"]["history"] == 0
     assert report["subject_minimum_standard_gap_counts"]["geography"] == 0

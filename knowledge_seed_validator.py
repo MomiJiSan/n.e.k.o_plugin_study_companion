@@ -1329,6 +1329,13 @@ def _build_quality_report(topics: tuple[KnowledgeSeedTopic, ...]) -> dict[str, A
         "subject_target_context_gap_counts": dict(
             sorted(subject_target_context_gap_counts.items())
         ),
+        "subject_target_context_excused_root_counts": dict(
+            sorted(subject_target_context_excused_root_counts.items())
+        ),
+        "subject_target_context_excused_roots": {
+            subject: roots
+            for subject, roots in sorted(subject_target_context_excused_roots.items())
+        },
         "subject_target_relation_gap_counts": {
             subject: dict(sorted(counts.items()))
             for subject, counts in sorted(subject_target_relation_gap_counts.items())
