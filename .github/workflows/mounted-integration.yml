@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          NEKO_ROOT="$PWD/../../.." PYTHONPATH="$PWD:$PWD/../../.." uv run --with pytest --with pytest-asyncio python -m pytest -q -rs \
+          NEKO_ROOT="$PWD/../../.." PYTHONPATH="$PWD:$PWD/../../.." uv run --project "$PWD/../../.." --with pytest --with pytest-asyncio python -m pytest -q -rs \
             tests/test_notebook_backend.py | tee notebook-backend.txt
           if grep -Eqi '([0-9]+ skipped|SKIPPED)' notebook-backend.txt; then
             echo "Notebook backend integration must not be skipped in a mounted checkout." >&2

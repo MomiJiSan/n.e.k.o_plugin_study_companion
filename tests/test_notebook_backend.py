@@ -16,7 +16,9 @@ if MOUNTED_NEKO_ROOT.is_dir() and (MOUNTED_NEKO_ROOT / "plugin" / "sdk").is_dir(
 
 try:
     from plugin.sdk.plugin import Ok
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    if exc.name not in {"plugin", "plugin.sdk", "plugin.sdk.plugin"}:
+        raise
     pytest.skip(
         "backend integration tests require the plugin mounted in an N.E.K.O checkout",
         allow_module_level=True,
