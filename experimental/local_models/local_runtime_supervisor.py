@@ -146,7 +146,7 @@ class LocalRuntimeSupervisor:
                     "--token",
                     token,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
                     stdin=asyncio.subprocess.DEVNULL,
                     creationflags=creationflags,
                 )
@@ -212,7 +212,12 @@ class LocalRuntimeSupervisor:
             process.stdout.readline(), timeout=self._startup_timeout_seconds
         )
         if not raw:
-            raise ValueError("runtime stopped before becoming ready")
+            diagnostic = ""
+            if process.stderr is not None:
+                stderr = await process.stderr.read()
+                diagnostic = stderr.decode("utf-8", errors="replace")[-512:].strip()
+            detail = f": {diagnostic}" if diagnostic else ""
+            raise ValueError(f"runtime stopped before becoming ready{detail}")
         event: Any = json.loads(raw.decode("utf-8"))
         if (
             not isinstance(event, dict)
