@@ -1,0 +1,4507 @@
+{
+  "type": "study_companion_question_generation_eval_cases",
+  "version": 1,
+  "description": "Static baseline cases for fixture CI and opt-in live Qwen question-generation evaluation. They do not alter production question generation.",
+  "cases": [
+    {
+      "id": "qgen-001",
+      "topic_id": "primary_fraction_meaning",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_fraction_meaning”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "primary_fraction_meaning",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-002",
+      "topic_id": "primary_decimal_operations",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "error_retry",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_decimal_operations”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "primary_decimal_operations",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-003",
+      "topic_id": "primary_perimeter_area",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "due_review",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_perimeter_area”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "primary_perimeter_area",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-004",
+      "topic_id": "primary_average",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_average”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "primary_average",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-005",
+      "topic_id": "primary_percent_application",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_percent_application”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "primary_percent_application",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-006",
+      "topic_id": "primary_ratio_scale",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_ratio_scale”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "primary_ratio_scale",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-007",
+      "topic_id": "primary_simple_statistics",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_simple_statistics”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "primary_simple_statistics",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-008",
+      "topic_id": "primary_unit_conversion",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "due_review",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_unit_conversion”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "primary_unit_conversion",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-009",
+      "topic_id": "primary_word_problem_modeling",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_word_problem_modeling”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "primary_word_problem_modeling",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-010",
+      "topic_id": "primary_logic_reasoning",
+      "subject": "math",
+      "stage": "primary",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“primary_logic_reasoning”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "primary_logic_reasoning",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-011",
+      "topic_id": "real_number_concept",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“real_number_concept”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "real_number_concept",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-012",
+      "topic_id": "absolute_value",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“absolute_value”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "absolute_value",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-013",
+      "topic_id": "linear_equation",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“linear_equation”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "linear_equation",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-014",
+      "topic_id": "linear_function_graph",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“linear_function_graph”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "linear_function_graph",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-015",
+      "topic_id": "quadratic_equation_formula",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“quadratic_equation_formula”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "quadratic_equation_formula",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-016",
+      "topic_id": "quadratic_vertex",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“quadratic_vertex”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "quadratic_vertex",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-017",
+      "topic_id": "triangle_angle_sum",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“triangle_angle_sum”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "triangle_angle_sum",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-018",
+      "topic_id": "pythagorean_theorem",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pythagorean_theorem”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "pythagorean_theorem",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-019",
+      "topic_id": "simple_probability",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“simple_probability”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "simple_probability",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-020",
+      "topic_id": "mean_median_mode",
+      "subject": "math",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“mean_median_mode”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "mean_median_mode",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-021",
+      "topic_id": "senior_set_concept",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_set_concept”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "senior_set_concept",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-022",
+      "topic_id": "senior_function_monotonicity",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_function_monotonicity”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "senior_function_monotonicity",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-023",
+      "topic_id": "senior_logarithmic_function",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_logarithmic_function”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "senior_logarithmic_function",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-024",
+      "topic_id": "senior_trig_graph",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_trig_graph”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "senior_trig_graph",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-025",
+      "topic_id": "senior_plane_vector_concept",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_plane_vector_concept”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "senior_plane_vector_concept",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-026",
+      "topic_id": "senior_derivative_concept",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_derivative_concept”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "senior_derivative_concept",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-027",
+      "topic_id": "senior_derivative_extrema",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_derivative_extrema”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "senior_derivative_extrema",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-028",
+      "topic_id": "senior_probability_counting",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_probability_counting”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "senior_probability_counting",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-029",
+      "topic_id": "senior_normal_distribution",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_normal_distribution”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "senior_normal_distribution",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-030",
+      "topic_id": "senior_linear_regression_equation",
+      "subject": "math",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“senior_linear_regression_equation”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "senior_linear_regression_equation",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-031",
+      "topic_id": "college_limit_concept",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_limit_concept”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_limit_concept",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-032",
+      "topic_id": "college_continuity",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "error_retry",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_continuity”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "college_continuity",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-033",
+      "topic_id": "college_derivative_calculation",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_derivative_calculation”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_derivative_calculation",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-034",
+      "topic_id": "college_definite_integral",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_definite_integral”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_definite_integral",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-035",
+      "topic_id": "college_integral_area_problem",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_integral_area_problem”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_integral_area_problem",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-036",
+      "topic_id": "college_eigenvalue",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_eigenvalue”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_eigenvalue",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-037",
+      "topic_id": "college_conditional_probability",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_conditional_probability”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "college_conditional_probability",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-038",
+      "topic_id": "college_confidence_interval",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_confidence_interval”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_confidence_interval",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-039",
+      "topic_id": "college_graph_shortest_path",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_graph_shortest_path”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_graph_shortest_path",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-040",
+      "topic_id": "college_vector_space",
+      "subject": "math",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_vector_space”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_vector_space",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-041",
+      "topic_id": "english_primary_phonics",
+      "subject": "english",
+      "stage": "primary",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_primary_phonics\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_primary_phonics",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-042",
+      "topic_id": "english_primary_sight_words",
+      "subject": "english",
+      "stage": "primary",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_primary_sight_words\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_primary_sight_words",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-043",
+      "topic_id": "english_primary_daily_dialogue",
+      "subject": "english",
+      "stage": "primary",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_primary_daily_dialogue\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_primary_daily_dialogue",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-044",
+      "topic_id": "english_primary_picture_writing",
+      "subject": "english",
+      "stage": "primary",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_primary_picture_writing\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_primary_picture_writing",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-045",
+      "topic_id": "english_junior_tense_system",
+      "subject": "english",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_junior_tense_system\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_junior_tense_system",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-046",
+      "topic_id": "english_junior_clause_intro",
+      "subject": "english",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_junior_clause_intro\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_junior_clause_intro",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-047",
+      "topic_id": "english_junior_reading_detail",
+      "subject": "english",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_junior_reading_detail\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_junior_reading_detail",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-048",
+      "topic_id": "english_junior_cloze_context",
+      "subject": "english",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_junior_cloze_context\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_junior_cloze_context",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-049",
+      "topic_id": "english_senior_application_email",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_application_email\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_application_email",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-050",
+      "topic_id": "english_senior_application_letter",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_application_letter\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_application_letter",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-051",
+      "topic_id": "english_senior_application_notice",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_application_notice\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_application_notice",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-052",
+      "topic_id": "english_senior_application_speech",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_application_speech\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_senior_application_speech",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-053",
+      "topic_id": "english_senior_clause_connection",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_clause_connection\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_clause_connection",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-054",
+      "topic_id": "english_senior_cloze_collocation",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_cloze_collocation\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_cloze_collocation",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-055",
+      "topic_id": "english_senior_cloze_logic",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_cloze_logic\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_cloze_logic",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-056",
+      "topic_id": "english_senior_continuation_emotion_arc",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_continuation_emotion_arc\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_continuation_emotion_arc",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-057",
+      "topic_id": "english_senior_continuation_language_imitation",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_continuation_language_imitation\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_senior_continuation_language_imitation",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-058",
+      "topic_id": "english_senior_continuation_plot_logic",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_continuation_plot_logic\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_continuation_plot_logic",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-059",
+      "topic_id": "english_senior_continuation_writing",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_continuation_writing\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_continuation_writing",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-060",
+      "topic_id": "english_senior_error_correction",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_error_correction\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_error_correction",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-061",
+      "topic_id": "english_senior_grammar_filling",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_grammar_filling\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_grammar_filling",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-062",
+      "topic_id": "english_senior_listening_inference",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_listening_inference\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_senior_listening_inference",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-063",
+      "topic_id": "english_senior_listening_note",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_listening_note\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_listening_note",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-064",
+      "topic_id": "english_senior_long_reading_structure",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_long_reading_structure\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_long_reading_structure",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-065",
+      "topic_id": "english_senior_nonfinite_verbs",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_nonfinite_verbs\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_nonfinite_verbs",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-066",
+      "topic_id": "english_senior_reading_author_attitude",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_author_attitude\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_author_attitude",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-067",
+      "topic_id": "english_senior_reading_detail_location",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_detail_location\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_detail_location",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-068",
+      "topic_id": "english_senior_reading_inference",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_inference\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_inference",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-069",
+      "topic_id": "english_senior_reading_main_idea",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_main_idea\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_main_idea",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-070",
+      "topic_id": "english_senior_reading_new_gaokao_information",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_new_gaokao_information\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_new_gaokao_information",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-071",
+      "topic_id": "english_senior_reading_word_guess",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_reading_word_guess\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_reading_word_guess",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-072",
+      "topic_id": "english_senior_relative_clause",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_relative_clause\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "english_senior_relative_clause",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-073",
+      "topic_id": "english_senior_seven_choice_coherence",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_seven_choice_coherence\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_seven_choice_coherence",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-074",
+      "topic_id": "english_senior_special_sentence_patterns",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_special_sentence_patterns\" at difficulty 3. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_special_sentence_patterns",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-075",
+      "topic_id": "english_senior_subject_verb_agreement",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_subject_verb_agreement\" at difficulty 4. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "english_senior_subject_verb_agreement",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-076",
+      "topic_id": "english_senior_summary_paraphrase",
+      "subject": "english",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "en",
+      "source_text": "Create one focused short_answer practice question for the target topic \"english_senior_summary_paraphrase\" at difficulty 2. Do not reveal the answer or repeat a prior stem.",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "english_senior_summary_paraphrase",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-077",
+      "topic_id": "chinese_primary_pinyin_character",
+      "subject": "chinese",
+      "stage": "primary",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_primary_pinyin_character”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chinese_primary_pinyin_character",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-078",
+      "topic_id": "chinese_primary_sentence_expansion",
+      "subject": "chinese",
+      "stage": "primary",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_primary_sentence_expansion”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_primary_sentence_expansion",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-079",
+      "topic_id": "chinese_primary_paragraph_main_idea",
+      "subject": "chinese",
+      "stage": "primary",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_primary_paragraph_main_idea”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_primary_paragraph_main_idea",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-080",
+      "topic_id": "chinese_primary_observation_writing",
+      "subject": "chinese",
+      "stage": "primary",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_primary_observation_writing”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_primary_observation_writing",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-081",
+      "topic_id": "chinese_junior_narrative_reading",
+      "subject": "chinese",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_junior_narrative_reading”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "chinese_junior_narrative_reading",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-082",
+      "topic_id": "chinese_junior_expository_reading",
+      "subject": "chinese",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_junior_expository_reading”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chinese_junior_expository_reading",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-083",
+      "topic_id": "chinese_junior_argumentative_reading",
+      "subject": "chinese",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_junior_argumentative_reading”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_junior_argumentative_reading",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-084",
+      "topic_id": "chinese_junior_classical_function_words",
+      "subject": "chinese",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_junior_classical_function_words”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_junior_classical_function_words",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-085",
+      "topic_id": "chinese_senior_classical_translation",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_classical_translation”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_classical_translation",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-086",
+      "topic_id": "chinese_senior_poetry_appreciation",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_poetry_appreciation”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_poetry_appreciation",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-087",
+      "topic_id": "chinese_senior_modern_argument_structure",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_modern_argument_structure”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_modern_argument_structure",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-088",
+      "topic_id": "chinese_senior_composition_argument",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_composition_argument”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_composition_argument",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-089",
+      "topic_id": "chinese_senior_language_cohesion",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_language_cohesion”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_language_cohesion",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-090",
+      "topic_id": "chinese_senior_practical_text",
+      "subject": "chinese",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chinese_senior_practical_text”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chinese_senior_practical_text",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-091",
+      "topic_id": "physics_junior_speed",
+      "subject": "physics",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_junior_speed”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "physics_junior_speed",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-092",
+      "topic_id": "physics_junior_force_balance",
+      "subject": "physics",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_junior_force_balance”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "physics_junior_force_balance",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-093",
+      "topic_id": "physics_junior_ohm_law",
+      "subject": "physics",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_junior_ohm_law”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "physics_junior_ohm_law",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-094",
+      "topic_id": "physics_junior_work_power",
+      "subject": "physics",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_junior_work_power”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "physics_junior_work_power",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-095",
+      "topic_id": "physics_senior_newton_laws",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_newton_laws”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_newton_laws",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-096",
+      "topic_id": "physics_senior_force_decomposition",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_force_decomposition”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_force_decomposition",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-097",
+      "topic_id": "physics_senior_motion_graph_synthesis",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_motion_graph_synthesis”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_motion_graph_synthesis",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-098",
+      "topic_id": "physics_senior_energy_momentum",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_energy_momentum”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_energy_momentum",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-099",
+      "topic_id": "physics_senior_electric_field_force",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_electric_field_force”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_electric_field_force",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-100",
+      "topic_id": "physics_senior_electromagnetic_induction_law",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_electromagnetic_induction_law”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_electromagnetic_induction_law",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-101",
+      "topic_id": "physics_senior_experiment_acceleration",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_experiment_acceleration”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_experiment_acceleration",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-102",
+      "topic_id": "physics_senior_wave_interference",
+      "subject": "physics",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“physics_senior_wave_interference”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "physics_senior_wave_interference",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-103",
+      "topic_id": "college_physics_kinematics_calculus",
+      "subject": "physics",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_physics_kinematics_calculus”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_physics_kinematics_calculus",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-104",
+      "topic_id": "college_physics_work_energy_theorem",
+      "subject": "physics",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_physics_work_energy_theorem”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_physics_work_energy_theorem",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-105",
+      "topic_id": "college_physics_ideal_gas_state",
+      "subject": "physics",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_physics_ideal_gas_state”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_physics_ideal_gas_state",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-106",
+      "topic_id": "college_physics_faraday_induction",
+      "subject": "physics",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_physics_faraday_induction”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_physics_faraday_induction",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-107",
+      "topic_id": "chem_junior_substance_classification",
+      "subject": "chemistry",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_junior_substance_classification”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chem_junior_substance_classification",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-108",
+      "topic_id": "chem_junior_chemical_equation",
+      "subject": "chemistry",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_junior_chemical_equation”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chem_junior_chemical_equation",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-109",
+      "topic_id": "chem_junior_acid_base_salt",
+      "subject": "chemistry",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_junior_acid_base_salt”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chem_junior_acid_base_salt",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-110",
+      "topic_id": "chem_junior_solution_solubility",
+      "subject": "chemistry",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_junior_solution_solubility”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chem_junior_solution_solubility",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-111",
+      "topic_id": "chem_senior_ionic_reaction",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_ionic_reaction”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_ionic_reaction",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-112",
+      "topic_id": "chem_senior_redox",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_redox”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_redox",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-113",
+      "topic_id": "chem_senior_redox_balance",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_redox_balance”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_redox_balance",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-114",
+      "topic_id": "chem_senior_mole_calculation",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_mole_calculation”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_mole_calculation",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-115",
+      "topic_id": "chem_senior_equilibrium",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_equilibrium”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_equilibrium",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-116",
+      "topic_id": "chem_senior_equilibrium_graph",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_equilibrium_graph”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_equilibrium_graph",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-117",
+      "topic_id": "chem_senior_electrochemistry",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_electrochemistry”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_electrochemistry",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-118",
+      "topic_id": "chem_senior_organic_functional_group",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_organic_functional_group”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_organic_functional_group",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-119",
+      "topic_id": "chem_senior_experiment_design",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "math_exact",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_experiment_design”生成一道难度 3 的 math_exact 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_experiment_design",
+        "question_type": "math_exact",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-120",
+      "topic_id": "chem_senior_industrial_process_flow",
+      "subject": "chemistry",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "math_reasoning",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“chem_senior_industrial_process_flow”生成一道难度 4 的 math_reasoning 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "chem_senior_industrial_process_flow",
+        "question_type": "math_reasoning",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-121",
+      "topic_id": "bio_junior_cell_structure",
+      "subject": "biology",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_junior_cell_structure”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "bio_junior_cell_structure",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-122",
+      "topic_id": "bio_junior_photosynthesis_respiration",
+      "subject": "biology",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_junior_photosynthesis_respiration”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "bio_junior_photosynthesis_respiration",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-123",
+      "topic_id": "bio_junior_human_body_systems",
+      "subject": "biology",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_junior_human_body_systems”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "bio_junior_human_body_systems",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-124",
+      "topic_id": "bio_junior_ecology_food_chain",
+      "subject": "biology",
+      "stage": "junior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_junior_ecology_food_chain”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "bio_junior_ecology_food_chain",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-125",
+      "topic_id": "bio_senior_genetics_law",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_genetics_law”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_genetics_law",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-126",
+      "topic_id": "bio_senior_dna_expression",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_dna_expression”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_dna_expression",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-127",
+      "topic_id": "bio_senior_meiosis",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_meiosis”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_meiosis",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-128",
+      "topic_id": "bio_senior_mitosis_image",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_mitosis_image”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_mitosis_image",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-129",
+      "topic_id": "bio_senior_cell_respiration",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_cell_respiration”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_cell_respiration",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-130",
+      "topic_id": "bio_senior_photosynthesis_curve",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_photosynthesis_curve”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_photosynthesis_curve",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-131",
+      "topic_id": "bio_senior_enzyme_curve",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_enzyme_curve”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_enzyme_curve",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-132",
+      "topic_id": "bio_senior_ecosystem_material_cycle",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_ecosystem_material_cycle”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_ecosystem_material_cycle",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-133",
+      "topic_id": "bio_senior_experiment_design",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_experiment_design”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_experiment_design",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-134",
+      "topic_id": "bio_senior_immunity_process",
+      "subject": "biology",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“bio_senior_immunity_process”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "bio_senior_immunity_process",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-135",
+      "topic_id": "history_junior_qin_unification",
+      "subject": "history",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_junior_qin_unification”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "history_junior_qin_unification",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-136",
+      "topic_id": "history_junior_tang_song_change",
+      "subject": "history",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_junior_tang_song_change”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "history_junior_tang_song_change",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-137",
+      "topic_id": "history_junior_opium_war",
+      "subject": "history",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_junior_opium_war”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "history_junior_opium_war",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-138",
+      "topic_id": "history_junior_industrial_revolution",
+      "subject": "history",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_junior_industrial_revolution”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "history_junior_industrial_revolution",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-139",
+      "topic_id": "history_senior_ancient_civilizations",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_ancient_civilizations”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "history_senior_ancient_civilizations",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-140",
+      "topic_id": "history_senior_material_analysis",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_material_analysis”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "history_senior_material_analysis",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-141",
+      "topic_id": "history_senior_historical_interpretation",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_historical_interpretation”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "history_senior_historical_interpretation",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-142",
+      "topic_id": "history_senior_1898_reform_revolution",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_1898_reform_revolution”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "history_senior_1898_reform_revolution",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-143",
+      "topic_id": "history_senior_cold_war_multipolarity",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_cold_war_multipolarity”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "history_senior_cold_war_multipolarity",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-144",
+      "topic_id": "history_senior_globalization",
+      "subject": "history",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“history_senior_globalization”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "history_senior_globalization",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-145",
+      "topic_id": "geo_junior_map_skills",
+      "subject": "geography",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_junior_map_skills”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "geo_junior_map_skills",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-146",
+      "topic_id": "geo_junior_climate_types",
+      "subject": "geography",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_junior_climate_types”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "geo_junior_climate_types",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-147",
+      "topic_id": "geo_junior_river_landform",
+      "subject": "geography",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_junior_river_landform”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "geo_junior_river_landform",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-148",
+      "topic_id": "geo_junior_agriculture_industry",
+      "subject": "geography",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_junior_agriculture_industry”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "geo_junior_agriculture_industry",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-149",
+      "topic_id": "geo_senior_atmospheric_circulation",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_atmospheric_circulation”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_atmospheric_circulation",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-150",
+      "topic_id": "geo_senior_earth_movement",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_earth_movement”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_earth_movement",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-151",
+      "topic_id": "geo_senior_map_scale_projection",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_map_scale_projection”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_map_scale_projection",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-152",
+      "topic_id": "geo_senior_industrial_location",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_industrial_location”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_industrial_location",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-153",
+      "topic_id": "geo_senior_urbanization",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_urbanization”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_urbanization",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-154",
+      "topic_id": "geo_senior_water_cycle",
+      "subject": "geography",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“geo_senior_water_cycle”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "geo_senior_water_cycle",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-155",
+      "topic_id": "pol_junior_rule_law",
+      "subject": "politics",
+      "stage": "junior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_junior_rule_law”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "pol_junior_rule_law",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-156",
+      "topic_id": "pol_junior_rights_obligations",
+      "subject": "politics",
+      "stage": "junior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_junior_rights_obligations”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "pol_junior_rights_obligations",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-157",
+      "topic_id": "pol_junior_collective_responsibility",
+      "subject": "politics",
+      "stage": "junior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_junior_collective_responsibility”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "pol_junior_collective_responsibility",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-158",
+      "topic_id": "pol_junior_national_security",
+      "subject": "politics",
+      "stage": "junior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_junior_national_security”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "pol_junior_national_security",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-159",
+      "topic_id": "pol_senior_economy_market",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_economy_market”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_economy_market",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-160",
+      "topic_id": "pol_senior_political_participation",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_political_participation”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_political_participation",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-161",
+      "topic_id": "pol_senior_rule_of_law",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_rule_of_law”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_rule_of_law",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-162",
+      "topic_id": "pol_senior_philosophy_dialectics",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_philosophy_dialectics”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_philosophy_dialectics",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-163",
+      "topic_id": "pol_senior_material_cause_meaning",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_material_cause_meaning”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_material_cause_meaning",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-164",
+      "topic_id": "pol_senior_new_development_concept",
+      "subject": "politics",
+      "stage": "senior_high",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“pol_senior_new_development_concept”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "pol_senior_new_development_concept",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-165",
+      "topic_id": "college_c_variables_types",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_c_variables_types”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_c_variables_types",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-166",
+      "topic_id": "college_c_branch_control",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_c_branch_control”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_c_branch_control",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-167",
+      "topic_id": "college_c_loop_invariant",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_c_loop_invariant”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "college_c_loop_invariant",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-168",
+      "topic_id": "college_c_array_traversal",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_c_array_traversal”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_c_array_traversal",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-169",
+      "topic_id": "college_c_recursion_basic",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_c_recursion_basic”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_c_recursion_basic",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-170",
+      "topic_id": "college_ds_algorithm_complexity",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_ds_algorithm_complexity”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_ds_algorithm_complexity",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-171",
+      "topic_id": "college_ds_graph_traversal",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_ds_graph_traversal”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_ds_graph_traversal",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-172",
+      "topic_id": "college_ds_shortest_path",
+      "subject": "computer_science",
+      "stage": "college",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_ds_shortest_path”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "college_ds_shortest_path",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-173",
+      "topic_id": "college_econ_scarcity_opportunity_cost",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_econ_scarcity_opportunity_cost”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_econ_scarcity_opportunity_cost",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-174",
+      "topic_id": "college_econ_ppf",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_econ_ppf”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_econ_ppf",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-175",
+      "topic_id": "college_micro_demand_supply",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_micro_demand_supply”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_micro_demand_supply",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-176",
+      "topic_id": "college_micro_elasticity",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "normal_practice",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_micro_elasticity”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.55
+      },
+      "expected": {
+        "target_topic_id": "college_micro_elasticity",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-177",
+      "topic_id": "college_micro_firm_profit",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "error_retry",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_micro_firm_profit”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 1,
+        "mastery": 0.42,
+        "error_type": "concept_confusion",
+        "previous_question_stem": "此前题干仅用于避免复用"
+      },
+      "expected": {
+        "target_topic_id": "college_micro_firm_profit",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-178",
+      "topic_id": "college_macro_gdp_accounting",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "due_review",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 2,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_macro_gdp_accounting”生成一道难度 2 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 3,
+        "mastery": 0.67,
+        "review_due": true
+      },
+      "expected": {
+        "target_topic_id": "college_macro_gdp_accounting",
+        "question_type": "short_answer",
+        "difficulty": 2,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-179",
+      "topic_id": "college_macro_fiscal_policy",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "weak_topic",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 3,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_macro_fiscal_policy”生成一道难度 3 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.28,
+        "weak_topic": true
+      },
+      "expected": {
+        "target_topic_id": "college_macro_fiscal_policy",
+        "question_type": "short_answer",
+        "difficulty": 3,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    },
+    {
+      "id": "qgen-180",
+      "topic_id": "college_econ_market_failure_synthesis",
+      "subject": "economics",
+      "stage": "college",
+      "scenario": "prerequisite_blocked",
+      "requested_question_type": "short_answer",
+      "planned_difficulty": 4,
+      "prompt_language": "zh",
+      "source_text": "围绕目标主题“college_econ_market_failure_synthesis”生成一道难度 4 的 short_answer 针对性练习题。题干不得泄露答案，也不得复用旧题干。",
+      "learner_context": {
+        "attempt_count": 0,
+        "mastery": 0.35,
+        "has_prerequisite_blocker": true
+      },
+      "expected": {
+        "target_topic_id": "college_econ_market_failure_synthesis",
+        "question_type": "short_answer",
+        "difficulty": 4,
+        "forbid_answer_leak": true,
+        "forbid_prompt_leakage": true,
+        "reference_answer_correct": true,
+        "rubric_answer_consistent": true
+      }
+    }
+  ]
+}
