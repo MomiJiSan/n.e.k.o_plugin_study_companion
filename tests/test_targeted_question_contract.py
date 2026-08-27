@@ -132,6 +132,35 @@ def test_targeted_question_contract_rejects_conflicting_answer_fields(
     assert "answer_reference_answer_mismatch" in invalid.errors
 
 
+def test_targeted_question_contract_requires_bounded_scoring_materials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_targeted_material_contract_test")
+    contract = importlib.import_module(f"{package}.targeted_question_contract")
+    invalid = contract.validate_targeted_question(
+        {
+            "question": "What is 2 + 2?",
+            "answer": "4",
+            "reference_answer": "4",
+            "accepted_answers": ["4", "4"],
+            "key_points": [],
+            "rubric": {"calculation": -1},
+            "solution_steps": [""],
+            "question_type": "math_exact",
+            "difficulty": 2,
+            "target_topic_id": "target",
+        },
+        target_topic_id="target",
+        target_topic_name="Target topic",
+    )
+    assert {
+        "invalid_accepted_answers",
+        "invalid_key_points",
+        "invalid_rubric",
+        "invalid_solution_steps",
+    } <= set(invalid.errors)
+
+
 def test_targeted_question_contract_handles_single_letter_answer_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -145,6 +174,10 @@ def test_targeted_question_contract_handles_single_letter_answer_hint(
         "difficulty": 2,
         "topic": "Target topic",
         "target_topic_id": "target",
+        "accepted_answers": ["A"],
+        "key_points": ["Classifies the item correctly."],
+        "rubric": {"classification": 1},
+        "solution_steps": ["Apply the target definition."],
     }
     safe = contract.validate_targeted_question(
         {**base, "hint": "Recall the applicable definition."},
@@ -898,7 +931,17 @@ def test_semantic_validation_uses_only_rebuilt_canonical_relations(
 ) -> None:
     entries, _ = _load_entries(monkeypatch, "_targeted_validation_evidence_test")
     context = entries._question_validation_context(
-        {"question": "Question", "reference_answer": "Answer"},
+        {
+            "question": "Question",
+            "reference_answer": "Answer",
+            "accepted_answers": ["Answer"],
+            "key_points": ["Key point"],
+            "rubric": {"key point": 1},
+            "solution_steps": ["Step"],
+            "hint": "Hint",
+            "difficulty": 2,
+            "question_type": "short_answer",
+        },
         {
             "question_params": {
                 "target_topic": {
@@ -921,6 +964,13 @@ def test_semantic_validation_uses_only_rebuilt_canonical_relations(
         canonical_relations={"prerequisites": ["Canonical prerequisite"]},
     )
     assert context["necessary_relations"] == {"prerequisites": ["Canonical prerequisite"]}
+    assert context["accepted_answers"] == ["Answer"]
+    assert context["key_points"] == ["Key point"]
+    assert context["rubric"] == {"key point": 1}
+    assert context["solution_steps"] == ["Step"]
+    assert context["hint"] == "Hint"
+    assert context["difficulty"] == 2
+    assert context["question_type"] == "short_answer"
     assert "forged prerequisite" not in str(context)
     assert "client-blocker" not in str(context)
     for sentinel in (
@@ -1013,6 +1063,10 @@ async def _server_binding_overrides_model_claim(
                     "question": "Question",
                     "answer": "Answer",
                     "reference_answer": "Answer",
+                    "accepted_answers": ["Answer"],
+                    "key_points": ["Uses the target definition."],
+                    "rubric": {"definition": 1},
+                    "solution_steps": ["Apply the target definition."],
                     "question_type": "short_answer",
                     "difficulty": 2,
                     "hint": "Recall the definition.",
@@ -1093,6 +1147,8 @@ async def _server_binding_overrides_model_claim(
     }
     assert "target_binding" not in subject.public_payload
     assert "answer" not in subject.public_payload
+    for private_field in ("accepted_answers", "key_points", "rubric", "solution_steps"):
+        assert private_field not in subject.public_payload
     assert subject._knowledge_tracker.recorded == [targeted["question_params"]]
 
 
@@ -1117,6 +1173,10 @@ async def _second_semantic_failure_never_finalizes_question(
                 "question": f"Question {self.generated}",
                 "answer": "Answer",
                 "reference_answer": "Answer",
+                "accepted_answers": ["Answer"],
+                "key_points": ["Uses the target definition."],
+                "rubric": {"definition": 1},
+                "solution_steps": ["Apply the target definition."],
                 "question_type": "short_answer",
                 "difficulty": 2,
                 "hint": "Think about the definition.",

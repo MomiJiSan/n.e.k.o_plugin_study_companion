@@ -246,6 +246,16 @@ def _question_validation_context(
     return {
         "question": payload.get("question") or "",
         "reference_answer": payload.get("reference_answer") or payload.get("answer") or "",
+        # This private validation-only context never becomes the public
+        # current-question payload.  It lets the semantic judge compare every
+        # grading artifact without expanding its response schema.
+        "accepted_answers": list(payload.get("accepted_answers") or []),
+        "key_points": list(payload.get("key_points") or []),
+        "rubric": dict(payload.get("rubric") or {}),
+        "solution_steps": list(payload.get("solution_steps") or []),
+        "hint": payload.get("hint") or "",
+        "difficulty": payload.get("difficulty"),
+        "question_type": payload.get("question_type") or "",
         "target_topic": target_metadata,
         # Semantic validation must not inherit the generation prompt's graph
         # summary (nor client-supplied blockers).  Its relation evidence is

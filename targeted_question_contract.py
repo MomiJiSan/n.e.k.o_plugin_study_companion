@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from typing import Any
 SUPPORTED_TARGETED_QUESTION_TYPES = frozenset(
     {"short_answer", "math_exact", "math_reasoning"}
 )
+_MATERIAL_LIST_MAX_ITEMS = 12
+_MATERIAL_TEXT_MAX_CHARS = 500
+_RUBRIC_KEY_MAX_CHARS = 200
 
 TARGET_TOPIC_IDENTITY_FIELDS = (
     "id",
@@ -56,6 +60,33 @@ def _normalized(value: object) -> str:
     return re.sub(r"[^\w\u4e00-\u9fff]+", "", _text(value).casefold())
 
 
+def _valid_material_list(value: object) -> bool:
+    if not isinstance(value, list) or not value or len(value) > _MATERIAL_LIST_MAX_ITEMS:
+        return False
+    items = [_text(item) for item in value]
+    return (
+        all(isinstance(item, str) and item and len(item) <= _MATERIAL_TEXT_MAX_CHARS for item in value)
+        and len({_normalized(item) for item in items}) == len(items)
+    )
+
+
+def _valid_rubric(value: object) -> bool:
+    if not isinstance(value, Mapping) or not value or len(value) > _MATERIAL_LIST_MAX_ITEMS:
+        return False
+    total = 0.0
+    for key, weight in value.items():
+        name = _text(key)
+        if not name or len(name) > _RUBRIC_KEY_MAX_CHARS:
+            return False
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+            return False
+        numeric_weight = float(weight)
+        if not math.isfinite(numeric_weight) or numeric_weight <= 0:
+            return False
+        total += numeric_weight
+    return math.isfinite(total) and total > 0
+
+
 def validate_targeted_question(
     payload: dict[str, Any],
     *,
@@ -76,6 +107,11 @@ def validate_targeted_question(
         errors.append("missing_question")
     if not answer or not reference:
         errors.append("missing_reference_answer")
+    for field_name in ("accepted_answers", "key_points", "solution_steps"):
+        if not _valid_material_list(payload.get(field_name)):
+            errors.append(f"invalid_{field_name}")
+    if not _valid_rubric(payload.get("rubric")):
+        errors.append("invalid_rubric")
     if (
         payload.get("_answer_reference_answer_consistent") is False
         or (raw_answer and raw_reference and raw_answer != raw_reference)
