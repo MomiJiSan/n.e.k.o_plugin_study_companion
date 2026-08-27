@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import Any, Mapping, Protocol, Sequence
 
-from .contracts import EvaluatedAttempt, MapPage, MapQuery, QuestionInstance, QuestionPlan, TopicRef
+from .assessment import AssessmentDecision, AssessmentRequest
+from .contracts import (
+    EvaluatedAttempt,
+    MapPage,
+    MapQuery,
+    QuestionGenerationResult,
+    QuestionInstance,
+    QuestionPlan,
+    TopicRef,
+)
+from .learning_commit import CommitResult
+from .question_factory import (
+    QuestionGenerationRequest,
+    QuestionValidationResult,
+)
 
 
 class CatalogPort(Protocol):
@@ -44,3 +59,39 @@ class ModelGatewayPort(Protocol):
         question: QuestionInstance,
         learner_answer: str,
     ) -> Mapping[str, Any]: ...
+
+
+class TutorModelPort(Protocol):
+    """Typed model boundary used by future question and answer adapters."""
+
+    def generate_question(
+        self, request: QuestionGenerationRequest
+    ) -> QuestionGenerationResult | Awaitable[QuestionGenerationResult]: ...
+
+    def evaluate_answer(
+        self, request: AssessmentRequest
+    ) -> AssessmentDecision | Awaitable[AssessmentDecision]: ...
+
+
+class LearningContextPort(Protocol):
+    """Build entry-owned generation context without exposing the plugin owner."""
+
+    def build_question_context(self, plan: QuestionPlan) -> Mapping[str, Any]: ...
+
+
+class QuestionValidationPort(Protocol):
+    """Typed structural or semantic question validation boundary."""
+
+    def validate_question(
+        self,
+        request: QuestionGenerationRequest,
+        generation: QuestionGenerationResult,
+    ) -> QuestionValidationResult | Awaitable[QuestionValidationResult]: ...
+
+
+class LearningCommitPort(Protocol):
+    """Submit exactly one complete evaluated attempt to an atomic adapter."""
+
+    def commit_evaluated_attempt(
+        self, attempt: EvaluatedAttempt
+    ) -> CommitResult | Awaitable[CommitResult]: ...
