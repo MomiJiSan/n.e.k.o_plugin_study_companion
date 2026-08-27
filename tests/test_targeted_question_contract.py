@@ -46,6 +46,40 @@ def test_targeted_question_contract_rejects_failure_modes(
     } <= set(invalid.errors)
 
 
+def test_targeted_question_contract_enforces_planned_difficulty_only_when_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_targeted_planned_difficulty_contract_test")
+    contract = importlib.import_module(f"{package}.targeted_question_contract")
+    payload = {
+        "question": "What is 2 + 2?",
+        "answer": "4",
+        "reference_answer": "4",
+        "accepted_answers": ["4"],
+        "key_points": ["Add the two terms."],
+        "rubric": {"addition": 1},
+        "solution_steps": ["Compute 2 + 2."],
+        "question_type": "math_exact",
+        "difficulty": 2,
+        "target_topic_id": "target",
+    }
+
+    legacy = contract.validate_targeted_question(
+        payload,
+        target_topic_id="target",
+        target_topic_name="Target",
+    )
+    planned = contract.validate_targeted_question(
+        payload,
+        target_topic_id="target",
+        target_topic_name="Target",
+        expected_difficulty=3,
+    )
+
+    assert legacy.valid
+    assert "planned_difficulty_mismatch" in planned.errors
+
+
 def test_target_topic_evidence_projection_is_the_single_seed_field_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -598,6 +632,8 @@ def test_unscoped_selection_refocuses_on_retry_with_complete_params(
 
     result = Subject()._build_targeted_question_context()
     assert result["selection_reason"] == "retry"
+    assert result["question_params"]["planned_difficulty"] == 2
+    assert result["question_params"]["suggested_difficulty"] == 2
     assert result["selected_topic_id"] == "target"
     assert result["question_params"]["mastery"]["mastery"] == 0.41
     assert result["question_params"]["blockers"] == [{"id": "pre"}]
@@ -1156,6 +1192,92 @@ def test_server_binding_overrides_model_claim_and_stays_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     asyncio.run(_server_binding_overrides_model_claim(monkeypatch))
+
+
+async def _planned_difficulty_mismatch_retries_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_planned_difficulty_retry_test")
+
+    class Agent:
+        generated = 0
+        validated = 0
+
+        async def question_generate(self, *_args, **_kwargs):
+            self.generated += 1
+            difficulty = 2 if self.generated == 1 else 3
+            payload = {
+                "question": f"Question {self.generated}",
+                "answer": "Answer",
+                "reference_answer": "Answer",
+                "accepted_answers": ["Answer"],
+                "key_points": ["Uses the target definition."],
+                "rubric": {"definition": 1},
+                "solution_steps": ["Apply the target definition."],
+                "question_type": "short_answer",
+                "difficulty": difficulty,
+                "hint": "Recall the definition.",
+            }
+            return _Reply("question_generate", "", payload["question"], payload)
+
+        async def question_validate(self, **_kwargs):
+            self.validated += 1
+            return _Reply(
+                "question_validate",
+                "",
+                "ok",
+                {"relevant": True, "answer_supported": True, "retry": False},
+            )
+
+    class Tracker:
+        def record_prompt_usage_for_question_params(self, _params: dict[str, Any]) -> None:
+            return None
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+        _knowledge_tracker = Tracker()
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "zh-CN"}
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        @asynccontextmanager
+        async def _practice_scope_write_lock(self):
+            yield
+
+        async def _finalize_tutor_call(self, _operation, reply, **_kwargs):
+            return dict(reply.payload)
+
+    subject = Subject()
+    result = await subject._generate_question_payload(
+        source_text="Generate",
+        source="targeted_question",
+        targeted_context={
+            "selected_topic_id": "target",
+            "selected_topic_name": "Target",
+            "selection_context_id": "ctx",
+            "scope_revision": 0,
+            "scope_key": "",
+            "question_params": {
+                "target_topic": {"id": "target", "name": "Target"},
+                "planned_difficulty": 3,
+            },
+        },
+    )
+
+    assert result["difficulty"] == 3
+    assert subject._agent.generated == 2
+    assert subject._agent.validated == 1
+
+
+def test_planned_difficulty_mismatch_uses_the_existing_one_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_planned_difficulty_mismatch_retries_once(monkeypatch))
 
 
 async def _second_semantic_failure_never_finalizes_question(
