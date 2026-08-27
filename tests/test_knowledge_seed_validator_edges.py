@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from knowledge_seed_validator import validate_knowledge_seed_manifest
+from knowledge_seed_validator import (
+    _format_quality_report,
+    validate_knowledge_seed_manifest,
+)
 
 
 def _topic(topic_id: str, **overrides: object) -> dict[str, object]:
@@ -271,9 +274,41 @@ def test_bundled_seed_target_context_audit_baseline() -> None:
     ) + sum(
         report["subject_target_context_excused_root_counts"].values()
     ) == report["topic_count"]
+    assert sum(report["subject_target_context_gap_counts"].values()) == 0
+    assert report["subject_target_context_excused_roots"] == {
+        "math": [
+            {
+                "id": "primary_number_sense",
+                "excused_relations": ["prerequisite"],
+            }
+        ]
+    }
     assert report["subject_minimum_standard_gap_counts"]["history"] == 0
     assert report["subject_minimum_standard_gap_counts"]["geography"] == 0
     assert report["subject_minimum_standard_gap_counts"]["math"] == 0
+    assert set(report["subject_target_context_complete_rates"].values()) == {1.0}
+    content_audit = report["content_quality_audit"]
+    assert content_audit["thresholds"] == {
+        "maximum_complete_misconception_group_reuse": 20,
+        "requires_topic_specific_misconception": True,
+        "requires_example_answer_outline_skill_hit": True,
+        "minimum_explicit_preferred_style_mapping_rate": 0.95,
+    }
+    assert content_audit["typical_misconception_group_reuse"]["maximum_reuse_count"] >= 20
+    assert content_audit["answer_outline_reuse"]["maximum_reuse_count"] >= 20
+    assert set(content_audit["subject_content_quality"]) == {
+        "biology",
+        "chemistry",
+        "chinese",
+        "computer_science",
+        "economics",
+        "english",
+        "geography",
+        "history",
+        "math",
+        "physics",
+        "politics",
+    }
 
 
 
@@ -369,3 +404,32 @@ def test_bundled_seed_passes_strict_taxonomy_coverage() -> None:
         }
     ]
     assert "taxonomy_coverage_gap" not in {issue.code for issue in result.issues}
+
+
+def test_quality_report_formats_non_blocking_content_audit() -> None:
+    lines = _format_quality_report(
+        {
+            "content_quality_audit": {
+                "typical_misconception_group_reuse": {
+                    "maximum_reuse_count": 21,
+                    "groups_over_limit": 1,
+                },
+                "answer_outline_reuse": {"maximum_reuse_count": 8},
+                "subject_content_quality": {
+                    "math": {
+                        "explicit_preferred_style_mapping_rate": 0.95,
+                        "topics_with_example_skill_hit": 9,
+                        "topics_with_topic_specific_misconception": 7,
+                        "topic_count": 10,
+                    }
+                },
+            }
+        }
+    )
+
+    assert "typical_misconception_group_reuse: max=21, over_limit=1" in lines
+    assert "answer_outline_reuse: max=8" in lines
+    assert (
+        "  math: preferred_style_mapping=95.00%, example_skill_hits=9/10, "
+        "topic_specific_misconceptions=7/10"
+    ) in lines

@@ -7,6 +7,7 @@ from functools import wraps
 from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import build_question_plan
 from .adaptive_learning.question_factory import QuestionFactory
+from .difficulty_policy import select_targeted_difficulty
 from .entry_common import (
     LLM_OPERATION_QUESTION_GENERATE,
     Any,
@@ -32,7 +33,7 @@ from .practice_scope import (
 )
 from .question_type_mapping import (
     enforce_mapped_question_type,
-    resolve_target_question_type,
+    select_question_style,
 )
 from .targeted_question_contract import (
     project_target_topic_evidence,
@@ -666,13 +667,27 @@ class _TutorQuestionEntriesMixin:
             focused["prompt_guidance"] = "\n".join(item for item in (existing_guidance, foundation_guidance) if item)
         focused["target_topic_id"] = selected_topic_id
         focused["target_topic"] = self._knowledge_tracker.store.get_topic(selected_topic_id) or {}
+        planned_difficulty = select_targeted_difficulty(
+            focused["target_topic"],
+            mastery=dict(focused.get("mastery") or {}),
+            blockers=list(focused.get("blockers") or []),
+            selection_reason=str(selection.get("selection_reason") or ""),
+            retry_wrong_question=dict(focused.get("retry_wrong_question") or {}),
+            recent_results=focused.get("recent_results"),
+        )
+        # Both keys are private prompt context.  Keeping the legacy
+        # ``suggested_difficulty`` current preserves established prompt
+        # guidance, while ``planned_difficulty`` is the exact validation
+        # binding used below.
+        focused["suggested_difficulty"] = planned_difficulty
+        focused["planned_difficulty"] = planned_difficulty
         focused["scope_candidates"] = {
             "retry_wrong_questions": initial_params.get("retry_wrong_questions") or [],
             "due_reviews": initial_params.get("due_reviews") or [],
             "weak_topics": initial_params.get("weak_topics") or [],
         }
         selection["question_params"] = focused
-        selection["difficulty"] = focused.get("suggested_difficulty") or selection["difficulty"]
+        selection["difficulty"] = planned_difficulty
 
     def _build_targeted_question_context(self) -> dict[str, Any]:
         scope = self._resolve_active_practice_scope()
@@ -730,8 +745,19 @@ class _TutorQuestionEntriesMixin:
             extra_context["source_question_id"] = source_question_id
         if targeted_context:
             question_params = dict(targeted_context.get("question_params") or {})
-            question_type_mapping = resolve_target_question_type(
-                dict(question_params.get("target_topic") or {})
+            retry = dict(question_params.get("retry_wrong_question") or {})
+            previous_question = dict(retry.get("question") or {})
+            mastery = dict(question_params.get("mastery") or {})
+            try:
+                attempt_count = max(0, int(mastery.get("attempts") or 0))
+            except (TypeError, ValueError):
+                attempt_count = 0
+            question_type_mapping = select_question_style(
+                dict(question_params.get("target_topic") or {}),
+                attempt_count=attempt_count,
+                selection_reason=str(targeted_context.get("selection_reason") or ""),
+                previous_question_style=str(previous_question.get("question_style") or ""),
+                error_type=str(retry.get("error_type") or ""),
             )
             question_params.update(question_type_mapping.to_context())
             extra_context.update(
@@ -803,11 +829,15 @@ class _TutorQuestionEntriesMixin:
                 created_at=candidate_reply.created_at,
             )
             params = dict(targeted_context.get("question_params") or {})
+            planned_difficulty = params.get("planned_difficulty")
+            if isinstance(planned_difficulty, bool) or not isinstance(planned_difficulty, int):
+                planned_difficulty = None
             structural = validate_targeted_question(
                 candidate_payload,
                 target_topic_id=str(targeted_context.get("selected_topic_id") or ""),
                 target_topic_name=str(targeted_context.get("selected_topic_name") or ""),
                 origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
+                expected_difficulty=planned_difficulty,
             )
             if not structural.valid:
                 validation_failure = "Structural validation failed: " + ", ".join(structural.errors)

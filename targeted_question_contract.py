@@ -93,6 +93,7 @@ def validate_targeted_question(
     target_topic_id: str,
     target_topic_name: str,
     origin_wrong_question: dict[str, Any] | None = None,
+    expected_difficulty: int | None = None,
 ) -> TargetedQuestionValidation:
     errors: list[str] = []
     question = _text(payload.get("question"))
@@ -127,6 +128,10 @@ def validate_targeted_question(
         or not 1 <= difficulty <= 5
     ):
         errors.append("invalid_difficulty")
+    elif expected_difficulty is not None and difficulty != expected_difficulty:
+        # The optional bound lets the server own the targeted difficulty while
+        # retaining the legacy contract for every caller that does not plan it.
+        errors.append("planned_difficulty_mismatch")
     generated_target = _text(payload.get("target_topic_id"))
     if not generated_target or generated_target != _text(target_topic_id):
         errors.append("target_topic_mismatch")
