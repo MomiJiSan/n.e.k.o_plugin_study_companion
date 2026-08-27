@@ -16,10 +16,14 @@ PACKAGE.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
 sys.modules[PACKAGE_NAME] = PACKAGE
 
 LocalRuntimeClient = importlib.import_module(
-    f"{PACKAGE_NAME}.local_runtime_client"
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_client"
 ).LocalRuntimeClient
-protocol = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_protocol")
-supervisor_module = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_supervisor")
+protocol = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_protocol"
+)
+supervisor_module = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_supervisor"
+)
 
 LocalRuntimeSupervisor = supervisor_module.LocalRuntimeSupervisor
 LOCAL_MODELS_NOT_INSTALLED = protocol.LOCAL_MODELS_NOT_INSTALLED
@@ -123,6 +127,62 @@ async def test_failed_post_ready_health_check_cleans_up_runtime() -> None:
         assert supervisor._process is None
     finally:
         await supervisor.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_start_failure_keeps_bounded_stderr_diagnostic() -> None:
+    class _ClosedStdout:
+        async def readline(self) -> bytes:
+            return b""
+
+    class _DiagnosticStderr:
+        async def read(self, limit: int = -1) -> bytes:
+            assert limit == 512
+            return b"runtime startup detail"
+
+    class _FailedProcess:
+        stdout = _ClosedStdout()
+        stderr = _DiagnosticStderr()
+        returncode = 1
+
+    async def process_factory(*_args, **_kwargs):
+        return _FailedProcess()
+
+    supervisor = LocalRuntimeSupervisor(
+        startup_timeout_seconds=0.1,
+        process_factory=process_factory,
+    )
+
+    with pytest.raises(LocalRuntimeError) as raised:
+        await supervisor.ensure_started()
+
+    assert raised.value.code == LOCAL_RUNTIME_START_FAILED
+    assert "runtime startup detail" in raised.value.diagnostic
+
+
+@pytest.mark.asyncio
+async def test_ready_port_diagnostic_read_does_not_wait_for_stderr_eof() -> None:
+    class _ClosedStdout:
+        async def readline(self) -> bytes:
+            return b""
+
+    class _OpenStderr:
+        async def read(self, limit: int = -1) -> bytes:
+            assert limit == 512
+            await asyncio.Event().wait()
+            return b""
+
+    class _ProcessWithOpenStderr:
+        stdout = _ClosedStdout()
+        stderr = _OpenStderr()
+
+    supervisor = LocalRuntimeSupervisor(startup_timeout_seconds=0.1)
+
+    with pytest.raises(ValueError, match="stopped before becoming ready"):
+        await asyncio.wait_for(
+            supervisor._read_ready_port(_ProcessWithOpenStderr()),
+            timeout=0.5,
+        )
 
 
 def test_client_refuses_non_loopback_endpoint() -> None:

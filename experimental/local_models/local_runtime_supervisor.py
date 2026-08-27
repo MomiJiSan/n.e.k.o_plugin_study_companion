@@ -39,6 +39,9 @@ except ImportError:  # Direct imports in isolated tests.
 
 
 _READY_TIMEOUT_SECONDS = 8.0
+_MAX_START_ATTEMPTS = 2
+_STARTUP_DIAGNOSTIC_LIMIT_BYTES = 512
+_STARTUP_DIAGNOSTIC_READ_TIMEOUT_SECONDS = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,31 +139,41 @@ class LocalRuntimeSupervisor:
         token = secrets.token_urlsafe(32)
         script = Path(__file__).with_name("local_runtime_stub.py")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        try:
-            process = await self._process_factory(
-                sys.executable,
-                str(script),
-                "--token",
-                token,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                stdin=asyncio.subprocess.DEVNULL,
-                creationflags=creationflags,
-            )
-            self._process = process
-            port = await self._read_ready_port(process)
-        except (
-            OSError,
-            TimeoutError,
-            ValueError,
-            json.JSONDecodeError,
-            LocalRuntimeError,
-        ) as exc:
-            await self._clear_process_locked()
-            self._state = LocalRuntimeState.UNAVAILABLE
-            raise LocalRuntimeError(
-                LOCAL_RUNTIME_START_FAILED, "local runtime could not start"
-            ) from exc
+        for attempt in range(_MAX_START_ATTEMPTS):
+            try:
+                process = await self._process_factory(
+                    sys.executable,
+                    "-u",
+                    str(script),
+                    f"--token={token}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    creationflags=creationflags,
+                )
+                self._process = process
+                port = await self._read_ready_port(process)
+                break
+            except (
+                OSError,
+                TimeoutError,
+                ValueError,
+                json.JSONDecodeError,
+                LocalRuntimeError,
+            ) as exc:
+                await self._clear_process_locked()
+                if attempt + 1 == _MAX_START_ATTEMPTS:
+                    self._state = LocalRuntimeState.UNAVAILABLE
+                    diagnostic = (
+                        exc.diagnostic
+                        if isinstance(exc, LocalRuntimeError)
+                        else str(exc)
+                    )[-_STARTUP_DIAGNOSTIC_LIMIT_BYTES:].strip()
+                    raise LocalRuntimeError(
+                        LOCAL_RUNTIME_START_FAILED,
+                        "local runtime could not start",
+                        diagnostic=diagnostic or LOCAL_RUNTIME_START_FAILED,
+                    ) from exc
         connection = LocalRuntimeConnection(
             base_url=f"http://127.0.0.1:{port}", token=token
         )
@@ -207,7 +220,21 @@ class LocalRuntimeSupervisor:
             process.stdout.readline(), timeout=self._startup_timeout_seconds
         )
         if not raw:
-            raise ValueError("runtime stopped before becoming ready")
+            diagnostic = ""
+            if process.stderr is not None:
+                try:
+                    stderr = await asyncio.wait_for(
+                        process.stderr.read(_STARTUP_DIAGNOSTIC_LIMIT_BYTES),
+                        timeout=min(
+                            self._startup_timeout_seconds,
+                            _STARTUP_DIAGNOSTIC_READ_TIMEOUT_SECONDS,
+                        ),
+                    )
+                except TimeoutError:
+                    stderr = b""
+                diagnostic = stderr.decode("utf-8", errors="replace").strip()
+            detail = f": {diagnostic}" if diagnostic else ""
+            raise ValueError(f"runtime stopped before becoming ready{detail}")
         event: Any = json.loads(raw.decode("utf-8"))
         if (
             not isinstance(event, dict)

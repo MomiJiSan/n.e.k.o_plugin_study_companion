@@ -4,9 +4,22 @@ import re
 import uuid
 from functools import wraps
 
+from .adaptive_learning import (
+    PracticeSelection,
+    QuestionGenerationFailure,
+    QuestionGenerationResult,
+    QuestionInstance,
+    QuestionPlan,
+    TopicRef,
+)
 from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import build_question_plan
-from .adaptive_learning.question_factory import QuestionFactory
+from .adaptive_learning.question_application import QuestionApplicationService
+from .adaptive_learning.question_factory import (
+    QuestionFactory,
+    QuestionGenerationRequest,
+    QuestionValidationResult,
+)
 from .difficulty_policy import select_targeted_difficulty
 from .entry_common import (
     LLM_OPERATION_QUESTION_GENERATE,
@@ -800,26 +813,70 @@ class _TutorQuestionEntriesMixin:
             if targeted_context
             else {}
         )
-        for generation_attempt in range(attempts):
-            generation_context = dict(tutor_context)
+        selected_topic_id = str(
+            (targeted_context or {}).get("selected_topic_id") or topic or ""
+        ).strip()
+        selected_topic_name = str(
+            (targeted_context or {}).get("selected_topic_name") or selected_topic_id
+        ).strip()
+        selection_reason = str(
+            (targeted_context or {}).get("selection_reason") or "recommended"
+        )
+        if selection_reason not in {
+            "wrong_retry", "due_review", "weak_topic", "recommended", "default"
+        }:
+            selection_reason = "recommended"
+        planned_difficulty = (
+            dict((targeted_context or {}).get("question_params") or {}).get(
+                "planned_difficulty"
+            )
+            if targeted_context
+            else 0
+        )
+        if isinstance(planned_difficulty, bool) or not isinstance(planned_difficulty, int):
+            planned_difficulty = 0
+        plan = QuestionPlan(
+            plan_id=str((targeted_context or {}).get("selection_context_id") or ""),
+            selection=PracticeSelection(
+                reason=selection_reason,
+                target_topic=TopicRef(id=selected_topic_id, name=selected_topic_name),
+                origin_wrong_question_id=str(
+                    dict((targeted_context or {}).get("question_params") or {})
+                    .get("retry_wrong_question", {})
+                    .get("id")
+                    or ""
+                ),
+            ),
+            difficulty=planned_difficulty,
+            question_type=(
+                question_type_mapping.machine_question_type
+                if question_type_mapping is not None
+                else ""
+            ),
+            mode=active_mode,
+            source_question_id=source_question_id,
+            scope_key=str((targeted_context or {}).get("scope_key") or ""),
+            scope_revision=int((targeted_context or {}).get("scope_revision") or 0),
+        )
+
+        async def generate_candidate(
+            request: QuestionGenerationRequest,
+        ) -> QuestionGenerationResult:
+            generation_context = dict(request.context)
             if validation_failure:
                 generation_context["generation_feedback"] = validation_failure
-            candidate_reply = await QuestionFactory.delegate(
-                self._agent.question_generate,
+            candidate_reply = await self._agent.question_generate(
                 source_text,
                 mode=active_mode,
                 context=generation_context,
             )
-            if not targeted_context:
-                reply = candidate_reply
-                break
-            candidate_payload = enforce_mapped_question_type(
-                candidate_reply.payload,
-                question_type_mapping,
-            )
-            # The binding is authoritative server state, never an LLM claim.
-            candidate_payload["target_topic_id"] = str(targeted_context.get("selected_topic_id") or "")
-            candidate_reply = TutorReply(
+            candidate_payload = dict(candidate_reply.payload or {})
+            if targeted_context:
+                candidate_payload = enforce_mapped_question_type(
+                    candidate_payload, question_type_mapping
+                )
+                candidate_payload["target_topic_id"] = selected_topic_id
+            normalized_reply = TutorReply(
                 operation=candidate_reply.operation,
                 input_text=candidate_reply.input_text,
                 reply=candidate_reply.reply,
@@ -828,50 +885,94 @@ class _TutorQuestionEntriesMixin:
                 diagnostic=candidate_reply.diagnostic,
                 created_at=candidate_reply.created_at,
             )
+            return QuestionGenerationResult(
+                question=QuestionInstance(
+                    question_id=str(candidate_payload.get("question_id") or ""),
+                    plan_id=plan.plan_id,
+                    target_topic=plan.target_topic,
+                    question_type=str(candidate_payload.get("question_type") or plan.question_type),
+                    difficulty=int(candidate_payload.get("difficulty") or 0),
+                    public_payload=candidate_payload,
+                    generator_metadata={"reply": normalized_reply},
+                    mode=active_mode,
+                    source_question_id=source_question_id,
+                    status="generated",
+                ),
+                payload=candidate_payload,
+                raw_result=normalized_reply,
+            )
+
+        async def validate_candidate(
+            _request: QuestionGenerationRequest,
+            generation: QuestionGenerationResult,
+        ) -> QuestionValidationResult:
+            nonlocal validation_failure
+            if not targeted_context or generation.question is None:
+                return QuestionValidationResult(valid=True)
+            candidate_payload = dict(generation.question.public_payload)
             params = dict(targeted_context.get("question_params") or {})
-            planned_difficulty = params.get("planned_difficulty")
-            if isinstance(planned_difficulty, bool) or not isinstance(planned_difficulty, int):
-                planned_difficulty = None
+            expected_difficulty = params.get("planned_difficulty")
+            if isinstance(expected_difficulty, bool) or not isinstance(expected_difficulty, int):
+                expected_difficulty = None
             structural = validate_targeted_question(
                 candidate_payload,
-                target_topic_id=str(targeted_context.get("selected_topic_id") or ""),
-                target_topic_name=str(targeted_context.get("selected_topic_name") or ""),
+                target_topic_id=selected_topic_id,
+                target_topic_name=selected_topic_name,
                 origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
-                expected_difficulty=planned_difficulty,
+                expected_difficulty=expected_difficulty,
             )
             if not structural.valid:
-                validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
-                continue
-            validation_reply = await QuestionFactory.delegate(
-                self._agent.question_validate,
+                validation_failure = "Structural validation failed: " + ", ".join(
+                    structural.errors
+                )
+                return QuestionValidationResult(
+                    valid=False, errors=tuple(structural.errors), raw_result=structural
+                )
+            validation_reply = await self._agent.question_validate(
                 context=_question_validation_context(
                     candidate_payload,
                     targeted_context,
                     canonical_relations=canonical_relations,
                 ),
             )
-            if not semantic_validation_passed(dict(validation_reply.payload or {}), degraded=validation_reply.degraded):
+            if not semantic_validation_passed(
+                dict(validation_reply.payload or {}), degraded=validation_reply.degraded
+            ):
                 validation_failure = "Semantic validation failed: " + str(
-                    (validation_reply.payload or {}).get("reason") or validation_reply.diagnostic or "retry"
+                    (validation_reply.payload or {}).get("reason")
+                    or validation_reply.diagnostic
+                    or "retry"
                 )
-                continue
+                return QuestionValidationResult(
+                    valid=False, errors=(validation_failure,), raw_result=validation_reply
+                )
             candidate_payload.pop("_targeted_difficulty_valid", None)
-            candidate_reply = TutorReply(
-                operation=candidate_reply.operation,
-                input_text=candidate_reply.input_text,
-                reply=candidate_reply.reply,
-                payload=candidate_payload,
-                degraded=candidate_reply.degraded,
-                diagnostic=candidate_reply.diagnostic,
-                created_at=candidate_reply.created_at,
+            generation.question.public_payload.update(candidate_payload)
+            return QuestionValidationResult(valid=True, raw_result=validation_reply)
+
+        try:
+            question_instance = await QuestionApplicationService(
+                QuestionFactory(
+                    generator=generate_candidate,
+                    validator=validate_candidate if targeted_context else None,
+                ),
+                max_attempts=attempts,
+            ).generate(
+                QuestionGenerationRequest(
+                    plan=plan,
+                    source_text=source_text,
+                    source=source,
+                    context=tutor_context,
+                )
             )
-            reply = candidate_reply
-            break
-        if reply is None:
+        except QuestionGenerationFailure as exc:
             raise SdkError(
-                validation_failure or "generated question failed validation",
+                validation_failure or str(exc) or "generated question failed validation",
                 code="QUESTION_VALIDATION_FAILED",
-            )
+            ) from exc
+        reply = question_instance.generator_metadata.get("reply")
+        if not isinstance(reply, TutorReply):
+            raise SdkError("generated question is missing its internal reply")
         if targeted_context:
             async with self._lock:
                 active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)

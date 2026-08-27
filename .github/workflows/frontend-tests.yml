@@ -31,6 +31,9 @@ jobs:
         working-directory: tests/frontend
         run: npm ci
 
+      - name: Verify generated study UI contracts
+        run: uv run python tools/sync_study_ui_contracts.py --check
+
       - name: Run frontend contract tests
         run: >-
           uv run --with pytest pytest

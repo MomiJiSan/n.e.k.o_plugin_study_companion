@@ -67,6 +67,9 @@ class QuestionPlan:
     prerequisite_context: tuple[TopicRef, ...] = ()
     scope_key: str = ""
     scope_revision: int = 0
+    mode: str = "companion"
+    source_question_id: str = ""
+    target_binding: Mapping[str, Any] = field(default_factory=dict)
     policy_version: str = DEFAULT_PRACTICE_POLICY_VERSION
     schema_version: int = INTERNAL_SCHEMA_VERSION
 
@@ -92,6 +95,12 @@ class QuestionInstance:
     generator: str = ""
     model: str = ""
     prompt_version: str = ""
+    generator_metadata: Mapping[str, Any] = field(default_factory=dict)
+    mode: str = "companion"
+    source_question_id: str = ""
+    target_binding: Mapping[str, Any] = field(default_factory=dict)
+    scope_key: str = ""
+    scope_revision: int = 0
     validation_errors: tuple[str, ...] = ()
     status: QuestionStatus = "planned"
     created_at: str = ""
@@ -111,9 +120,58 @@ class EvaluationResult:
     confidence: float | None = None
     evaluator_type: str = "llm_rubric"
     evaluator_version: str = ""
+    evaluator_metadata: Mapping[str, Any] = field(default_factory=dict)
     fallback_reason: str = ""
     details: Mapping[str, Any] = field(default_factory=dict)
     policy_version: str = DEFAULT_ASSESSMENT_POLICY_VERSION
+    schema_version: int = INTERNAL_SCHEMA_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionGenerationResult:
+    """A typed generator outcome before an application service chooses a retry.
+
+    ``payload`` and ``raw_result`` preserve provider-specific information for
+    the outer entry adapter.  They are internal-only and must not be exposed
+    as a public question response without explicit filtering.
+    """
+
+    question: QuestionInstance | None
+    payload: Mapping[str, Any] = field(default_factory=dict)
+    error_code: str = ""
+    diagnostic: str = ""
+    raw_result: Any = None
+    schema_version: int = INTERNAL_SCHEMA_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class AssessmentResult:
+    """Typed assessment outcome with its internal evaluator payload retained."""
+
+    evaluation: EvaluationResult
+    payload: Mapping[str, Any] = field(default_factory=dict)
+    deterministic: bool = False
+    validation_errors: tuple[str, ...] = ()
+    schema_version: int = INTERNAL_SCHEMA_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class LearningCommitContext:
+    """All non-answer facts required to commit one evaluated attempt.
+
+    Keeping these facts on the attempt prevents a production commit adapter
+    from recovering hidden values from an entry closure or plugin owner.
+    """
+
+    mode: str = ""
+    source_question_id: str = ""
+    target_binding: Mapping[str, Any] = field(default_factory=dict)
+    scope_key: str = ""
+    scope_revision: int = 0
+    origin_wrong_question_id: str = ""
+    allow_knowledge_update: bool = True
+    require_existing_topic: bool = False
+    metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = INTERNAL_SCHEMA_VERSION
 
 
@@ -129,6 +187,7 @@ class EvaluatedAttempt:
     response_time_ms: int | None = None
     submitted_at: str = ""
     used_hint: bool = False
+    commit_context: LearningCommitContext = field(default_factory=LearningCommitContext)
     schema_version: int = INTERNAL_SCHEMA_VERSION
 
 

@@ -4,6 +4,7 @@ import contextlib
 from collections.abc import Mapping
 from types import SimpleNamespace
 
+from .adaptive_learning.answer_application import AnswerAssessmentService
 from .adaptive_learning.assessment import AssessmentEngine, AssessmentRequest
 from .adaptive_learning.deterministic_evaluators import (
     ExactShortAnswerEvaluator,
@@ -86,14 +87,16 @@ class _TutorAnswerEntriesMixin:
             return None
         answer_spec = question_payload.get("answer_spec")
         equivalence_engine = question_payload.get("math_equivalence_engine")
-        decision = await AssessmentEngine(
-            deterministic_evaluators=(
-                ExactShortAnswerEvaluator(),
-                NumericToleranceEvaluator(),
-                MathExpressionEvaluator(),
-            ),
-            feature_flags=flags,
-        ).try_assess(
+        assessment = await AnswerAssessmentService(
+            AssessmentEngine(
+                deterministic_evaluators=(
+                    ExactShortAnswerEvaluator(),
+                    NumericToleranceEvaluator(),
+                    MathExpressionEvaluator(),
+                ),
+                feature_flags=flags,
+            )
+        ).try_assess_request(
             AssessmentRequest(
                 question=question,
                 answer=answer,
@@ -120,15 +123,15 @@ class _TutorAnswerEntriesMixin:
                 },
             )
         )
-        if decision is None:
+        if assessment is None:
             return None
-        payload = decision.as_payload()
+        payload = dict(assessment.payload)
         payload.update(
             {
-                "evaluator_type": decision.evaluator_type,
-                "evaluator_version": decision.evaluator_version,
-                "confidence": decision.confidence,
-                "fallback_reason": decision.fallback_reason or "",
+                "evaluator_type": assessment.evaluation.evaluator_type,
+                "evaluator_version": assessment.evaluation.evaluator_version,
+                "confidence": assessment.evaluation.confidence,
+                "fallback_reason": assessment.evaluation.fallback_reason or "",
             }
         )
         return SimpleNamespace(

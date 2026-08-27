@@ -1,0 +1,10 @@
+{
+  "include": [
+    "adaptive_learning/question_application.py",
+    "adaptive_learning/answer_application.py",
+    "adaptive_learning/production_adapters.py"
+  ],
+  "exclude": ["**/__pycache__"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "strict"
+}

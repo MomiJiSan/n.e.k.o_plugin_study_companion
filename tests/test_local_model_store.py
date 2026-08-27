@@ -17,9 +17,15 @@ PACKAGE = ModuleType(PACKAGE_NAME)
 PACKAGE.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
 sys.modules[PACKAGE_NAME] = PACKAGE
 
-manifest = importlib.import_module(f"{PACKAGE_NAME}.local_model_manifest")
-store_module = importlib.import_module(f"{PACKAGE_NAME}.local_model_store")
-protocol = importlib.import_module(f"{PACKAGE_NAME}.local_runtime_protocol")
+manifest = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_model_manifest"
+)
+store_module = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_model_store"
+)
+protocol = importlib.import_module(
+    f"{PACKAGE_NAME}.experimental.local_models.local_runtime_protocol"
+)
 LocalModelAssetError = manifest.LocalModelAssetError
 LocalModelCatalog = manifest.LocalModelCatalog
 LocalModelStore = store_module.LocalModelStore

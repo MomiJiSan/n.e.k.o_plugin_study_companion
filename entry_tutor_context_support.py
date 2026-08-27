@@ -11,13 +11,12 @@ from ._semantic_routing import (
 from .adaptive_learning import (
     EvaluatedAttempt,
     EvaluationResult,
+    LearningCommitContext,
     QuestionInstance,
+    StudyTrackerCommitAdapter,
     TopicRef,
 )
-from .adaptive_learning.learning_commit import (
-    DelegatingCommitPort,
-    LearningCommitService,
-)
+from .adaptive_learning.learning_commit import LearningCommitService
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
     LLM_OPERATION_CONCEPT_EXPLAIN,
@@ -1139,8 +1138,20 @@ class _TutorContextSupportMixin:
                 target_topic=TopicRef(id=topic, name=topic),
                 question_type=str(question_payload.get("question_type") or ""),
                 difficulty=question_payload.get("difficulty") or 0,
-                public_payload={"question": question_text},
-                private_payload={"answer": question_payload.get("answer") or ""},
+                # This is an internal contract; it carries every fact the
+                # existing tracker needs, while entry responses keep using
+                # the separately filtered public payload.
+                public_payload=question_payload,
+                private_payload={},
+                mode=str(context.get("mode") or self._state.active_mode),
+                source_question_id=str(
+                    context.get("source_question_id")
+                    or question_payload.get("source_question_id")
+                    or ""
+                ),
+                target_binding=binding,
+                scope_key=str(question_payload.get("scope_key") or ""),
+                scope_revision=int(question_payload.get("scope_revision") or 0),
                 status="answered",
             ),
             learner_answer=str(context.get("answer") or eval_reply.input_text or ""),
@@ -1150,35 +1161,32 @@ class _TutorContextSupportMixin:
                 feedback=str(eval_payload.get("feedback") or ""),
                 error_type=str(eval_payload.get("error_type") or ""),
                 final_answer_correct=bool(eval_payload.get("final_answer_correct")),
-                details=eval_payload,
+                details=eval_result,
             ),
             session_id=session_id,
             response_time_ms=context.get("response_time_ms"),
-        )
-        tracker_call_kwargs = {
-            "topic_id": topic,
-            "question": question_payload,
-            "user_answer": str(context.get("answer") or eval_reply.input_text or ""),
-            "eval_result": eval_result,
-            "mode": str(context.get("mode") or self._state.active_mode),
-            "session_id": session_id,
-            "response_time_ms": context.get("response_time_ms"),
-            "used_hint": context.get("used_hint"),
-            "allow_knowledge_update": allow_knowledge_update,
-            "require_existing_topic": True,
-            "origin_wrong_question_id": (
-                str(binding.get("origin_wrong_question_id") or "").strip()
-                if allow_knowledge_update
-                else ""
+            used_hint=context.get("used_hint"),
+            commit_context=LearningCommitContext(
+                mode=str(context.get("mode") or self._state.active_mode),
+                source_question_id=str(
+                    context.get("source_question_id")
+                    or question_payload.get("source_question_id")
+                    or ""
+                ),
+                target_binding=binding,
+                scope_key=str(question_payload.get("scope_key") or ""),
+                scope_revision=int(question_payload.get("scope_revision") or 0),
+                origin_wrong_question_id=(
+                    str(binding.get("origin_wrong_question_id") or "").strip()
+                    if allow_knowledge_update
+                    else ""
+                ),
+                allow_knowledge_update=allow_knowledge_update,
+                require_existing_topic=True,
             ),
-            "attempt_id": attempt_id,
-        }
+        )
         commit_service = LearningCommitService(
-            DelegatingCommitPort(
-                lambda _attempt: asyncio.to_thread(
-                    self._knowledge_tracker.on_answer, **tracker_call_kwargs
-                )
-            )
+            StudyTrackerCommitAdapter(self._knowledge_tracker)
         )
         try:
             tracking_task = asyncio.create_task(

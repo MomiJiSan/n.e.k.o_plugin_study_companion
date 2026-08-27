@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from .local_runtime_client import LocalRuntimeClient
-from .local_runtime_supervisor import LocalRuntimeSupervisor
 from .models import StudyConfig
 from .study_model_gateway import (
     AgentQuotaReservation,
@@ -39,14 +37,15 @@ class StudyInferenceRouter:
         logger: Any,
         config: StudyConfig,
         api_gateway: StudyModelGateway,
-        local_client: LocalRuntimeClient | None = None,
+        local_client: Any | None = None,
     ) -> None:
         self._logger = logger
         self._config = config
         self._api_gateway = api_gateway
-        self._local_client = local_client or LocalRuntimeClient(
-            LocalRuntimeSupervisor()
-        )
+        # Local runtime construction belongs to the experimental package.  An
+        # injected client remains accepted for compatibility tests, but normal
+        # plugin startup never imports or creates one.
+        self._local_client = local_client
 
     def update_config(self, config: StudyConfig) -> None:
         """Use the latest mode without starting or stopping the runtime."""
@@ -72,7 +71,7 @@ class StudyInferenceRouter:
     ) -> StudyModelResult:
         """Call exactly one configured transport; never perform a fallback."""
 
-        if self.local_models_enabled:
+        if self.local_models_enabled and self._local_client is not None:
             # The local client deliberately has no API gateway reference.  Any
             # LocalRuntimeError is allowed to propagate to the caller unchanged.
             return await self._local_client.call(
@@ -99,11 +98,12 @@ class StudyInferenceRouter:
 
         if not self.local_models_enabled:
             return {
-                "state": "stopped",
+                "available": False,
+                "state": "unavailable",
                 "models": [],
                 "capabilities": [],
                 "active_job": None,
-                "error_code": "",
+                "error_code": "local_model_store_unavailable",
             }
         try:
             status = await self._local_client.status()
@@ -131,7 +131,8 @@ class StudyInferenceRouter:
     async def shutdown(self) -> None:
         """Release the local-runtime child process when the plugin exits."""
 
-        await self._local_client.shutdown()
+        if self._local_client is not None:
+            await self._local_client.shutdown()
 
 
 __all__ = ["StudyInferenceRouter"]

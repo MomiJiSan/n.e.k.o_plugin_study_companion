@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
-from .contracts import QuestionInstance, QuestionPlan
+from .contracts import QuestionGenerationResult, QuestionPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,17 +24,6 @@ class QuestionGenerationRequest:
     source_text: str = ""
     source: str = "manual"
     context: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class QuestionGenerationResult:
-    """Existing generator output without adaptation or interpretation."""
-
-    question: QuestionInstance | None
-    payload: Mapping[str, Any] = field(default_factory=dict)
-    error_code: str = ""
-    diagnostic: str = ""
-    raw_result: Any = None
 
 
 @dataclass(frozen=True, slots=True)

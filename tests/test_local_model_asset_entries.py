@@ -37,16 +37,13 @@ def _load_entry_module(monkeypatch: pytest.MonkeyPatch, package_name: str):
     return module, models, package_name
 
 
-def test_license_url_sanitizer_rejects_credentials_queries_and_invalid_ports(
+def test_paused_local_model_compatibility_does_not_expose_asset_helpers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module, _models, _package_name = _load_entry_module(monkeypatch, "_local_assets_url_safety")
 
-    assert module._safe_https_url("https://licenses.example/model")
-    assert module._safe_https_url("https://licenses.example:443/model")
-    assert module._safe_https_url("https://user@licenses.example/model") == ""
-    assert module._safe_https_url("https://licenses.example/model?token=secret") == ""
-    assert module._safe_https_url("https://licenses.example:invalid/model") == ""
+    assert not hasattr(module, "_safe_https_url")
+    assert not hasattr(module, "_catalog_packages")
 
 
 class _Package:
@@ -158,9 +155,6 @@ async def test_asset_catalog_and_status_never_touch_inference_or_network(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module, models, package_name = _load_entry_module(monkeypatch, "_local_assets_entries")
-    manager_module = ModuleType(f"{package_name}.local_model_download_manager")
-    manager_module.LocalModelDownloadManager = _Manager  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, manager_module.__name__, manager_module)
     _Manager.instances.clear()
     owner = _Owner(module._LocalModelEntriesMixin, models.StudyConfig())
 
@@ -168,78 +162,50 @@ async def test_asset_catalog_and_status_never_touch_inference_or_network(
     catalog = await owner.study_local_models_catalog()
     status = await owner.study_local_models_status()
 
-    manager = _Manager.instances[-1]
-    assert catalog["packages"] == [
-        {
-            "id": "math-basic",
-            "version": "1.0.0",
-            "role": "reasoner",
-            "size_bytes": 123,
-            "requires_license_acceptance": False,
-            "license": "MIT",
-            "license_url": "",
-        }
-    ]
-    assert status["state"] == "ready"
-    assert status["error_code"] == ""
-    assert "directory" not in status
-    assert manager.catalog_calls >= 2
-    # Initialization performs exactly one local recovery/status check; the
-    # explicit status entry is the second check. Neither touches inference.
-    assert manager.status_calls == 2
-    assert manager.install_calls == []
-    assert manager.actions == []
+    assert catalog == {
+        "available": False,
+        "directory_mode": "default",
+        "packages": [],
+        "error_code": "local_model_store_unavailable",
+    }
+    assert status["state"] == "unavailable"
+    assert status["available"] is False
+    assert status["installed"] == []
+    assert status["downloads"] == []
+    assert status["disk"] == {}
+    assert _Manager.instances == []
 
 
 @pytest.mark.asyncio
-async def test_startup_status_failure_is_safe_and_does_not_block_asset_manager(
+async def test_compatibility_initialization_never_creates_an_asset_manager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module, models, package_name = _load_entry_module(monkeypatch, "_local_assets_status_failure")
 
-    class _StatusFailureManager(_Manager):
-        async def status(self):
-            self.status_calls += 1
-            error = _SdkError("C:/private/models", code="local_model_store_unavailable")
-            raise error
-
-    manager_module = ModuleType(f"{package_name}.local_model_download_manager")
-    manager_module.LocalModelDownloadManager = _StatusFailureManager  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, manager_module.__name__, manager_module)
     _Manager.instances.clear()
     owner = _Owner(module._LocalModelEntriesMixin, models.StudyConfig())
 
     await owner._initialize_local_model_manager()
 
-    manager = _Manager.instances[-1]
-    assert owner._local_model_manager is manager
+    assert owner._local_model_manager is None
     assert owner._local_model_manager_error == "local_model_store_unavailable"
-    assert manager.catalog_calls == 1
-    assert manager.status_calls == 1
-    assert manager.install_calls == []
-    assert manager.actions == []
+    assert _Manager.instances == []
 
 
 @pytest.mark.asyncio
-async def test_install_requires_confirmation_and_directory_updates_without_download(
+async def test_actions_are_unavailable_and_directory_remains_a_passive_setting(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     module, models, package_name = _load_entry_module(monkeypatch, "_local_assets_actions")
-    manager_module = ModuleType(f"{package_name}.local_model_download_manager")
-    manager_module.LocalModelDownloadManager = _Manager  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, manager_module.__name__, manager_module)
     _Manager.instances.clear()
     owner = _Owner(module._LocalModelEntriesMixin, models.StudyConfig())
     await owner._initialize_local_model_manager()
-    manager = _Manager.instances[-1]
 
     denied = await owner.study_local_model_install("math-basic", "1.0.0")
-    assert denied["error"].code == "local_model_install_failed"
-    assert manager.install_calls == []
+    assert denied["error"].code == "local_model_store_unavailable"
 
     installed = await owner.study_local_model_install("math-basic", "1.0.0", confirmed=True, license_accepted=False)
-    assert installed["result"] == {"state": "installing"}
-    assert manager.install_calls == [("math-basic", "1.0.0")]
+    assert installed["error"].code == "local_model_store_unavailable"
 
     directory = str(tmp_path / "local-models")
     updated = await owner.study_local_models_set_directory(directory)
@@ -247,23 +213,19 @@ async def test_install_requires_confirmation_and_directory_updates_without_downl
     assert owner._cfg.local_models_directory == directory
     assert owner.persisted == 1
     assert owner.plugin_config_updates == [("llm.local_models_directory", directory)]
-    assert ("set_directory", (Path(directory),)) in manager.actions
+    assert _Manager.instances == []
 
 
 @pytest.mark.asyncio
-async def test_asset_manager_shutdown_is_explicit_and_does_not_shutdown_agent(
+async def test_compatibility_shutdown_does_not_touch_an_agent_or_manager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module, models, package_name = _load_entry_module(monkeypatch, "_local_assets_shutdown")
-    manager_module = ModuleType(f"{package_name}.local_model_download_manager")
-    manager_module.LocalModelDownloadManager = _Manager  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, manager_module.__name__, manager_module)
     _Manager.instances.clear()
     owner = _Owner(module._LocalModelEntriesMixin, models.StudyConfig())
     await owner._initialize_local_model_manager()
-    manager = _Manager.instances[-1]
 
     await owner._shutdown_local_model_manager()
 
-    assert manager.shutdown_calls == 1
     assert owner._local_model_manager is None
+    assert _Manager.instances == []

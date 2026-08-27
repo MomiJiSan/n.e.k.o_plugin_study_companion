@@ -7,6 +7,11 @@ import {
   postStudySurfaceMessage,
   STUDY_SURFACE_MESSAGE_TYPES,
 } from './study_surface_utils';
+import {
+  isKnowledgeMapCursorStale,
+  knowledgeMapErrorMessage,
+  mergeKnowledgeMapPage,
+} from './study_ui_contracts';
 
 type KnowledgeNode = {
   id: string;
@@ -109,199 +114,49 @@ function knowledgeMapScope(stage: string) {
   };
 }
 
-function knowledgeMapErrorCode(error: unknown) {
-  if (error && typeof error === 'object' && 'code' in error) {
-    return String((error as { code?: unknown }).code || '').trim().toUpperCase();
-  }
-  return '';
-}
-
-function knowledgeMapErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message?: unknown }).message || '');
-  }
-  return String(error || '');
-}
-
-function isKnowledgeMapCursorStale(error: unknown) {
-  return knowledgeMapErrorCode(error) === 'KNOWLEDGE_MAP_CURSOR_STALE'
-    || /knowledge_map_cursor_stale/i.test(knowledgeMapErrorMessage(error));
-}
-
-function isKnowledgeMapV2Unavailable(error: unknown) {
-  const code = knowledgeMapErrorCode(error);
-  if (['ENTRY_NOT_FOUND', 'UNKNOWN_ENTRY', 'NOT_IMPLEMENTED', 'UNSUPPORTED_ENTRY'].includes(code)) {
-    return true;
-  }
-  return /study_query_knowledge_map.*(?:not found|unknown|unavailable|not implemented)/i
-    .test(knowledgeMapErrorMessage(error));
-}
-
-function isScopeKnowledgeNode(node: KnowledgeNode) {
-  return node?.boundary !== true && node?.in_scope !== false;
-}
-
-function uniqueKnowledgeNodes(nodes: KnowledgeNode[]) {
-  const byId = new Map<string, KnowledgeNode>();
-  nodes.forEach((node) => {
-    const id = String(node?.id || '').trim();
-    if (!id) return;
-    const current = byId.get(id);
-    // A topic can appear as a boundary on an earlier page and then arrive as
-    // an in-scope topic on its own page. The canonical in-scope payload must
-    // replace the temporary boundary payload in that case.
-    if (!current || (isScopeKnowledgeNode(node) && !isScopeKnowledgeNode(current))) {
-      byId.set(id, node);
-    }
-  });
-  return Array.from(byId.values());
-}
-
-function uniqueKnowledgeEdges(edges: KnowledgeEdge[]) {
-  const byKey = new Map<string, KnowledgeEdge>();
-  edges.forEach((edge) => {
-    const from = String(edge?.from || '').trim();
-    const to = String(edge?.to || '').trim();
-    const relation = String(edge?.relation || '').trim();
-    if (from && to) byKey.set(`${from}\u0000${to}\u0000${relation}`, edge);
-  });
-  return Array.from(byKey.values());
-}
-
-function uniqueKnowledgeItems(items: unknown[], key: string) {
-  const byKey = new Map<string, unknown>();
-  const unkeyed: unknown[] = [];
-  items.forEach((item) => {
-    if (!item || typeof item !== 'object') {
-      unkeyed.push(item);
-      return;
-    }
-    const value = String((item as Record<string, unknown>)[key] || '').trim();
-    if (!value) {
-      unkeyed.push(item);
-      return;
-    }
-    byKey.set(value, item);
-  });
-  return [...byKey.values(), ...unkeyed];
-}
-
-async function loadCompleteKnowledgeMap(api: PluginSurfaceProps['api'], stage: string): Promise<KnowledgeMapPage> {
-  let retriedAfterStaleCursor = false;
+async function loadKnowledgeMapPage(
+  api: PluginSurfaceProps['api'],
+  stage: string,
+  current: KnowledgeMapPage | null,
+): Promise<KnowledgeMapPage> {
+  let retryAfterStaleCursor = true;
+  let activePayload = current;
   while (true) {
-    const collectedNodes: KnowledgeNode[] = [];
-    const collectedEdges: KnowledgeEdge[] = [];
-    const collectedMastery: unknown[] = [];
-    const collectedWeakTopics: unknown[] = [];
-    const collectedWrongQuestions: unknown[] = [];
-    const seenCursors = new Set<string>(['']);
-    let cursor = '';
-    let pageCount = 0;
-    let catalogRevision: string | null = null;
-    let firstPage: KnowledgeMapPage | null = null;
-    let edgeTruncated = false;
-    let boundaryTruncated = false;
-    let omittedEdgeCount = 0;
-
+    const cursor = activePayload ? String(activePayload.next_cursor || '').trim() : '';
+    if (activePayload?.has_more === true && !cursor) {
+      throw new Error('Knowledge map pagination returned a repeated cursor.');
+    }
     try {
-      while (true) {
-        if (pageCount >= 20) {
-          throw new Error('Knowledge map pagination stopped after 20 pages.');
-        }
-        let page: KnowledgeMapPage;
-        try {
-          page = await callPlugin(api, 'study_query_knowledge_map', {
-            scope: knowledgeMapScope(stage),
-            page_size: 100,
-            cursor,
-            include_boundary: true,
-          }) as KnowledgeMapPage;
-        } catch (error) {
-          // The legacy contract may be used only when V2 cannot serve page one.
-          if (pageCount === 0 && isKnowledgeMapV2Unavailable(error)) {
-            return await callPlugin(api, 'study_knowledge_map', { limit: 1000 }) as KnowledgeMapPage;
-          }
-          throw error;
-        }
-        if (page?.error && typeof page.error === 'object') {
-          if (pageCount === 0 && isKnowledgeMapV2Unavailable(page.error)) {
-            return await callPlugin(api, 'study_knowledge_map', { limit: 1000 }) as KnowledgeMapPage;
-          }
-          throw page.error;
-        }
-
-        const pageRevision = String(page?.catalog_revision || '');
-        if (catalogRevision === null) {
-          catalogRevision = pageRevision;
-        } else if (catalogRevision !== pageRevision) {
-          throw new Error('Knowledge map catalog revision changed while loading.');
-        }
-        if (!firstPage) firstPage = page;
-        collectedNodes.push(...(Array.isArray(page?.nodes) ? page.nodes : []));
-        collectedEdges.push(...(Array.isArray(page?.edges) ? page.edges : []));
-        collectedMastery.push(...(Array.isArray(page?.mastery_overview) ? page.mastery_overview : []));
-        collectedWeakTopics.push(...(Array.isArray(page?.weak_topics) ? page.weak_topics : []));
-        collectedWrongQuestions.push(...(Array.isArray(page?.wrong_questions) ? page.wrong_questions : []));
-        edgeTruncated = edgeTruncated || page?.edge_truncated === true || page?.edges_truncated === true;
-        boundaryTruncated = boundaryTruncated || page?.boundary?.truncated === true;
-        omittedEdgeCount += Math.max(0, Number(page?.omitted_edge_count || 0) || 0);
-        pageCount += 1;
-
-        if (page?.has_more !== true) break;
+      const page = await callPlugin(api, 'study_query_knowledge_map', {
+        scope: knowledgeMapScope(stage),
+        page_size: 100,
+        cursor,
+        include_boundary: true,
+      }) as KnowledgeMapPage;
+      if (page?.error) throw page.error;
+      if (page?.has_more === true) {
         const nextCursor = String(page?.next_cursor || '').trim();
-        if (!nextCursor || seenCursors.has(nextCursor)) {
+        if (!nextCursor || nextCursor === cursor) {
           throw new Error('Knowledge map pagination returned a repeated cursor.');
         }
-        seenCursors.add(nextCursor);
-        cursor = nextCursor;
       }
+      const expectedRevision = String(activePayload?.catalog_revision || '').trim();
+      const pageRevision = String(page?.catalog_revision || '').trim();
+      if (activePayload && expectedRevision && pageRevision && expectedRevision !== pageRevision) {
+        if (!retryAfterStaleCursor) throw new Error('Knowledge map catalog revision changed while loading.');
+        retryAfterStaleCursor = false;
+        activePayload = null;
+        continue;
+      }
+      return mergeKnowledgeMapPage(activePayload, page) as KnowledgeMapPage;
     } catch (error) {
-      if (!retriedAfterStaleCursor && isKnowledgeMapCursorStale(error)) {
-        retriedAfterStaleCursor = true;
+      if (retryAfterStaleCursor && isKnowledgeMapCursorStale(error)) {
+        retryAfterStaleCursor = false;
+        activePayload = null;
         continue;
       }
       throw error;
     }
-
-    const base = firstPage || {};
-    const nodes = uniqueKnowledgeNodes(collectedNodes);
-    const edges = uniqueKnowledgeEdges(collectedEdges);
-    const masteryOverview = uniqueKnowledgeItems(collectedMastery, 'topic_id');
-    const weakTopics = uniqueKnowledgeItems(collectedWeakTopics, 'topic_id');
-    const wrongQuestions = uniqueKnowledgeItems(collectedWrongQuestions, 'id');
-    const scopeReturnedCount = nodes.filter(isScopeKnowledgeNode).length;
-    const boundaryReturnedCount = nodes.length - scopeReturnedCount;
-    const baseSummary = base.summary && typeof base.summary === 'object' ? base.summary : {};
-    return {
-      ...base,
-      catalog_revision: catalogRevision || undefined,
-      nodes,
-      edges,
-      mastery_overview: masteryOverview,
-      weak_topics: weakTopics,
-      wrong_questions: wrongQuestions,
-      scope_returned_count: scopeReturnedCount,
-      boundary: {
-        ...(base.boundary && typeof base.boundary === 'object' ? base.boundary : {}),
-        returned_count: boundaryReturnedCount,
-        truncated: boundaryTruncated,
-      },
-      summary: {
-        ...(baseSummary as Record<string, unknown>),
-        topic_count: scopeReturnedCount,
-        scope_topic_count: scopeReturnedCount,
-        boundary_node_count: boundaryReturnedCount,
-        edge_count: edges.length,
-        weak_topic_count: weakTopics.length,
-        wrong_question_count: wrongQuestions.length,
-      },
-      edge_truncated: edgeTruncated,
-      omitted_edge_count: omittedEdgeCount,
-      has_more: false,
-      next_cursor: '',
-      relationships_incomplete: edgeTruncated || boundaryTruncated,
-    };
   }
 }
 
@@ -616,10 +471,28 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   const [relationshipsIncomplete, setRelationshipsIncomplete] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [mapPayload, setMapPayload] = useState<KnowledgeMapPage | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const nodeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mapLoadRequestRef = useRef(0);
+  const mapPayloadRef = useRef<KnowledgeMapPage | null>(null);
+
+  function applyMapPayload(payload: KnowledgeMapPage) {
+    mapPayloadRef.current = payload;
+    setMapPayload(payload);
+    const nextNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+    const nextEdges = Array.isArray(payload.edges) ? payload.edges : [];
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    setRelationshipsIncomplete(payload.relationships_incomplete === true
+      || payload.edge_truncated === true
+      || payload.boundary?.truncated === true);
+    setSummary(payload.summary || {
+      topic_count: Number(payload.scope_total_count || payload.scope_returned_count || nextNodes.length),
+      edge_count: nextEdges.length,
+    });
+  }
 
   function closeNodeDetail() {
     setSelectedNode(null);
@@ -633,22 +506,12 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     let mounted = true;
     const requestId = mapLoadRequestRef.current += 1;
     setIsLoading(true);
-    loadCompleteKnowledgeMap(props.api, selectedStage)
+    loadKnowledgeMapPage(props.api, selectedStage, null)
       .then((payload: any) => {
         if (!mounted || requestId !== mapLoadRequestRef.current) {
           return;
         }
-        const nextNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
-        const nextEdges = Array.isArray(payload.edges) ? payload.edges : [];
-        setNodes(nextNodes);
-        setEdges(nextEdges);
-        setRelationshipsIncomplete(payload.relationships_incomplete === true
-          || payload.edge_truncated === true
-          || payload.boundary?.truncated === true);
-        setSummary(payload.summary || {
-          topic_count: Number(payload.scope_total_count || payload.scope_returned_count || nextNodes.length),
-          edge_count: nextEdges.length,
-        });
+        applyMapPayload(payload);
         setSelectedNode(null);
         setError('');
       })
@@ -664,6 +527,24 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       mounted = false;
     };
   }, [props.api, selectedStage]);
+
+  async function loadMoreKnowledgeMap() {
+    const current = mapPayloadRef.current;
+    if (isLoading || current?.has_more !== true) return;
+    const requestId = mapLoadRequestRef.current;
+    setIsLoading(true);
+    try {
+      const payload = await loadKnowledgeMapPage(props.api, selectedStage, current);
+      if (requestId !== mapLoadRequestRef.current) return;
+      applyMapPayload(payload);
+      setError('');
+    } catch (err) {
+      if (requestId !== mapLoadRequestRef.current) return;
+      setError(knowledgeMapErrorMessage(err));
+    } finally {
+      if (requestId === mapLoadRequestRef.current) setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -1110,6 +991,13 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
       ) : null}
       {isLoading ? (
         <pre>{loadingSubjectText}</pre>
+      ) : null}
+      {mapPayload?.has_more === true ? (
+        <div className="study-panel__actions" aria-live="polite">
+          <button type="button" disabled={isLoading} onClick={() => void loadMoreKnowledgeMap()}>
+            {text(props, 'ui.knowledge.load_more', 'Load more topics')}
+          </button>
+        </div>
       ) : null}
       {!isLoading ? <div className="study-panel__actions">
         {visibleNodes.slice(0, 60).map((node) => {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import re
 import sys
 from pathlib import Path
@@ -8,16 +9,21 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+ROOT = Path(__file__).resolve().parents[1]
+MOUNTED_NEKO_ROOT = Path(os.environ.get("NEKO_ROOT", ""))
+if MOUNTED_NEKO_ROOT.is_dir() and (MOUNTED_NEKO_ROOT / "plugin" / "sdk").is_dir():
+    sys.path.insert(0, str(MOUNTED_NEKO_ROOT))
+
 try:
     from plugin.sdk.plugin import Ok
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    if exc.name not in {"plugin", "plugin.sdk", "plugin.sdk.plugin"}:
+        raise
     pytest.skip(
         "backend integration tests require the plugin mounted in an N.E.K.O checkout",
         allow_module_level=True,
     )
 
-
-ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "_study_companion_notebook_backend_test"
 PACKAGE = ModuleType(PACKAGE_NAME)
 PACKAGE.__path__ = [str(ROOT)]  # type: ignore[attr-defined]

@@ -20,7 +20,9 @@ def _module(monkeypatch: pytest.MonkeyPatch) -> Any:
     package = ModuleType(package_name)
     package.__path__ = [str(root)]  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, package_name, package)
-    return importlib.import_module(f"{package_name}.local_model_download_manager")
+    return importlib.import_module(
+        f"{package_name}.experimental.local_models.local_model_download_manager"
+    )
 
 
 def _catalog(

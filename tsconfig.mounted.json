@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@neko/plugin-ui": ["../../sdk/hosted-ui/index.d.ts"]
+    }
+  },
+  "include": [
+    "surfaces/**/*.ts",
+    "surfaces/**/*.tsx",
+    "../../sdk/hosted-ui/globals.d.ts"
+  ],
+  "exclude": ["tests", "node_modules"]
+}

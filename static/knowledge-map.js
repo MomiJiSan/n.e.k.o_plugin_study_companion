@@ -1156,6 +1156,18 @@ function renderKnowledgePanel(payload = null) {
       t('ui.knowledge.relationships_incomplete', 'Some relationships could not be loaded completely.'),
     ));
   }
+  if (data.has_more === true) {
+    const actions = drawerElement('div', 'study-panel__actions');
+    const loadMore = drawerElement('button', 'button button-secondary', t('ui.knowledge.load_more', 'Load more topics'));
+    loadMore.type = 'button';
+    loadMore.dataset.action = 'load-more-knowledge-map';
+    loadMore.disabled = typeof loadMoreKnowledgeMap !== 'function';
+    loadMore.addEventListener('click', () => {
+      if (typeof loadMoreKnowledgeMap === 'function') loadMoreKnowledgeMap();
+    });
+    actions.appendChild(loadMore);
+    root.appendChild(actions);
+  }
   root.appendChild(renderKnowledgeStageSelector(nodes));
   root.appendChild(renderKnowledgeSubjectSelector(nodes, activeStage));
   root.appendChild(renderKnowledgeHierarchyScopePicker(nodes));
