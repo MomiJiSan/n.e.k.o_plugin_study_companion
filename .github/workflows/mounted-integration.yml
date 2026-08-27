@@ -63,18 +63,19 @@ jobs:
         run: uv run --with pip python -m plugin.neko_plugin_cli.cli sync "${PLUGIN_ID}" --clean
 
       - name: Run mounted plugin test suite
-        working-directory: neko
+        working-directory: neko/plugin/plugins/${{ env.PLUGIN_ID }}
         run: >-
-          uv run --with pytest --with pytest-asyncio python -m pytest -q
-          "plugin/plugins/${PLUGIN_ID}/tests"
+          PYTHONPATH="$PWD:$PWD/../../.." uv run --with pytest
+          --with pytest-asyncio python -m pytest -q
+          tests
 
       - name: Require notebook backend integration to run
-        working-directory: neko
+        working-directory: neko/plugin/plugins/${{ env.PLUGIN_ID }}
         shell: bash
         run: |
           set -o pipefail
-          uv run --with pytest --with pytest-asyncio python -m pytest -q -rs \
-            "plugin/plugins/${PLUGIN_ID}/tests/test_notebook_backend.py" | tee notebook-backend.txt
+          PYTHONPATH="$PWD:$PWD/../../.." uv run --with pytest --with pytest-asyncio python -m pytest -q -rs \
+            tests/test_notebook_backend.py | tee notebook-backend.txt
           if grep -Eqi '([0-9]+ skipped|SKIPPED)' notebook-backend.txt; then
             echo "Notebook backend integration must not be skipped in a mounted checkout." >&2
             exit 1
