@@ -33,6 +33,7 @@ PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
         "internal_private_payload",
         "current_question_private",
         "target_binding",
+        "question_style",
         "_answer_reference_answer_consistent",
         "attempt_evaluated",
     }

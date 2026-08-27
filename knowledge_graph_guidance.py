@@ -339,32 +339,114 @@ def _topic_search_text(topic: dict[str, Any]) -> str:
     return " ".join(part for part in parts if part).lower()
 
 
+_CJK_CONNECTORS = ("\u548c", "\u4e0e", "\u8ddf", "\u53ca", "\u3001")
+
+
+def _cjk_fragments(value: str, *, strip_generic: bool) -> list[str]:
+    """Extract complete CJK concept fragments without crossing connectors.
+
+    CJK has no whitespace word boundary.  Treating a connector as removable
+    used to join the two sides and manufacture fragments such as ``\u5dee\u76f8\u6570``;
+    removing every generic phrase also split ``\u76f8\u5173\u7cfb\u6570`` into one-character
+    pieces.  Keep connectors as separators and only make a generic phrase
+    disappear when processing a user query, never a stored topic label.
+    """
+    cjk = "".join(
+        char if "\u4e00" <= char <= "\u9fff" else " "
+        for char in _text(value).lower()
+    )
+    if strip_generic:
+        for stopword in sorted(GENERIC_QUERY_TERMS, key=len, reverse=True):
+            # "\u5173\u7cfb" is generic by itself but is part of the complete concept
+            # "\u76f8\u5173\u7cfb\u6570".  Do not split a potential label inside a query.
+            if stopword in {"\u5206\u6790", "\u5173\u7cfb", "\u6709"}:
+                continue
+            cjk = cjk.replace(stopword, " ")
+        # A trailing "\u6709" belongs to prompts such as "\u6709\u4ec0\u4e48\u533a\u522b", while
+        # an in-concept character (for example "\u6709\u4e1d\u5206\u88c2") must remain intact.
+        cjk = cjk.replace("\u6709\u5173", " ")
+        cjk = re.sub("\u6709(?=\\s|$)", " ", cjk)
+    for connector in _CJK_CONNECTORS:
+        cjk = cjk.replace(connector, " ")
+    return [fragment for fragment in cjk.split() if len(fragment) >= 2]
+
+
 def _query_terms(query: str) -> list[str]:
     normalized = _text(query).lower()
     if not normalized:
         return []
-    terms = {normalized}
-    for raw_part in normalized.replace("，", " ").replace("。", " ").split():
-        if raw_part:
-            terms.add(raw_part)
-        cjk_chars = [char for char in raw_part if "\u4e00" <= char <= "\u9fff"]
-        cjk = "".join(cjk_chars)
-        for stopword in sorted(GENERIC_QUERY_TERMS, key=len, reverse=True):
-            cjk = cjk.replace(stopword, " ")
-        cjk = cjk.replace("\u6709", " ")
-        for connector in ("\u548c", "\u4e0e", "\u8ddf", "\u53ca", "\u3001"):
-            cjk = cjk.replace(connector, " ")
-        for item in cjk.split():
-            if item:
-                terms.add(item)
+    terms = {
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized)
+        if len(token) >= 2 and token not in GENERIC_QUERY_TERMS
+    }
+    for fragment in _cjk_fragments(normalized, strip_generic=True):
+        terms.add(fragment)
+        # N-grams remain a recall fallback, but they are built inside each
+        # complete concept only.  In particular, no connector-spanning token
+        # and no one-character CJK term may enter the matcher.
         for size in (2, 3, 4):
-            compact_cjk = cjk.replace(" ", "")
-            for index in range(0, max(0, len(compact_cjk) - size + 1)):
-                terms.add(compact_cjk[index : index + size])
-    return sorted(
-        (term for term in terms if term not in GENERIC_QUERY_TERMS),
-        key=lambda item: (-len(item), item),
-    )
+            for index in range(0, len(fragment) - size + 1):
+                terms.add(fragment[index : index + size])
+    return sorted(terms, key=lambda item: (-len(item), item))
+
+
+def _has_full_concept_coverage(
+    *,
+    label: str,
+    aliases: list[str],
+    query: str,
+) -> bool:
+    """Whether a complete stored label or alias is covered by query concepts.
+
+    This is a rank category, not an accumulated substring bonus: a topic named
+    ``\u534f\u65b9\u5dee\u4e0e\u76f8\u5173\u7cfb\u6570`` must outrank a topic that only shares the
+    short substring ``\u65b9\u5dee``.  Connector-normalized token coverage also accepts
+    user wording with a different connector ("\u548c" vs "\u4e0e").
+    """
+    query_fragments = set(_cjk_fragments(query, strip_generic=True))
+    query_words = {
+        token for token in re.findall(r"[a-z0-9]+", _text(query).lower()) if len(token) >= 2
+    }
+    for candidate in (label, *aliases):
+        candidate_fragments = _cjk_fragments(candidate, strip_generic=False)
+        # A two-character alias is often an ambiguous abbreviation (for
+        # example "\u9012\u5f52").  It remains a valid regular match, but cannot by
+        # itself promote a broader topic over a complete stored label.
+        short_alias = candidate != label and len(candidate_fragments) == 1 and len(candidate_fragments[0]) < 3
+        if (
+            candidate_fragments
+            and not short_alias
+            and set(candidate_fragments).issubset(query_fragments)
+        ):
+            return True
+        candidate_words = {
+            token
+            for token in re.findall(r"[a-z0-9]+", _text(candidate).lower())
+            if len(token) >= 2
+        }
+        if candidate_words and candidate_words.issubset(query_words):
+            return True
+    return False
+
+
+def _label_prefix_concepts(label: str, query: str) -> list[str]:
+    """Find complete query concepts at the beginning of a stored label.
+
+    A user naming "\u5bfc\u6570" is strong evidence for "\u5bfc\u6570\u5b9a\u4e49", whereas a
+    mention of "\u5bfc\u6570" in an example or a short substring inside another word is
+    only fallback evidence.  This keeps lexical recall without rewarding
+    arbitrary metadata accumulation.
+    """
+    label_fragments = _cjk_fragments(label, strip_generic=False)
+    if not label_fragments:
+        return []
+    first_label_fragment = label_fragments[0]
+    return [
+        fragment
+        for fragment in _cjk_fragments(query, strip_generic=True)
+        if first_label_fragment.startswith(fragment)
+    ]
 
 
 def _has_meaningful_plain_query_term(query: str) -> bool:
@@ -443,6 +525,23 @@ def match_topics(
         haystack = _topic_search_text(topic)
         score = 0
         matched_terms: list[str] = []
+        label_prefix_concepts = _label_prefix_concepts(label_lower, query_text)
+        if label_prefix_concepts:
+            # Keep direct concept-to-label evidence separate from a term that
+            # only happens to occur in examples, skills, or misconceptions.
+            score += 5
+            matched_terms.extend(label_prefix_concepts)
+        if _has_full_concept_coverage(
+            label=label_lower,
+            aliases=aliases,
+            query=query_text,
+        ):
+            # Complete stored concepts are a stronger kind of evidence than
+            # several overlapping short substrings.  Keep the numeric score
+            # for the existing response contract, but do not let a partial
+            # term such as "\u65b9\u5dee" outrank the full paired label.
+            score += 100
+            matched_terms.append(label_lower)
         if label_lower and label_lower in terms:
             score += 40
             matched_terms.append(label_lower)

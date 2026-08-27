@@ -71,6 +71,11 @@ def _load_store_runtime(monkeypatch: pytest.MonkeyPatch, name: str):
             "final_answer_correct_mismatch",
         ),
         (
+            {"verdict": "wrong", "score": 10, "final_answer_correct": True},
+            "x",
+            "final_answer_correct_mismatch",
+        ),
+        (
             {"verdict": "partial", "score": 60, "final_answer_correct": False},
             "",
             "empty_answer_verdict_mismatch",
@@ -88,6 +93,47 @@ def test_evaluation_contract_rejects_inconsistent_boundaries(
     result = contract.validate_evaluation(payload, learner_answer=answer)
     assert not result.valid
     assert expected_error in result.errors
+
+
+@pytest.mark.parametrize("final_answer_correct", [True, False])
+def test_evaluation_contract_allows_partial_with_either_final_answer_status(
+    monkeypatch: pytest.MonkeyPatch, final_answer_correct: bool
+) -> None:
+    package = _package(monkeypatch, f"_evaluation_contract_partial_{final_answer_correct}")
+    contract = importlib.import_module(f"{package}.evaluation_contract")
+
+    result = contract.validate_evaluation(
+        {
+            "verdict": "partial",
+            "score": 60,
+            "final_answer_correct": final_answer_correct,
+        },
+        learner_answer="worked answer",
+    )
+
+    assert result.valid
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_final_answer_correct"),
+    [
+        ({"verdict": "partial", "final_answer_correct": True}, True),
+        ({"verdict": "partial", "final_answer_correct": False}, False),
+        ({"verdict": "correct"}, True),
+        ({"verdict": "wrong"}, False),
+    ],
+)
+def test_canonicalize_evaluation_preserves_valid_final_answer_status(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict,
+    expected_final_answer_correct: bool,
+) -> None:
+    package = _package(monkeypatch, "_evaluation_contract_canonicalize")
+    contract = importlib.import_module(f"{package}.evaluation_contract")
+
+    canonical = contract.canonicalize_evaluation(payload)
+
+    assert canonical["final_answer_correct"] is expected_final_answer_correct
 
 
 def _make_store(tmp_path: Path, Store):
@@ -172,16 +218,11 @@ def test_wrong_question_attempt_updates_only_bound_id_without_schema_change(
         )
         assert store.get_wrong_question(second)["retry_count"] == 0
 
-        with store._lock:
-            store._require_conn().execute(
-                "UPDATE wrong_questions SET last_error_at = datetime('now', '-2 days') WHERE id = ?",
-                (first,),
-            )
-            store._require_conn().commit()
-        for _ in range(3):
-            _write_attempt(store, origin_id=first, verdict="correct", difficulty=3)
-        assert store.get_wrong_question(first)["status"] == "resolved"
-        assert store.get_wrong_question(first)["consecutive_correct"] == 3
+        first_correct = _write_attempt(
+            store, origin_id=first, verdict="correct", difficulty=3
+        )
+        assert first_correct["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(first)["consecutive_correct"] == 1
         assert store.get_wrong_question(second)["status"] == "active"
     finally:
         store.close()
@@ -265,7 +306,6 @@ def test_auto_retry_candidates_apply_cooldowns_and_oldest_retry_first(
             active,
             oldest_ready,
             newer_ready,
-            day_old_correct,
         ]
         assert cooling_wrong not in {item["id"] for item in candidates}
         assert cooling_correct not in {item["id"] for item in candidates}
@@ -308,7 +348,8 @@ def test_correct_retry_reenters_automatic_candidates_one_day_after_error(
             store._require_conn().execute(
                 """
                 UPDATE wrong_questions
-                SET last_error_at = datetime('now', '-25 hours')
+                SET last_error_at = datetime('now', '-25 hours'),
+                    last_retry_at = datetime('now', '-25 hours')
                 WHERE id = ?
                 """,
                 (origin,),
@@ -317,6 +358,72 @@ def test_correct_retry_reenters_automatic_candidates_one_day_after_error(
         assert [
             item["id"] for item in store.list_auto_retry_candidates(limit=None)
         ] == [origin]
+    finally:
+        store.close()
+
+
+def test_correct_retries_require_one_day_between_each_counted_attempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, _, _ = _load_store_runtime(monkeypatch, "_correct_retry_spacing_runtime")
+    store = _make_store(tmp_path, Store)
+    try:
+        origin = store.add_wrong_question(
+            topic_id="topic-a",
+            question={"question": "original"},
+            user_answer="bad",
+            expected_answer="good",
+            error_type="misconception",
+            verdict="wrong",
+        )
+
+        first = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert first["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 1
+
+        second_immediate = _write_attempt(store, origin_id=origin, verdict="correct")
+        third_immediate = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert second_immediate["wrong_question_attempt"]["status"] == "cooling"
+        assert third_immediate["wrong_question_attempt"]["status"] == "cooling"
+        assert store.get_wrong_question(origin)["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 1
+
+        with store._lock:
+            conn = store._require_conn()
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET last_error_at = datetime('now', '-2 days'),
+                    last_retry_at = datetime('now', '-25 hours')
+                WHERE id = ?
+                """,
+                (origin,),
+            )
+            conn.commit()
+        second = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert second["wrong_question_attempt"]["status"] == "retrying"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 2
+
+        immediate_after_second = _write_attempt(
+            store, origin_id=origin, verdict="correct"
+        )
+        assert immediate_after_second["wrong_question_attempt"]["status"] == "cooling"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 2
+
+        with store._lock:
+            conn = store._require_conn()
+            conn.execute(
+                """
+                UPDATE wrong_questions
+                SET last_retry_at = datetime('now', '-25 hours')
+                WHERE id = ?
+                """,
+                (origin,),
+            )
+            conn.commit()
+        third = _write_attempt(store, origin_id=origin, verdict="correct")
+        assert third["wrong_question_attempt"]["status"] == "resolved"
+        assert store.get_wrong_question(origin)["consecutive_correct"] == 3
     finally:
         store.close()
 
@@ -582,6 +689,15 @@ def _load_answer_entries(monkeypatch: pytest.MonkeyPatch, package: str):
     monkeypatch.setitem(sys.modules, f"{package}.models", models)
     entries = importlib.import_module(f"{package}.entry_tutor_answer_entries")
     return entries, SdkError, Err, Ok
+
+
+def test_attempt_signal_values_accept_only_bounded_integer_and_boolean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, _ = _load_answer_entries(monkeypatch, "_attempt_signal_values")
+    assert entries._attempt_signal_values({"response_time_ms": 1_234, "used_hint": True}) == (1_234, True)
+    assert entries._attempt_signal_values({"response_time_ms": True, "used_hint": 1}) == (None, None)
+    assert entries._attempt_signal_values({"response_time_ms": 86_400_001, "used_hint": False}) == (None, False)
 
 
 class _EvaluationReply:

@@ -339,6 +339,8 @@ def list_auto_retry_candidates(
                 status = 'retrying'
                 AND consecutive_correct > 0
                 AND (julianday('now') - julianday(last_error_at)) >= 1.0
+                AND last_retry_at IS NOT NULL
+                AND (julianday('now') - julianday(last_retry_at)) >= 1.0
             )
         )
         {scope_sql}
@@ -414,7 +416,25 @@ def apply_wrong_question_attempt(
     if normalized_verdict != "correct":
         return {"status": "ignored", "wrong_question_id": question_key}
 
-    consecutive = int(row["consecutive_correct"] or 0) + 1
+    previous_consecutive = int(row["consecutive_correct"] or 0)
+    if previous_consecutive > 0:
+        spacing_ready = bool(
+            conn.execute(
+                """
+                SELECT
+                    (julianday('now') - julianday(?)) >= 1.0
+                    AND (julianday('now') - julianday(?)) >= 1.0 AS ok
+                """,
+                (
+                    str(row["last_error_at"] or ""),
+                    str(row["last_retry_at"] or ""),
+                ),
+            ).fetchone()["ok"]
+        )
+        if not spacing_ready:
+            return {"status": "cooling", "wrong_question_id": question_key}
+
+    consecutive = previous_consecutive + 1
     max_difficulty = max(int(row["max_correct_difficulty"] or 0), int(difficulty or 0))
     old_enough = bool(
         conn.execute(

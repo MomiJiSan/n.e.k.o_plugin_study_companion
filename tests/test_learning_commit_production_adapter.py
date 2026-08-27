@@ -123,6 +123,8 @@ def test_record_answer_knowledge_delegates_to_existing_tracker_unchanged(
                 "session_id": "session-1",
                 "attempt_id": "attempt-1",
                 "mode": "companion",
+                "response_time_ms": 1_234,
+                "used_hint": True,
             },
         )
     )
@@ -142,6 +144,8 @@ def test_record_answer_knowledge_delegates_to_existing_tracker_unchanged(
             },
             "mode": "companion",
             "session_id": "session-1",
+            "response_time_ms": 1_234,
+            "used_hint": True,
             "allow_knowledge_update": True,
             "require_existing_topic": True,
             "origin_wrong_question_id": "wrong-1",

@@ -30,6 +30,10 @@ from .practice_scope import (
     ordered_scope_topics,
     practice_scope_matches_topic,
 )
+from .question_type_mapping import (
+    enforce_mapped_question_type,
+    resolve_target_question_type,
+)
 from .targeted_question_contract import (
     project_target_topic_evidence,
     semantic_validation_passed,
@@ -246,6 +250,16 @@ def _question_validation_context(
     return {
         "question": payload.get("question") or "",
         "reference_answer": payload.get("reference_answer") or payload.get("answer") or "",
+        # This private validation-only context never becomes the public
+        # current-question payload.  It lets the semantic judge compare every
+        # grading artifact without expanding its response schema.
+        "accepted_answers": list(payload.get("accepted_answers") or []),
+        "key_points": list(payload.get("key_points") or []),
+        "rubric": dict(payload.get("rubric") or {}),
+        "solution_steps": list(payload.get("solution_steps") or []),
+        "hint": payload.get("hint") or "",
+        "difficulty": payload.get("difficulty"),
+        "question_type": payload.get("question_type") or "",
         "target_topic": target_metadata,
         # Semantic validation must not inherit the generation prompt's graph
         # summary (nor client-supplied blockers).  Its relation evidence is
@@ -705,6 +719,7 @@ class _TutorQuestionEntriesMixin:
     ) -> dict[str, Any]:
         async with self._lock:
             active_mode = self._state.active_mode
+        question_type_mapping = None
         extra_context = {
             "source": source,
             "source_text": source_text,
@@ -714,6 +729,11 @@ class _TutorQuestionEntriesMixin:
         if source_question_id:
             extra_context["source_question_id"] = source_question_id
         if targeted_context:
+            question_params = dict(targeted_context.get("question_params") or {})
+            question_type_mapping = resolve_target_question_type(
+                dict(question_params.get("target_topic") or {})
+            )
+            question_params.update(question_type_mapping.to_context())
             extra_context.update(
                 {
                     "source": "targeted_question",
@@ -723,7 +743,7 @@ class _TutorQuestionEntriesMixin:
                     "selection_context_id": targeted_context.get("selection_context_id") or "",
                     "selection_reason": targeted_context.get("selection_reason") or "",
                     "selection_reason_payload": targeted_context.get("selection_reason_payload") or {},
-                    "knowledge_question_params": targeted_context.get("question_params") or {},
+                    "knowledge_question_params": question_params,
                     "scope_key": targeted_context.get("scope_key") or "",
                     "scope_revision": targeted_context.get("scope_revision") or 0,
                     "practice_scope": targeted_context.get("practice_scope") or {},
@@ -767,7 +787,10 @@ class _TutorQuestionEntriesMixin:
             if not targeted_context:
                 reply = candidate_reply
                 break
-            candidate_payload = dict(candidate_reply.payload or {})
+            candidate_payload = enforce_mapped_question_type(
+                candidate_reply.payload,
+                question_type_mapping,
+            )
             # The binding is authoritative server state, never an LLM claim.
             candidate_payload["target_topic_id"] = str(targeted_context.get("selected_topic_id") or "")
             candidate_reply = TutorReply(

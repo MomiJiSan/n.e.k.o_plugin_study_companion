@@ -31,6 +31,23 @@ from .tutor_lifecycle import (
     reserve_question_lifecycle,
 )
 
+_MAX_RESPONSE_TIME_MS = 24 * 60 * 60 * 1000
+
+
+def _attempt_signal_values(kwargs: Mapping[str, object]) -> tuple[int | None, bool | None]:
+    """Keep optional client timing signals bounded and type-safe."""
+
+    raw_response_time = kwargs.get("response_time_ms")
+    response_time_ms = (
+        raw_response_time
+        if isinstance(raw_response_time, int)
+        and not isinstance(raw_response_time, bool)
+        and 0 <= raw_response_time <= _MAX_RESPONSE_TIME_MS
+        else None
+    )
+    raw_used_hint = kwargs.get("used_hint")
+    return response_time_ms, raw_used_hint if isinstance(raw_used_hint, bool) else None
+
 
 class _TutorAnswerEntriesMixin:
     def _deterministic_assessment_flags(self) -> dict[str, bool]:
@@ -273,6 +290,8 @@ class _TutorAnswerEntriesMixin:
                 "question_id": {"type": "string", "default": ""},
                 "attempt_id": {"type": "string", "default": ""},
                 "selected_topic_id": {"type": "string", "default": ""},
+                "response_time_ms": {"type": "integer"},
+                "used_hint": {"type": "boolean"},
                 "vision_image_base64": {"type": "string", "default": ""},
             },
         },
@@ -328,6 +347,7 @@ class _TutorAnswerEntriesMixin:
         ):
             return Err(SdkError("study tutor agent is not initialized"))
         target_lanlan = self._resolve_study_target_lanlan(kwargs)
+        response_time_ms, used_hint = _attempt_signal_values(kwargs)
         async with self._lock:
             current_question = dict(self._state.current_question)
             active_mode = self._state.active_mode
@@ -539,6 +559,8 @@ class _TutorAnswerEntriesMixin:
                     "attempt_id": supplied_attempt_id or state_attempt_id,
                     "source_question_id": source_question_id,
                     "selected_topic_id": selected_topic_id,
+                    "response_time_ms": response_time_ms,
+                    "used_hint": used_hint,
                     "mode": active_mode,
                     **(
                         {

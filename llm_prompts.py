@@ -230,6 +230,9 @@ def _targeted_context_parts(
             "blockers",
             "retry_wrong_question",
             "prompt_guidance",
+            "question_style",
+            "required_question_type",
+            "allowed_question_types",
         )
         if params.get(key) not in (None, "", [], {})
     }
