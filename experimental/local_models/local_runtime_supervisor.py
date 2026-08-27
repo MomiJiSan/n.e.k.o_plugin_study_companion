@@ -39,6 +39,7 @@ except ImportError:  # Direct imports in isolated tests.
 
 
 _READY_TIMEOUT_SECONDS = 8.0
+_MAX_START_ATTEMPTS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,31 +137,35 @@ class LocalRuntimeSupervisor:
         token = secrets.token_urlsafe(32)
         script = Path(__file__).with_name("local_runtime_stub.py")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        try:
-            process = await self._process_factory(
-                sys.executable,
-                str(script),
-                "--token",
-                token,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                stdin=asyncio.subprocess.DEVNULL,
-                creationflags=creationflags,
-            )
-            self._process = process
-            port = await self._read_ready_port(process)
-        except (
-            OSError,
-            TimeoutError,
-            ValueError,
-            json.JSONDecodeError,
-            LocalRuntimeError,
-        ) as exc:
-            await self._clear_process_locked()
-            self._state = LocalRuntimeState.UNAVAILABLE
-            raise LocalRuntimeError(
-                LOCAL_RUNTIME_START_FAILED, "local runtime could not start"
-            ) from exc
+        for attempt in range(_MAX_START_ATTEMPTS):
+            try:
+                process = await self._process_factory(
+                    sys.executable,
+                    "-u",
+                    str(script),
+                    "--token",
+                    token,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    creationflags=creationflags,
+                )
+                self._process = process
+                port = await self._read_ready_port(process)
+                break
+            except (
+                OSError,
+                TimeoutError,
+                ValueError,
+                json.JSONDecodeError,
+                LocalRuntimeError,
+            ) as exc:
+                await self._clear_process_locked()
+                if attempt + 1 == _MAX_START_ATTEMPTS:
+                    self._state = LocalRuntimeState.UNAVAILABLE
+                    raise LocalRuntimeError(
+                        LOCAL_RUNTIME_START_FAILED, "local runtime could not start"
+                    ) from exc
         connection = LocalRuntimeConnection(
             base_url=f"http://127.0.0.1:{port}", token=token
         )
