@@ -21,7 +21,7 @@ jobs:
           - name: latest-main
             ref: main
           - name: pinned-2026-08-27
-            ref: d0610f90d2fd2d2849731ea2bc101332ba501bdd
+            ref: 661a80f91b61dd8abb7565b837e2c1e61dd0d7ae
     env:
       PLUGIN_ID: study_companion
     steps:
@@ -34,7 +34,7 @@ jobs:
       - name: Checkout N.E.K.O
         uses: actions/checkout@v4
         with:
-          repository: Project-N-E-K-O/N.E.K.O
+          repository: MomiJiSan/N.E.K.O
           ref: ${{ matrix.neko.ref }}
           path: neko
           persist-credentials: false
