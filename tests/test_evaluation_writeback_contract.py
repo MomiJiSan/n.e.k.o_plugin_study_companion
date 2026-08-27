@@ -71,6 +71,11 @@ def _load_store_runtime(monkeypatch: pytest.MonkeyPatch, name: str):
             "final_answer_correct_mismatch",
         ),
         (
+            {"verdict": "wrong", "score": 10, "final_answer_correct": True},
+            "x",
+            "final_answer_correct_mismatch",
+        ),
+        (
             {"verdict": "partial", "score": 60, "final_answer_correct": False},
             "",
             "empty_answer_verdict_mismatch",
@@ -88,6 +93,47 @@ def test_evaluation_contract_rejects_inconsistent_boundaries(
     result = contract.validate_evaluation(payload, learner_answer=answer)
     assert not result.valid
     assert expected_error in result.errors
+
+
+@pytest.mark.parametrize("final_answer_correct", [True, False])
+def test_evaluation_contract_allows_partial_with_either_final_answer_status(
+    monkeypatch: pytest.MonkeyPatch, final_answer_correct: bool
+) -> None:
+    package = _package(monkeypatch, f"_evaluation_contract_partial_{final_answer_correct}")
+    contract = importlib.import_module(f"{package}.evaluation_contract")
+
+    result = contract.validate_evaluation(
+        {
+            "verdict": "partial",
+            "score": 60,
+            "final_answer_correct": final_answer_correct,
+        },
+        learner_answer="worked answer",
+    )
+
+    assert result.valid
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_final_answer_correct"),
+    [
+        ({"verdict": "partial", "final_answer_correct": True}, True),
+        ({"verdict": "partial", "final_answer_correct": False}, False),
+        ({"verdict": "correct"}, True),
+        ({"verdict": "wrong"}, False),
+    ],
+)
+def test_canonicalize_evaluation_preserves_valid_final_answer_status(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict,
+    expected_final_answer_correct: bool,
+) -> None:
+    package = _package(monkeypatch, "_evaluation_contract_canonicalize")
+    contract = importlib.import_module(f"{package}.evaluation_contract")
+
+    canonical = contract.canonicalize_evaluation(payload)
+
+    assert canonical["final_answer_correct"] is expected_final_answer_correct
 
 
 def _make_store(tmp_path: Path, Store):

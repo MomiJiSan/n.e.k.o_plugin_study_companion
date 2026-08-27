@@ -44,7 +44,9 @@ def validate_evaluation(
     if not isinstance(final_answer_correct, bool):
         if "invalid_final_answer_correct" not in errors:
             errors.append("invalid_final_answer_correct")
-    elif verdict in ANSWER_VERDICTS and final_answer_correct != (verdict == "correct"):
+    elif verdict == "correct" and not final_answer_correct:
+        errors.append("final_answer_correct_mismatch")
+    elif verdict in {"wrong", "dont_know"} and final_answer_correct:
         errors.append("final_answer_correct_mismatch")
 
     return EvaluationValidation(valid=not errors, errors=tuple(errors))
@@ -54,7 +56,8 @@ def canonicalize_evaluation(payload: dict[str, Any]) -> dict[str, Any]:
     canonical = dict(payload or {})
     verdict = str(canonical.get("verdict") or "").strip().lower()
     canonical["verdict"] = verdict
-    canonical["final_answer_correct"] = verdict == "correct"
+    if not isinstance(canonical.get("final_answer_correct"), bool):
+        canonical["final_answer_correct"] = verdict == "correct"
     canonical.pop("_evaluation_score_valid", None)
     canonical.pop("_evaluation_verdict_valid", None)
     canonical.pop("_evaluation_final_answer_correct_valid", None)
