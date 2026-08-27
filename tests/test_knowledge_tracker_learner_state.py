@@ -207,10 +207,11 @@ def test_answer_batch_enqueues_shadow_projection_only_when_enabled(
         mode="companion",
         session_id="session-a",
         response_time_ms=500,
+        used_hint=True,
         attempt_id="attempt-a",
     )
 
-    assert store.batch_kwargs["used_hint"] is None
+    assert store.batch_kwargs["used_hint"] is True
     assert store.batch_kwargs["enqueue_mastery_v2"] is shadow_enabled
 
 

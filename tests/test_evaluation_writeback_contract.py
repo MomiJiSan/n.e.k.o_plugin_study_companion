@@ -630,6 +630,15 @@ def _load_answer_entries(monkeypatch: pytest.MonkeyPatch, package: str):
     return entries, SdkError, Err, Ok
 
 
+def test_attempt_signal_values_accept_only_bounded_integer_and_boolean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, _ = _load_answer_entries(monkeypatch, "_attempt_signal_values")
+    assert entries._attempt_signal_values({"response_time_ms": 1_234, "used_hint": True}) == (1_234, True)
+    assert entries._attempt_signal_values({"response_time_ms": True, "used_hint": 1}) == (None, None)
+    assert entries._attempt_signal_values({"response_time_ms": 86_400_001, "used_hint": False}) == (None, False)
+
+
 class _EvaluationReply:
     def __init__(self, payload: dict, *, degraded: bool = False) -> None:
         self.payload = payload

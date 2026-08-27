@@ -1051,6 +1051,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [documentOcrProgress, setDocumentOcrProgress] = useState<ScannedPdfOcrProgress | null>(null);
   const [documentOcrCanceling, setDocumentOcrCanceling] = useState(false);
   const [documentJob, setDocumentJob] = useState<DocumentJobState | null>(null);
+  const questionStartedAtRef = useRef(0);
+  const questionAttemptIdRef = useRef('');
+  const hintRevealedRef = useRef(false);
   const explainControllerRef = useRef<AbortController | null>(null);
   const pasteControllerRef = useRef<AbortController | null>(null);
   const documentControllerRef = useRef<AbortController | null>(null);
@@ -1344,10 +1347,23 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     return trimmed.length > 72 ? `${trimmed.slice(0, 72)}...` : trimmed;
   }
 
+  function startQuestionAttempt(nextQuestion: GeneratedQuestion) {
+    const attemptId = String(nextQuestion.attempt_id || '').trim();
+    if (!attemptId || attemptId === questionAttemptIdRef.current) {
+      return;
+    }
+    questionAttemptIdRef.current = attemptId;
+    questionStartedAtRef.current = Date.now();
+    // The React surface places the generated hint in the visible reply, so
+    // receiving a non-empty hint is a real reveal rather than an inference.
+    hintRevealedRef.current = Boolean(String(nextQuestion.hint || '').trim());
+  }
+
   function setStatusLine(data: StudyStatus) {
     setStatus({ ...data, active_mode: String(data.active_mode || data.mode || 'companion') });
     if (data.current_question?.question) {
       setCurrentQuestion(data.current_question);
+      startQuestionAttempt(data.current_question);
       setQuestion(data.current_question.question);
       setCanEvaluateCurrentQuestion(data.can_evaluate_current_question === true);
       if (data.current_question_state === 'evaluated' && data.last_answer_evaluation?.feedback) {
@@ -2208,6 +2224,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       }
       setQuestion(data.question || '');
       setCurrentQuestion(data);
+      startQuestionAttempt(data);
       setCanEvaluateCurrentQuestion(true);
       setPracticeScopeReviewing(false);
       if (context.practice_scope?.display_path) {
@@ -2258,6 +2275,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       question_id: currentQuestion.question_id,
       attempt_id: currentQuestion.attempt_id,
       selected_topic_id: currentQuestion.selected_topic_id || '',
+      response_time_ms: questionStartedAtRef.current
+        ? Math.max(0, Date.now() - questionStartedAtRef.current)
+        : undefined,
+      used_hint: hintRevealedRef.current,
     };
     if (answerImage) evalArgs.vision_image_base64 = answerImage;
     let shouldClearAnswerImage = false;

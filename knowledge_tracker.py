@@ -648,6 +648,7 @@ class KnowledgeTracker:
         mode: str,
         session_id: str = "default",
         response_time_ms: int | None = None,
+        used_hint: bool | None = None,
         allow_knowledge_update: bool = True,
         require_existing_topic: bool = False,
         origin_wrong_question_id: str = "",
@@ -703,6 +704,7 @@ class KnowledgeTracker:
                     mode=mode,
                     session_id=session_id,
                     response_time_ms=response_time_ms,
+                    used_hint=used_hint,
                     origin_wrong_question_id=origin_wrong_question_id,
                     attempt_id=attempt_id,
                 )
@@ -769,6 +771,7 @@ class KnowledgeTracker:
         mode: str,
         session_id: str,
         response_time_ms: int | None,
+        used_hint: bool | None = None,
         origin_wrong_question_id: str = "",
         attempt_id: str = "",
     ) -> dict[str, Any]:
@@ -860,7 +863,7 @@ class KnowledgeTracker:
                 topic_candidate_data=topic_candidate_data,
                 attempt_id=attempt_id,
                 source_question_id=source_question_id or None,
-                used_hint=None,
+                used_hint=used_hint,
                 enqueue_mastery_v2=self._mastery_v2_shadow_enabled,
             )
         except Exception as exc:

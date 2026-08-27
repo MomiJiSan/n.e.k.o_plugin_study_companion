@@ -202,6 +202,8 @@ let pastePendingCount = 0;
 let llmVisionMaxImagePx = DEFAULT_VISION_MAX_IMAGE_PX;
 let currentQuestion = null;
 let canEvaluateCurrentQuestion = false;
+let questionStartedAt = 0;
+let hintRevealed = false;
 let currentSelectionContext = null;
 let currentPracticeScope=null;
 let learningProfile = readLearningProfile();
@@ -366,7 +368,16 @@ function setQuestionContext(data = {}) {
 }
 
 function setGeneratedQuestion(data = {}) {
+  const previousAttemptId = String(currentQuestion?.attempt_id || '');
   currentQuestion = data && typeof data === 'object' ? data : null;
+  const nextAttemptId = String(currentQuestion?.attempt_id || '');
+  if (nextAttemptId && nextAttemptId !== previousAttemptId) {
+    questionStartedAt = Date.now();
+    hintRevealed = false;
+  } else if (!nextAttemptId) {
+    questionStartedAt = 0;
+    hintRevealed = false;
+  }
   canEvaluateCurrentQuestion = typeof currentQuestion?.can_evaluate_current_question === 'boolean'
     ? currentQuestion.can_evaluate_current_question
     : Boolean(currentQuestion?.question_id && currentQuestion?.attempt_id);
@@ -2727,6 +2738,8 @@ async function evaluateAnswer() {
     question_id: currentQuestion.question_id,
     attempt_id: currentQuestion.attempt_id,
     selected_topic_id: currentQuestion.selected_topic_id || '',
+    response_time_ms: questionStartedAt ? Math.max(0, Date.now() - questionStartedAt) : undefined,
+    used_hint: hintRevealed,
   };
   if (answerInputImageValue) {
     args.vision_image_base64 = answerInputImageValue;
@@ -2966,6 +2979,7 @@ async function bootstrap() {
     hintToggleBtn.addEventListener('click', () => {
       const expanded = hintToggleBtn.getAttribute('aria-expanded') === 'true';
       hintToggleBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      if (!expanded) hintRevealed = true;
       if (hintText) {
         hintText.hidden = expanded;
       }

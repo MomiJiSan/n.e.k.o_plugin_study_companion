@@ -44,6 +44,18 @@ def test_hosted_retryable_evaluation_keeps_answer_image() -> None:
     assert "shouldClearAnswerImage = !isRetryablePracticeError(error)" in hosted
 
 
+def test_both_practice_uis_submit_attempt_signals_without_exposing_answers() -> None:
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    for source in (hosted, static):
+        assert "response_time_ms" in source
+        assert "used_hint" in source
+    assert "questionStartedAtRef" in hosted
+    assert "hintRevealedRef" in hosted
+    assert "questionStartedAt" in static
+    assert "hintRevealed" in static
+
+
 def test_both_knowledge_maps_activate_explicit_topic_scope() -> None:
     hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
     static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")

@@ -1162,6 +1162,8 @@ class _TutorContextSupportMixin:
             "eval_result": eval_result,
             "mode": str(context.get("mode") or self._state.active_mode),
             "session_id": session_id,
+            "response_time_ms": context.get("response_time_ms"),
+            "used_hint": context.get("used_hint"),
             "allow_knowledge_update": allow_knowledge_update,
             "require_existing_topic": True,
             "origin_wrong_question_id": (
