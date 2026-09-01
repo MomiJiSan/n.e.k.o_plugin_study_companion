@@ -212,37 +212,6 @@ def _voice_session_key(lanlan_name: str, metadata: Mapping[str, Any] | None) -> 
     return f"lanlan:{name}" if name else "__default__"
 
 
-def _register_install_routes() -> None:
-    from plugin.server.install_registry import (
-        InstallKindRegistration,
-        register_install_plugin,
-    )
-
-    register_install_plugin(
-        "study_companion",
-        install_kinds={
-            "rapidocr_models": InstallKindRegistration(
-                entry_id="study_download_rapidocr_models",
-                label="RapidOCR Models",
-                queued_message="RapidOCR model download queued",
-            ),
-        },
-        ui_i18n_dir=Path(__file__).resolve().parent / "i18n",
-        tutorial_enabled=True,
-    )
-
-
-try:
-    _register_install_routes()
-except Exception:  # noqa: BLE001 - route registration should not block package import.
-    from plugin.logging_config import get_logger
-
-    get_logger("study.install_routes").warning(
-        "study install route registration failed",
-        exc_info=True,
-    )
-
-
 _REVIEW_DUE_INTERVAL_SECONDS = 1800.0
 
 

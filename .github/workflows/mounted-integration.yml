@@ -34,7 +34,7 @@ jobs:
       - name: Checkout N.E.K.O
         uses: actions/checkout@v4
         with:
-          repository: MomiJiSan/N.E.K.O
+          repository: Project-N-E-K-O/N.E.K.O
           ref: ${{ matrix.neko.ref }}
           path: neko
           persist-credentials: false
