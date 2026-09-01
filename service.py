@@ -6,8 +6,8 @@ import sys
 from typing import Any
 
 from .models import (
-    OcrSnapshot,
     RAPIDOCR_LANG_TYPE_INVALID_DIAGNOSTIC,
+    OcrSnapshot,
     StudyConfig,
     StudyState,
     TutorReply,
@@ -15,6 +15,7 @@ from .models import (
     public_current_question_payload,
     public_screen_classification_payload,
 )
+
 
 def build_status_payload(
     *,
