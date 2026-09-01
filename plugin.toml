@@ -119,7 +119,7 @@ expose_legacy_static_panel = false
 
 [[plugin.ui.docs]]
 id = "onboarding"
-title = "Study Companion Onboarding"
+title = "Start with Study Companion"
 entry = "onboarding.md"
 permissions = ["state:read"]
 
