@@ -81,8 +81,8 @@ local builds and CI recreate it before release checks.
 Push a tag matching `plugin.toml` version to create a GitHub Release asset:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 The generated `.github/workflows/release.yml` uploads `study_companion.neko-plugin`.
