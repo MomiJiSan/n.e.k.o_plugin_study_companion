@@ -705,18 +705,18 @@ function buildFirstRunSteps() {
   return [
     {
       label: t('ui.onboarding.step.mode.label', 'Step 1'),
-      title: t('ui.onboarding.step.mode.title', 'Choose a default mode'),
-      body: t('ui.onboarding.step.mode.body', 'Companion, Interactive, and Teaching tune how the study companion responds.'),
+      title: t('ui.onboarding.step.mode.title', 'Choose how you want to study'),
+      body: t('ui.onboarding.step.mode.body', 'Use Companion for a quick explanation, Interactive for more questions, or Teaching for step-by-step guidance. You can switch at the top at any time.'),
     },
     {
       label: t('ui.onboarding.step.ocr.label', 'Step 2'),
-      title: t('ui.onboarding.step.ocr.title', 'Check OCR capture'),
-      body: t('ui.onboarding.step.ocr.body', 'OCR only extracts text from the selected screen area. It does not automatically detect or split questions.'),
+      title: t('ui.onboarding.step.ocr.title', 'Add your first learning material'),
+      body: t('ui.onboarding.step.ocr.body', 'In Study, paste text, import a file, or use OCR. OCR only extracts text from the selected screen area. It does not automatically detect or split questions.'),
     },
     {
       label: t('ui.onboarding.step.goal.label', 'Step 3'),
-      title: t('ui.onboarding.step.goal.title', 'Bind a study goal'),
-      body: t('ui.onboarding.step.goal.body', 'Review cards, focus sessions, and summaries stay useful when tied to a goal.'),
+      title: t('ui.onboarding.step.goal.title', 'Complete one learning loop'),
+      body: t('ui.onboarding.step.goal.body', 'Explain the material, then use Practice, Memory, or Focus. Review what you learned in Knowledge, Notebook, or Session Summary.'),
     },
   ];
 }
