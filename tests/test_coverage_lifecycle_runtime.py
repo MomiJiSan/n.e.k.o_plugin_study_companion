@@ -82,8 +82,6 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
     plugin.__path__ = []  # type: ignore[attr-defined]
     sdk = _install_module(monkeypatch, "plugin.sdk")
     sdk.__path__ = []  # type: ignore[attr-defined]
-    server = _install_module(monkeypatch, "plugin.server")
-    server.__path__ = []  # type: ignore[attr-defined]
 
     class _NekoPluginBase:
         pass
@@ -108,16 +106,6 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
         neko_plugin=lambda cls: cls,
     )
 
-    class _InstallKindRegistration:
-        def __init__(self, **kwargs: Any):
-            self.__dict__.update(kwargs)
-
-    _install_module(
-        monkeypatch,
-        "plugin.server.install_registry",
-        InstallKindRegistration=_InstallKindRegistration,
-        register_install_plugin=lambda *_args, **_kwargs: None,
-    )
     _install_module(
         monkeypatch,
         "plugin.logging_config",

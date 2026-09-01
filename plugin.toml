@@ -4,7 +4,7 @@ name = "Study Companion"
 description = "An adaptive study companion that can classify the screen, generate questions, evaluate answers, explain concepts, and summarize sessions."
 short_description = "OCR, tutoring, and session summaries for study sessions."
 keywords = ["study", "ocr", "tutor", "concept", "learning"]
-version = "0.2.1"
+version = "0.2.2"
 type = "plugin"
 entry = "plugin.plugins.study_companion:StudyCompanionPlugin"
 
@@ -121,3 +121,14 @@ permissions = ["state:read"]
 [plugin.i18n]
 default_locale = "zh-CN"
 locales_dir = "i18n"
+
+[plugin.install]
+enabled = true
+ui_i18n_dir = "i18n"
+tutorial_enabled = true
+
+[plugin.install.kinds.rapidocr_models]
+entry_id = "study_download_rapidocr_models"
+label = "RapidOCR Models"
+queued_message = "RapidOCR model download queued"
+entry_timeout = 600.0

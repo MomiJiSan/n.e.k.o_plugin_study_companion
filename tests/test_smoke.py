@@ -2,6 +2,7 @@ import ast
 import importlib
 import json
 import sys
+import tomllib
 from pathlib import Path
 from types import ModuleType
 
@@ -320,4 +321,10 @@ def test_release_versions_stay_in_sync() -> None:
         for line in (root / "pyproject.toml").read_text(encoding="utf-8").splitlines()
         if line.startswith("version = ")
     )
-    assert plugin_version == project_version == "0.2.1"
+    with (root / "uv.lock").open("rb") as lock_file:
+        locked_version = next(
+            package["version"]
+            for package in tomllib.load(lock_file)["package"]
+            if package["name"] == "study-companion"
+        )
+    assert plugin_version == project_version == locked_version == "0.2.2"
