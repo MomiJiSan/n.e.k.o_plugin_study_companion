@@ -320,4 +320,4 @@ def test_release_versions_stay_in_sync() -> None:
         for line in (root / "pyproject.toml").read_text(encoding="utf-8").splitlines()
         if line.startswith("version = ")
     )
-    assert plugin_version == project_version == "0.2.0"
+    assert plugin_version == project_version == "0.2.1"
