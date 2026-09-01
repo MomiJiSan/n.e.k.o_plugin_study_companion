@@ -7,7 +7,7 @@ const LOAD_IMAGE_TIMEOUT_MS = 30000;
 const TARGET_DATA_URL_LENGTH = 1000000;
 const DEFAULT_VISION_MAX_IMAGE_PX = 768;
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg']);
-const DEPENDENCY_KEYS = Object.freeze(['rapidocr', 'tesseract', 'dxcam']);
+const DEPENDENCY_KEYS = Object.freeze(['rapidocr', 'dxcam']);
 const LEARNING_PROFILE_STORAGE_KEY = 'study_companion.learning_profile.v1';
 const LEARNING_STAGE_OPTIONS = ['primary', 'junior_high', 'senior_high', 'college', 'cross_stage', 'postgraduate', 'custom'];
 const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'chemistry', 'biology', 'history', 'geography', 'politics', 'computer_science', 'economics'];
@@ -901,7 +901,7 @@ function buildDiagnosis(data = {}) {
     const issues = `${ocrIssue} ${t('ui.diagnosis.knowledge_empty.body', 'The knowledge map has no loaded topics yet.')}`;
     return { severity: 'warning', title: t('ui.diagnosis.multiple_issues.title', 'Study setup needs attention'), body: tf('ui.diagnosis.multiple_issues.body', 'Resolve these items: {issues}', { issues }) };
   }
-  if (ocrIssue) return { severity: 'warning', title: t('ui.diagnosis.ocr_unavailable.title', 'The selected OCR backend is unavailable'), body: ocrIssue };
+  if (ocrIssue) return { severity: 'warning', title: t('ui.diagnosis.ocr_unavailable.title', 'Text recognition is unavailable'), body: ocrIssue };
   if (!hasKnowledge && readiness.ready === true) return { severity: 'warning', title: t('ui.diagnosis.knowledge_empty.title', 'Knowledge topics are not loaded'), body: t('ui.diagnosis.knowledge_empty.body', 'OCR is ready, but the knowledge map has no loaded topics yet.') };
   if (hasDependencyStatus || data.status === 'ready') {
     return {
@@ -1100,7 +1100,7 @@ function updateStudySummaries(data = {}) {
     : t('ui.settings.ocr.no_status', 'Dependency status is not loaded yet.'));
   setText('settingsDependencySummary', dependencyCount
     ? tf('ui.settings.dependencies.ready_summary', '{ready}/{total} dependencies ready', { ready: readyCount, total: dependencyCount })
-    : t('ui.settings.dependencies.no_status', 'Refresh status to inspect OCR backends.'));
+    : t('ui.settings.dependencies.no_status', 'Refresh status to check text recognition and screen capture.'));
   window.StudyDependencyController?.render(deps);
   setText('settingsKnowledgeSummary', topicCount
     ? tf('ui.settings.knowledge.loaded_summary', '{topics} topics and {edges} edges loaded.', { topics: topicCount, edges: edgeCount })
@@ -2207,13 +2207,17 @@ function renderLocalModelsRuntime(runtime = settingsLocalModelsRuntimeStatus) {
 function applySettingsConfig(config) {
   const study = config.study || {};
   const ocr = config.ocr_reader || {};
+  const rapidocr = config.rapidocr || {};
   const llm = config.llm || {};
   const communication = config.communication || {};
   const docExport = config.doc_export || {};
   if (settingsDefaultMode) settingsDefaultMode.value = ['companion', 'interactive', 'teaching'].includes(study.default_mode) ? study.default_mode : 'companion';
   syncLearningProfileUi();
   if (settingsOcrEnabled) settingsOcrEnabled.checked = ocr.enabled !== false;
-  if (settingsOcrLanguages) settingsOcrLanguages.value = String(ocr.languages || 'chi_sim+jpn+eng');
+  if (settingsOcrLanguages) {
+    const langType = String(rapidocr.lang_type || 'ch').trim().toLowerCase();
+    settingsOcrLanguages.value = ['ch', 'japan', 'korean', 'en'].includes(langType) ? langType : 'ch';
+  }
   if (settingsOcrQuestionPersistence) {
     settingsOcrQuestionPersistence.value = ocr.question_persistence_mode === 'auto_save_questions'
       ? 'auto_save_questions'
@@ -2259,12 +2263,15 @@ function collectSettingsConfig() {
   const next = cloneConfig(settingsConfig);
   const study = ensureConfigSection(next, 'study');
   const ocr = ensureConfigSection(next, 'ocr_reader');
+  const rapidocr = ensureConfigSection(next, 'rapidocr');
   const llm = ensureConfigSection(next, 'llm');
   const communication = ensureConfigSection(next, 'communication');
   const docExport = ensureConfigSection(next, 'doc_export');
   study.default_mode = settingsDefaultMode ? settingsDefaultMode.value : 'companion';
   ocr.enabled = settingsOcrEnabled ? settingsOcrEnabled.checked : true;
-  ocr.languages = settingsOcrLanguages ? settingsOcrLanguages.value.trim() || 'chi_sim+jpn+eng' : 'chi_sim+jpn+eng';
+  rapidocr.lang_type = settingsOcrLanguages && ['ch', 'japan', 'korean', 'en'].includes(settingsOcrLanguages.value)
+    ? settingsOcrLanguages.value
+    : 'ch';
   ocr.question_persistence_mode = settingsOcrQuestionPersistence
     ? settingsOcrQuestionPersistence.value
     : 'save_when_used';

@@ -13,7 +13,7 @@
 | 辅导与推理 | `tutor_llm_agent*.py`, `study_model_gateway.py`, `study_inference_router.py`, `llm_prompts.py` | 构建提示词、选择运行时、调用模型并规范化结构化结果 |
 | 学习状态与知识图谱 | `knowledge_tracker.py`, `knowledge_graph_*.py`, `knowledge_quality.py`, `knowledge_seed_validator.py` | 掌握度、题目范围、图谱引导、种子校验和质量评估 |
 | 持久化 | `store.py`, `store_*.py`, `memory_*.py`, `fsrs_bridge.py` | SQLite schema、学习记录、笔记、卡组、FSRS 与迁移兼容 |
-| OCR 与文档 | `study_ocr_pipeline.py`, `document_*.py`, `tesseract_support.py` | 截图识别、文档分块、异步分析、导出与可选 OCR 依赖 |
+| 文字识别与文档 | `study_ocr_pipeline.py`, `document_*.py` | 使用内置文字识别读取截图和文档页面，并完成分块、异步分析与导出 |
 | 习惯与监督 | `study_habit_store.py`, `pomodoro_timer.py`, `checkin_manager.py`, `supervision.py` | 番茄钟、打卡、学习习惯和提醒 |
 | Hosted surfaces | `surfaces/*.tsx`, `surfaces/*.ts` | 宿主提供的现代 UI surface |
 | 兼容静态 UI | `static/` | 传统工作台、控制器、样式、i18n 运行时及随包资源 |
