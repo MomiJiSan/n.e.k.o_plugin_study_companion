@@ -592,10 +592,6 @@ def test_pipeline_backend_resolution_and_platform_title_fallbacks(
             super().__init__("owned")
             self.kwargs = kwargs
 
-    tesseract = ModuleType(f"{package_name}.tesseract_support")
-    tesseract.TesseractOcrBackend = OwnedBackend
-    monkeypatch.setitem(sys.modules, tesseract.__name__, tesseract)
-
     plugin = ModuleType("plugin")
     plugin.__path__ = []  # type: ignore[attr-defined]
     plugins = ModuleType("plugin.plugins")
@@ -629,11 +625,18 @@ def test_pipeline_backend_resolution_and_platform_title_fallbacks(
     )
     try:
         owned = pipeline._resolve_ocr_backend()
-        assert owned.kwargs["languages"] == ["eng"]
-        pipeline.update_config(_config(ocr_backend_selection="rapidocr"))
+        assert owned.kwargs["lang_type"] == "ch"
+        assert owned.kwargs["plugin_id"] == "study_companion"
+        pipeline.update_config(
+            _config(
+                ocr_backend_selection="tesseract",
+                rapidocr_lang_type="japan",
+            )
+        )
         assert owned.closed is True
         rapid = pipeline._resolve_ocr_backend()
         assert rapid.kwargs["plugin_id"] == "study_companion"
+        assert rapid.kwargs["lang_type"] == "japan"
 
         for selection in ("dxcam", "mss", "printwindow", "pyautogui", "unknown"):
             pipeline.update_config(_config(ocr_capture_backend=selection))

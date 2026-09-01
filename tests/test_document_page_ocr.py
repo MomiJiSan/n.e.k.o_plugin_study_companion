@@ -570,7 +570,7 @@ def test_document_page_entry_reports_uninitialized_pipeline(
         "text": "",
         "status": "unavailable",
         "diagnostic": "document_pdf_ocr_unavailable",
-        "backend": "tesseract",
+        "backend": "rapidocr",
     }
 
 

@@ -2,23 +2,19 @@ from __future__ import annotations
 
 import copy
 import importlib.util
-import logging
-import subprocess
 import sys
-from pathlib import Path
 from typing import Any
 
 from .models import (
     OcrSnapshot,
+    RAPIDOCR_LANG_TYPE_INVALID_DIAGNOSTIC,
     StudyConfig,
     StudyState,
     TutorReply,
+    normalize_rapidocr_lang_type,
     public_current_question_payload,
     public_screen_classification_payload,
 )
-
-_LOGGER = logging.getLogger(__name__)
-
 
 def build_status_payload(
     *,
@@ -91,26 +87,22 @@ def build_status_payload(
 
 def build_dependency_status(config: StudyConfig) -> dict[str, Any]:
     rapidocr = _inspect_rapidocr(config)
-    tesseract = _inspect_tesseract(config)
     dxcam = _inspect_dxcam()
-    missing = [
-        name
-        for name, status in {
-            "rapidocr": rapidocr,
-            "tesseract": tesseract,
-            "dxcam": dxcam,
-        }.items()
-        if isinstance(status, dict) and status.get("installed") is False and status.get("can_install")
-    ]
+    missing = []
+    if (
+        rapidocr.get("installed") is False
+        and rapidocr.get("can_download_models") is True
+        and str(rapidocr.get("detail") or "").strip().lower()
+        == "missing_model_files"
+    ):
+        missing.append("rapidocr_models")
     return {
         "rapidocr": rapidocr,
-        "tesseract": tesseract,
         "dxcam": dxcam,
         "missing_installable": missing,
         "ocr_readiness": _build_ocr_readiness(
             config=config,
             rapidocr=rapidocr,
-            tesseract=tesseract,
             dxcam=dxcam,
         ),
     }
@@ -120,11 +112,10 @@ def _build_ocr_readiness(
     *,
     config: StudyConfig,
     rapidocr: dict[str, Any],
-    tesseract: dict[str, Any],
     dxcam: dict[str, Any],
 ) -> dict[str, Any]:
     enabled = bool(config.ocr_enabled)
-    selected_backend = str(config.ocr_backend_selection or "rapidocr").strip().lower()
+    selected_backend = "rapidocr"
     capture_backend = str(config.ocr_capture_backend or "auto").strip().lower()
     if capture_backend == "auto":
         capture_backend = "dxcam"
@@ -137,30 +128,17 @@ def _build_ocr_readiness(
     else:
         capture_ready = False
 
-    selected_status: dict[str, Any] | None
-    if selected_backend == "rapidocr":
-        selected_status = rapidocr
-    elif selected_backend == "tesseract":
-        selected_status = tesseract
-    else:
-        selected_status = None
-
-    selected_backend_ready = bool(selected_status is not None and selected_status.get("installed") is True)
+    selected_backend_ready = rapidocr.get("installed") is True
     ready = enabled and selected_backend_ready and capture_ready
 
     if not enabled:
         diagnostic = "ocr_disabled"
-    elif selected_status is None:
-        diagnostic = "unsupported_ocr_backend"
     elif not selected_backend_ready:
-        detail = str(selected_status.get("detail") or "").strip().lower()
-        if selected_backend == "rapidocr":
-            diagnostic = {
-                "missing_model_files": "rapidocr_models_missing",
-                "broken_runtime": "rapidocr_runtime_broken",
-            }.get(detail, "rapidocr_runtime_missing")
-        else:
-            diagnostic = "tesseract_languages_missing" if detail == "missing_languages" else "tesseract_missing"
+        detail = str(rapidocr.get("detail") or "").strip().lower()
+        diagnostic = {
+            "invalid_language": RAPIDOCR_LANG_TYPE_INVALID_DIAGNOSTIC,
+            "missing_model_files": "rapidocr_models_missing",
+        }.get(detail, "rapidocr_runtime_missing")
     elif capture_backend not in {"dxcam", "mss", "pyautogui", "printwindow"}:
         diagnostic = "unsupported_capture_backend"
     elif not capture_ready:
@@ -179,6 +157,25 @@ def _build_ocr_readiness(
 
 
 def _inspect_rapidocr(config: StudyConfig) -> dict[str, Any]:
+    lang_type, input_diagnostic = normalize_rapidocr_lang_type(
+        config.rapidocr_lang_type
+    )
+    diagnostic = str(
+        getattr(config, "_rapidocr_lang_type_diagnostic", "")
+        or input_diagnostic
+    ).strip()
+    if diagnostic:
+        return {
+            "install_supported": False,
+            "installed": False,
+            "can_install": False,
+            "detected_path": "",
+            "target_dir": "",
+            "detail": "invalid_language",
+            "runtime_error": diagnostic,
+            "lang_type": lang_type,
+        }
+
     from plugin.plugins._shared.rapidocr.rapidocr_support import (
         inspect_rapidocr_installation,
     )
@@ -186,70 +183,11 @@ def _inspect_rapidocr(config: StudyConfig) -> dict[str, Any]:
     return inspect_rapidocr_installation(
         install_target_dir_raw=config.rapidocr_install_target_dir,
         engine_type=config.rapidocr_engine_type,
-        lang_type=config.rapidocr_lang_type,
+        lang_type=lang_type,
         model_type=config.rapidocr_model_type,
         ocr_version=config.rapidocr_ocr_version,
         plugin_id="study_companion",
     )
-
-
-def _inspect_tesseract(config: StudyConfig) -> dict[str, Any]:
-    from .tesseract_support import inspect_tesseract_installation
-
-    return inspect_tesseract_installation(
-        configured_path=config.ocr_tesseract_path,
-        install_target_dir_raw=config.ocr_install_target_dir,
-        languages=config.ocr_languages,
-    )
-
-
-def _available_tesseract_languages(detected: Path | None, target_dir: Path | None) -> set[str]:
-    tessdata_dirs = []
-    if detected is not None:
-        try:
-            completed = subprocess.run(
-                [str(detected), "--list-langs"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-            languages = {
-                line.strip()
-                for line in output.splitlines()
-                if line.strip() and not line.lower().startswith("list of available languages")
-            }
-            if completed.returncode != 0:
-                _LOGGER.warning(
-                    "tesseract --list-langs exited with code %s, falling back to filesystem scan",
-                    completed.returncode,
-                )
-            if languages:
-                return languages
-        except subprocess.TimeoutExpired as exc:
-            _LOGGER.warning(
-                "tesseract --list-langs timed out, falling back to filesystem scan: %s",
-                exc,
-            )
-        except OSError as exc:
-            _LOGGER.warning(
-                "tesseract --list-langs failed, falling back to filesystem scan: %s",
-                exc,
-            )
-    if target_dir is not None:
-        tessdata_dirs.append(target_dir / "tessdata")
-    if detected is not None:
-        tessdata_dirs.append(detected.parent / "tessdata")
-    for tessdata_dir in tessdata_dirs:
-        if tessdata_dir.is_dir():
-            languages = {path.stem for path in tessdata_dir.glob("*.traineddata")}
-            if languages:
-                return languages
-    return set()
-
-
 def _inspect_dxcam() -> dict[str, Any]:
     supported = sys.platform == "win32"
     spec = importlib.util.find_spec("dxcam") if supported else None

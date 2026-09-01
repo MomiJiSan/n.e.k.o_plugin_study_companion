@@ -52,6 +52,7 @@ _LIGHTWEIGHT_INITIAL_JPEG_QUALITY = 60
 _LIGHTWEIGHT_MIN_JPEG_QUALITY = 35
 _PHASH_CHANGE_THRESHOLD = 5
 _VISION_SNAPSHOT_JPEG_QUALITY = 72
+_RAPIDOCR_BACKEND_NAME = "rapidocr"
 _VISION_SNAPSHOT_TTL_SECONDS = 30.0
 
 try:
@@ -192,11 +193,11 @@ class StudyOcrPipeline:
         if image is None:
             self._clear_vision_snapshot()
             return OcrSnapshot(status="empty", captured_at=utc_now_iso(), diagnostic="no image supplied")
-        return self._extract_image(image, backend_name=backend_name or self._config.ocr_backend_selection)
+        return self._extract_image(image, backend_name=_RAPIDOCR_BACKEND_NAME)
 
     def recognize_document_page(self, image: Any) -> OcrSnapshot:
         """OCR one imported document page without changing live screen state."""
-        backend_name = str(self._config.ocr_backend_selection or "").strip()
+        backend_name = _RAPIDOCR_BACKEND_NAME
         if not self._config.ocr_enabled:
             return OcrSnapshot(
                 status="disabled",
@@ -260,7 +261,7 @@ class StudyOcrPipeline:
                     captured_at=utc_now_iso(),
                     diagnostic=f"fullscreen capture failed: {exc}",
                 )
-            return self._extract_image(frame, backend_name=self._config.ocr_backend_selection)
+            return self._extract_image(frame, backend_name=_RAPIDOCR_BACKEND_NAME)
         try:
             profile = StudyCaptureProfile(
                 left_inset_ratio=self._config.ocr_left_inset_ratio,
@@ -276,7 +277,7 @@ class StudyOcrPipeline:
                 captured_at=utc_now_iso(),
                 diagnostic=str(exc),
             )
-        return self._extract_image(frame, backend_name=self._config.ocr_backend_selection)
+        return self._extract_image(frame, backend_name=_RAPIDOCR_BACKEND_NAME)
 
     def capture_lightweight(self, target: Any | None = None) -> LightweightSnapshot:
         started = time.monotonic()
@@ -343,7 +344,7 @@ class StudyOcrPipeline:
             except Exception as exc:
                 ocr_snapshot = OcrSnapshot(
                     status="ocr_failed",
-                    backend=self._config.ocr_backend_selection,
+                    backend=_RAPIDOCR_BACKEND_NAME,
                     captured_at=utc_now_iso(),
                     diagnostic=str(exc),
                 )
@@ -357,7 +358,7 @@ class StudyOcrPipeline:
                 ocr_future = executor.submit(
                     self._extract_image,
                     thumbnail,
-                    backend_name=self._config.ocr_backend_selection,
+                    backend_name=_RAPIDOCR_BACKEND_NAME,
                     _skip_vision_snapshot=True,
                 )
                 try:
@@ -375,7 +376,7 @@ class StudyOcrPipeline:
                     self._retire_executor(executor)
                     ocr_snapshot = OcrSnapshot(
                         status="ocr_failed",
-                        backend=self._config.ocr_backend_selection,
+                        backend=_RAPIDOCR_BACKEND_NAME,
                         captured_at=utc_now_iso(),
                         diagnostic=str(exc),
                     )
@@ -569,7 +570,7 @@ class StudyOcrPipeline:
         except Exception as exc:
             return OcrSnapshot(
                 status="ocr_failed",
-                backend=backend_name,
+                backend=_RAPIDOCR_BACKEND_NAME,
                 captured_at=utc_now_iso(),
                 diagnostic=str(exc),
             )
@@ -578,7 +579,7 @@ class StudyOcrPipeline:
             text=text,
             boxes=boxes,
             status="ok" if text.strip() else "empty",
-            backend=backend_name,
+            backend=_RAPIDOCR_BACKEND_NAME,
             captured_at=utc_now_iso(),
             diagnostic=f"ocr_duration_seconds={elapsed:.3f}",
         )
@@ -713,28 +714,17 @@ class StudyOcrPipeline:
                 raise RuntimeError("study OCR pipeline is closed")
             if self._ocr_backend is not None:
                 return self._ocr_backend
-            selection = str(self._config.ocr_backend_selection or "rapidocr").strip().lower()
-            if selection == "tesseract":
-                from .tesseract_support import TesseractOcrBackend
+            from plugin.plugins._shared.rapidocr.ocr_backends import RapidOcrBackend
 
-                self._ocr_backend = TesseractOcrBackend(
-                    tesseract_path=self._config.ocr_tesseract_path,
-                    install_target_dir_raw=self._config.ocr_install_target_dir,
-                    languages=self._config.ocr_languages,
-                )
-                self._owns_ocr_backend = True
-            else:
-                from plugin.plugins._shared.rapidocr.ocr_backends import RapidOcrBackend
-
-                self._ocr_backend = RapidOcrBackend(
-                    install_target_dir_raw=self._config.rapidocr_install_target_dir,
-                    engine_type=self._config.rapidocr_engine_type,
-                    lang_type=self._config.rapidocr_lang_type,
-                    model_type=self._config.rapidocr_model_type,
-                    ocr_version=self._config.rapidocr_ocr_version,
-                    plugin_id="study_companion",
-                )
-                self._owns_ocr_backend = True
+            self._ocr_backend = RapidOcrBackend(
+                install_target_dir_raw=self._config.rapidocr_install_target_dir,
+                engine_type=self._config.rapidocr_engine_type,
+                lang_type=self._config.rapidocr_lang_type,
+                model_type=self._config.rapidocr_model_type,
+                ocr_version=self._config.rapidocr_ocr_version,
+                plugin_id="study_companion",
+            )
+            self._owns_ocr_backend = True
             return self._ocr_backend
 
     def _resolve_capture_backend(self) -> Any:
