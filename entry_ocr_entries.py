@@ -14,7 +14,6 @@ from .entry_common import (
     build_ocr_payload,
     plugin_entry,
     rapidocr_support,
-    tesseract_support,
     tr,
     ui,
     update_install_task_state,
@@ -369,7 +368,7 @@ class _OcrEntriesMixin:
         ),
         description=tr(
             "entries.dependency_status.description",
-            default="Inspect RapidOCR, Tesseract, and capture dependencies used by study_companion.",
+            default="Inspect text recognition and screen capture dependencies used by study_companion.",
         ),
         input_schema={"type": "object", "properties": {}},
         llm_result_fields=["missing_installable"],
@@ -540,9 +539,7 @@ class _OcrEntriesMixin:
         llm_result_fields=["status", "diagnostic", "backend"],
     )
     async def study_ocr_document_page(self, image_data_url: str, **_):
-        backend_name = str(
-            getattr(getattr(self, "_cfg", None), "ocr_backend_selection", "") or ""
-        ).strip()
+        backend_name = "rapidocr"
         if self._ocr_pipeline is None:
             return Ok(
                 {
@@ -604,60 +601,6 @@ class _OcrEntriesMixin:
                     lambda task: _release_document_page_image(task, image)
                 )
         return Ok(_document_page_ocr_payload(snapshot))
-
-    @plugin_entry(
-        id="study_install_tesseract",
-        name=tr(
-            "entries.install_tesseract.name", default="Install Tesseract for Study OCR"
-        ),
-        description=tr(
-            "entries.install_tesseract.description",
-            default="Install local Tesseract OCR for study_companion and refresh dependency status.",
-        ),
-        input_schema={
-            "type": "object",
-            "properties": {"force": {"type": "boolean", "default": False}},
-        },
-        timeout=300.0,
-        llm_result_fields=["summary"],
-    )
-    async def study_install_tesseract(self, force: bool = False, **kwargs):
-        async with self._lock:
-            if self._install_in_progress:
-                return Err(SdkError("Tesseract install is already running"))
-            self._install_in_progress = True
-        try:
-            run_id = self._resolve_current_run_id(kwargs)
-            result = await tesseract_support.install_tesseract(
-                logger=self.logger,
-                configured_path=self._cfg.ocr_tesseract_path,
-                install_target_dir_raw=self._cfg.ocr_install_target_dir,
-                manifest_url=self._cfg.ocr_install_manifest_url,
-                timeout_seconds=self._cfg.ocr_install_timeout_seconds,
-                languages=self._cfg.ocr_languages,
-                force=bool(force),
-                task_id=run_id or None,
-                plugin_id=self.plugin_id,
-                progress_callback=self._resolve_install_progress_callback(run_id),
-            )
-            await self._refresh_dependency_status()
-            await self._persist_state()
-            return Ok(
-                {
-                    "summary": str(result.get("summary") or "Tesseract is ready"),
-                    "install_result": result,
-                }
-            )
-        except Exception as exc:
-            return _entry_exception_error(
-                self,
-                exc,
-                operation="study_install_tesseract",
-                message=f"Tesseract install failed: {exc}",
-            )
-        finally:
-            async with self._lock:
-                self._install_in_progress = False
 
     @plugin_entry(
         id="study_download_rapidocr_models",

@@ -18,6 +18,24 @@ StudyMode = Literal["companion", "interactive", "teaching"]
 STUDY_EXPORT_FORMATS = ("markdown", "pdf", "docx", "xmind")
 STUDY_EXPORT_STYLES = ("neko", "academic", "compact")
 _LOGGER = logging.getLogger(__name__)
+
+RAPIDOCR_LANG_TYPES = frozenset({"ch", "japan", "korean", "en"})
+RAPIDOCR_LANG_TYPE_FALLBACK = "ch"
+RAPIDOCR_LANG_TYPE_INVALID_DIAGNOSTIC = "rapidocr_language_invalid"
+
+
+def normalize_rapidocr_lang_type(value: object) -> tuple[str, str]:
+    normalized = str(value or "").strip().lower()
+    if normalized in RAPIDOCR_LANG_TYPES:
+        return normalized, ""
+    _LOGGER.warning(
+        "StudyConfig: invalid rapidocr_lang_type=%r, falling back to %r",
+        value,
+        RAPIDOCR_LANG_TYPE_FALLBACK,
+    )
+    return RAPIDOCR_LANG_TYPE_FALLBACK, RAPIDOCR_LANG_TYPE_INVALID_DIAGNOSTIC
+
+
 OCR_SNIPPET_MAX_CHARS = 200
 OCR_SESSION_TEXT_TTL_SECONDS = 30 * 60
 _SCREEN_CLASSIFICATION_PUBLIC_FIELDS = frozenset({"screen_type", "confidence", "reason", "signals", "at"})
@@ -403,12 +421,17 @@ class StudyConfig:
     auto_open_ui: bool = False
     ocr_enabled: bool = True
     ocr_question_persistence_mode: str = "save_when_used"
+    # Legacy rollback-only backend choice. 0.2.1 keeps it serializable so a
+    # user can return to 0.2.0, but the active OCR runtime never reads it.
     ocr_backend_selection: str = "rapidocr"
     ocr_capture_backend: str = "auto"
+    # Legacy rollback-only Tesseract values.
     ocr_tesseract_path: str = ""
     ocr_install_manifest_url: str = ""
     ocr_install_target_dir: str = ""
+    # Still active for RapidOCR model downloads.
     ocr_install_timeout_seconds: float = 300.0
+    # Legacy rollback-only language list for the removed Tesseract backend.
     ocr_languages: str = "chi_sim+jpn+eng"
     ocr_left_inset_ratio: float = 0.03
     ocr_right_inset_ratio: float = 0.03
@@ -419,6 +442,9 @@ class StudyConfig:
     rapidocr_lang_type: str = "ch"
     rapidocr_model_type: str = "mobile"
     rapidocr_ocr_version: str = "PP-OCRv4"
+    _rapidocr_lang_type_diagnostic: str = field(
+        default="", init=False, repr=False, compare=False
+    )
     llm_call_timeout_seconds: float = 30.0
     llm_vision_enabled: bool = False
     llm_vision_max_image_px: int = 768
@@ -461,6 +487,10 @@ class StudyConfig:
             )
             persistence_mode = "save_when_used"
         self.ocr_question_persistence_mode = persistence_mode
+        (
+            self.rapidocr_lang_type,
+            self._rapidocr_lang_type_diagnostic,
+        ) = normalize_rapidocr_lang_type(self.rapidocr_lang_type)
         self.ocr_install_timeout_seconds = self._clamp_float(self.ocr_install_timeout_seconds, 1.0, 3600.0, 300.0)
         self.ocr_left_inset_ratio = self._clamp_float(self.ocr_left_inset_ratio, 0.0, 1.0, 0.03)
         self.ocr_right_inset_ratio = self._clamp_float(self.ocr_right_inset_ratio, 0.0, 1.0, 0.03)
@@ -513,7 +543,9 @@ class StudyConfig:
             self.mastery = MasteryConfig(**self.mastery) if isinstance(self.mastery, dict) else MasteryConfig()
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload.pop("_rapidocr_lang_type_diagnostic", None)
+        return payload
 
     @staticmethod
     def _coerce_int(value: object, default: int) -> int:

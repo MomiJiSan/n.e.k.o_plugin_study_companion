@@ -3,7 +3,6 @@
 
   const PLUGIN_ID = 'study_companion';
   const URLS = Object.freeze({
-    tesseract: `/plugin/${PLUGIN_ID}/ui-api/tesseract/install`,
     rapidocr_models: `/plugin/${PLUGIN_ID}/ui-api/rapidocr-models`,
   });
   const state = { kind: '', taskId: '', task: null, source: null, busy: false, dependencies: {}, refresh: null };
@@ -36,17 +35,16 @@
       if (detail === 'broken_runtime') return 'status_runtime_broken';
       return 'status_runtime_missing';
     }
-    if (name === 'tesseract' && detail === 'missing_languages') return 'status_languages_missing';
     return name === 'dxcam' ? 'status_capture_missing' : 'status_not_installed';
   }
 
-  function errorKey(kind, task) {
+  function errorKey(task) {
     const value = `${task?.diagnostic || ''} ${task?.error || ''} ${task?.phase || ''}`.toLowerCase();
     if (value.includes('timeout')) return 'error_install_timeout';
     if (value.includes('permission') || value.includes('access denied')) return 'error_install_permission_denied';
     if (value.includes('manifest') || value.includes('checksum')) return 'error_install_manifest_invalid';
     if (value.includes('network') || value.includes('download') || value.includes('connection')) {
-      return kind === 'rapidocr_models' ? 'error_rapidocr_model_download_failed' : 'error_install_network';
+      return 'error_rapidocr_model_download_failed';
     }
     if (value.includes('incomplete') || value.includes('interrupted')) return 'error_install_incomplete';
     if (value.includes('dependency_refresh_failed')) return 'error_dependency_refresh_failed';
@@ -56,7 +54,6 @@
   function render(dependencies) {
     state.dependencies = dependencies || {};
     const readiness = state.dependencies.ocr_readiness || {};
-    const selected = String(readiness.selected_backend || '').toLowerCase();
     const chain = document.getElementById('settingsOcrChainStatus');
     if (chain) {
       const key = readiness.diagnostic === 'ocr_disabled'
@@ -65,31 +62,30 @@
         ? 'The current OCR path is ready' : key === 'chain_disabled' ? 'OCR is disabled' : 'The current OCR path is unavailable');
     }
 
-    ['rapidocr', 'tesseract', 'dxcam'].forEach((name) => {
+    ['rapidocr', 'dxcam'].forEach((name) => {
       const row = document.querySelector(`[data-dependency="${name}"]`);
       if (!row) return;
       const item = state.dependencies[name] || {};
-      const current = name === selected;
       const role = row.querySelector('.dependency-row__role');
       const label = row.querySelector('.dependency-row__status');
       const action = row.querySelector('.dependency-row__action');
-      if (role) role.textContent = name === 'dxcam'
-        ? ''
-        : t(`ui.settings.dependencies.${current ? 'current' : 'optional'}`, current ? 'In use' : 'Optional');
+      if (role) role.textContent = name === 'rapidocr'
+        ? t('ui.settings.dependencies.current', 'In use')
+        : '';
       const key = statusKey(name, item);
       if (label) label.textContent = t(`ui.settings.dependencies.${key}`, key === 'status_ready' ? 'Ready' : 'Not installed');
       if (!action) return;
       const kind = action.dataset.dependencyAction;
-      const allowed = kind === 'tesseract'
-        ? item.can_install === true && !ready(item)
-        : item.can_download_models === true && String(item.detail || '').toLowerCase() === 'missing_model_files';
+      const allowed = kind === 'rapidocr_models'
+        && item.can_download_models === true
+        && String(item.detail || '').toLowerCase() === 'missing_model_files';
       const failed = state.kind === kind && String(state.task?.status || '').toLowerCase() === 'failed';
       action.hidden = !allowed;
       action.disabled = state.busy;
       action.textContent = state.busy && state.kind === kind
         ? t('ui.settings.dependencies.working', 'Working...')
         : failed ? t('ui.settings.dependencies.retry', 'Retry')
-          : t(`ui.settings.dependencies.${kind === 'tesseract' ? 'install_tesseract' : 'download_models'}`, kind === 'tesseract' ? 'Install Tesseract' : 'Download models');
+          : t('ui.settings.dependencies.download_models', 'Download language support');
     });
 
     const rapidocr = state.dependencies.rapidocr || {};
@@ -99,8 +95,8 @@
     if (help) {
       help.hidden = !runtimeMissing && !failedTask;
       help.textContent = runtimeMissing
-        ? `${t('ui.settings.dependencies.source_fix', 'Source environment: run uv sync --group galgame, then restart the backend.')}\n${t('ui.settings.dependencies.package_fix', 'Packaged app: repair or reinstall N.E.K.O.')}`
-        : failedTask ? t(`ui.settings.dependencies.${errorKey(state.kind, failedTask)}`, 'The dependency operation failed. Please retry.') : '';
+        ? t('ui.settings.dependencies.runtime_unavailable_help', 'Text recognition is unavailable. Repair or reinstall N.E.K.O., then try again.')
+        : failedTask ? t(`ui.settings.dependencies.${errorKey(failedTask)}`, 'The dependency operation failed. Please retry.') : '';
     }
 
     const progressBox = document.getElementById('settingsDependencyProgress');

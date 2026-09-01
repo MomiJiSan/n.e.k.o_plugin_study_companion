@@ -33,7 +33,6 @@ from plugin.sdk.plugin import (
 )
 from plugin.server.routes._install_task_store import update_install_task_state
 
-from . import tesseract_support
 from ._event_bus import StudyEvent, StudyEventBus
 from .checkin_manager import CheckinManager
 from .constants import (
@@ -312,7 +311,6 @@ __all__ = [
     "build_knowledge_map_payload",
     "build_habit_dashboard_payload",
     "build_pomodoro_status_payload",
-    "tesseract_support",
     "rapidocr_support",
     "update_install_task_state",
     "_validated_pomodoro_focus_minutes",

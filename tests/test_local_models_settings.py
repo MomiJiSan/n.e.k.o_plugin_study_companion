@@ -78,6 +78,74 @@ def test_local_models_settings_payload_round_trips_without_side_effects(
     assert invalid.local_models_enabled is False
 
 
+@pytest.mark.parametrize(
+    ("raw_lang_type", "expected"),
+    [
+        ("ch", "ch"),
+        (" JAPAN ", "japan"),
+        ("Korean", "korean"),
+        ("EN", "en"),
+    ],
+)
+def test_rapidocr_language_settings_round_trip_only_supported_values(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_lang_type: str,
+    expected: str,
+) -> None:
+    models, package_name = _load_models(
+        monkeypatch, f"_rapidocr_language_settings_{expected}"
+    )
+    entries = _load_status_entries(monkeypatch, package_name, models)
+    current = models.StudyConfig(
+        ocr_backend_selection="tesseract",
+        ocr_tesseract_path="C:/legacy/tesseract.exe",
+        ocr_install_manifest_url="https://legacy.invalid/manifest.json",
+        ocr_install_target_dir="C:/legacy/tesseract",
+        ocr_languages="chi_sim+jpn+eng",
+    )
+
+    updated = entries._apply_settings_config(
+        current,
+        {"rapidocr": {"lang_type": raw_lang_type}},
+    )
+    payload = entries._settings_config_payload(updated)
+    serialized = updated.to_dict()
+
+    assert payload["rapidocr"] == {"lang_type": expected}
+    assert "languages" not in payload["ocr_reader"]
+    assert serialized["ocr_backend_selection"] == "tesseract"
+    assert serialized["ocr_tesseract_path"] == "C:/legacy/tesseract.exe"
+    assert serialized["ocr_install_manifest_url"] == (
+        "https://legacy.invalid/manifest.json"
+    )
+    assert serialized["ocr_install_target_dir"] == "C:/legacy/tesseract"
+    assert serialized["ocr_languages"] == "chi_sim+jpn+eng"
+
+
+def test_invalid_rapidocr_language_falls_back_with_stable_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(
+        monkeypatch, "_rapidocr_language_settings_invalid"
+    )
+    entries = _load_status_entries(monkeypatch, package_name, models)
+
+    updated = entries._apply_settings_config(
+        models.StudyConfig(rapidocr_lang_type="japan"),
+        {"rapidocr": {"lang_type": "not-a-model"}},
+    )
+
+    assert updated.rapidocr_lang_type == "ch"
+    assert (
+        updated._rapidocr_lang_type_diagnostic
+        == "rapidocr_language_invalid"
+    )
+    assert "_rapidocr_lang_type_diagnostic" not in updated.to_dict()
+    assert entries._settings_config_payload(updated)["rapidocr"] == {
+        "lang_type": "ch"
+    }
+
+
 def test_local_models_setting_ui_is_coming_soon_and_cannot_enable_local_mode() -> None:
     index_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")

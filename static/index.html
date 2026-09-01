@@ -558,9 +558,15 @@
                     <span data-i18n="ui.settings.ocr_enabled.label">Enable OCR</span>
                   </label>
                   <label class="setting-field">
-                    <span data-i18n="ui.settings.ocr_languages.label">OCR languages</span>
-                    <input id="settingsOcrLanguages" type="text" autocomplete="off" />
+                    <span data-i18n="ui.settings.recognition_language.label">Recognition language</span>
+                    <select id="settingsOcrLanguages" aria-describedby="settingsRecognitionLanguageHelp">
+                      <option value="ch" data-i18n="ui.settings.recognition_language.ch">Chinese</option>
+                      <option value="japan" data-i18n="ui.settings.recognition_language.japan">Japanese</option>
+                      <option value="korean" data-i18n="ui.settings.recognition_language.korean">Korean</option>
+                      <option value="en" data-i18n="ui.settings.recognition_language.en">English</option>
+                    </select>
                   </label>
+                  <p id="settingsRecognitionLanguageHelp" class="model-runtime__help" data-i18n="ui.settings.recognition_language.help">Choose the language used to read screenshots and document pages.</p>
                   <label class="setting-field">
                     <span data-i18n="ui.settings.ocr_question_persistence.label">Recognized question storage</span>
                     <select id="settingsOcrQuestionPersistence">
@@ -649,7 +655,7 @@
                 </article>
               <article class="settings-card">
                 <h3 data-i18n="ui.settings.dependencies.title">Dependencies</h3>
-                <p id="settingsDependencySummary" data-i18n="ui.settings.dependencies.summary">Refresh status to inspect OCR backends.</p>
+                <p id="settingsDependencySummary" data-i18n="ui.settings.dependencies.summary">Check whether text recognition and screen capture are ready.</p>
                 <p id="settingsOcrChainStatus" class="dependency-chain-status" aria-live="polite"></p>
                 <div id="settingsDependencyList" class="dependency-list">
                   <div class="dependency-row" data-dependency="rapidocr">
@@ -657,12 +663,6 @@
                     <span class="dependency-row__role"></span>
                     <strong class="dependency-row__status"></strong>
                     <button class="button button-secondary dependency-row__action" type="button" data-dependency-action="rapidocr_models" hidden></button>
-                  </div>
-                  <div class="dependency-row" data-dependency="tesseract">
-                    <span data-i18n="ui.settings.dependencies.name_tesseract">Tesseract</span>
-                    <span class="dependency-row__role"></span>
-                    <strong class="dependency-row__status"></strong>
-                    <button class="button button-secondary dependency-row__action" type="button" data-dependency-action="tesseract" hidden></button>
                   </div>
                   <div class="dependency-row" data-dependency="dxcam">
                     <span data-i18n="ui.settings.dependencies.name_dxcam">Screen capture</span>
@@ -777,12 +777,12 @@
     <script src="./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825"></script>
     <script src="./scanned-pdf-ocr.js?v=study-scanned-pdf-ocr-20260822"></script>
     <script src="./document-controller.js?v=study-scanned-pdf-ocr-20260822"></script>
-    <script src="./dependency-controller.js?v=study-ocr-dependencies-20260812"></script>
+    <script src="./dependency-controller.js?v=study-rapidocr-only-0.2.1"></script>
     <script src="./quick-card-controller.js?v=study-quick-card-types-20260812"></script>
     <script src="./outcome-formatters.js?v=study-hotfix-20260812"></script>
     <script src="./model-runtime.js?v=study-provider-gateway-20260813"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-knowledge-mastery-status-pr1-20260825"></script>
+    <script src="./main.js?v=study-rapidocr-only-0.2.1"></script>
   </body>
 </html>

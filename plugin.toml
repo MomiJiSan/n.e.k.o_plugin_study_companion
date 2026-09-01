@@ -4,7 +4,7 @@ name = "Study Companion"
 description = "An adaptive study companion that can classify the screen, generate questions, evaluate answers, explain concepts, and summarize sessions."
 short_description = "OCR, tutoring, and session summaries for study sessions."
 keywords = ["study", "ocr", "tutor", "concept", "learning"]
-version = "0.2.0"
+version = "0.2.1"
 type = "plugin"
 entry = "plugin.plugins.study_companion:StudyCompanionPlugin"
 
@@ -76,13 +76,8 @@ local_models_directory = ""
 
 [ocr_reader]
 enabled = true
-backend_selection = "rapidocr"
 capture_backend = "auto"
-tesseract_path = ""
-install_manifest_url = ""
-install_target_dir = ""
 install_timeout_seconds = 300
-languages = "chi_sim+jpn+eng"
 left_inset_ratio = 0.03
 right_inset_ratio = 0.03
 top_ratio = 0.0
