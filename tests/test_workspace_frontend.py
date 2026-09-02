@@ -228,9 +228,10 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
         main.index("async function saveSettingsConfig") : main.index("async function createRun")
     ]
     assert "setAdvancedSettingsOpen(false);" in save_settings
-    assert save_settings.index("setAdvancedSettingsOpen(false);") < save_settings.index(
-        "} catch (error) {"
-    )
+    save_call = save_settings.index("await callPlugin('study_update_settings_config'")
+    close_call = save_settings.index("setAdvancedSettingsOpen(false);")
+    catch_call = save_settings.index("} catch (error) {")
+    assert save_call < close_call < catch_call
 
 
 def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
