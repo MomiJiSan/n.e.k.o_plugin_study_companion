@@ -252,28 +252,26 @@ wheels = [
 
 [[package]]
 name = "study-companion"
-version = "0.2.2"
+version = "0.2.3"
 source = { virtual = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "pillow" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "pillow" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "pillow", specifier = ">=11,<12" },
-]
+requires-dist = [{ name = "httpx", specifier = ">=0.28,<1" }]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pillow", specifier = ">=11,<12" },
     { name = "pyright", specifier = ">=1.1.400,<2" },
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "pytest-asyncio", specifier = ">=1.1,<2" },

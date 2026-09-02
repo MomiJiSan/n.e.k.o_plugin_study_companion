@@ -1,14 +1,14 @@
 [project]
 name = "study_companion"
-version = "0.2.2"
+version = "0.2.3"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28,<1",
-    "Pillow>=11,<12",
 ]
 
 [dependency-groups]
 dev = [
+    "Pillow>=11,<12",
     "pytest>=8.4,<9",
     "pytest-asyncio>=1.1,<2",
     "pyright>=1.1.400,<2",

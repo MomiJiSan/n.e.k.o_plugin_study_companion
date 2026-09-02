@@ -167,7 +167,7 @@ def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825" in index
     assert "./local-models-controller.js" not in index
-    assert "./main.js?v=study-rapidocr-only-0.2.1" in index
+    assert "./main.js?v=study-scanned-pdf-hybrid-0.2.3" in index
 
 
 def test_local_model_controller_normalizes_transfer_states_and_uses_canceled() -> None:

@@ -620,7 +620,13 @@
                 meta: {
                   ...importedDocument.meta,
                   pages: Number(ocrDocument.pageCount) || 0,
-                  scannedPdfOcr: true,
+                  scannedPdfOcr: Number(ocrDocument.ocrPageCount) > 0,
+                  pdfHybridOcr: true,
+                  ocrPages: Array.isArray(ocrDocument.ocrPages) ? ocrDocument.ocrPages : [],
+                  inspectedPages: Number(ocrDocument.inspectedPageCount) || 0,
+                  textPageCount: Number(ocrDocument.textPageCount) || 0,
+                  ocrPageCount: Number(ocrDocument.ocrPageCount) || 0,
+                  emptyPageCount: Number(ocrDocument.emptyPageCount) || 0,
                 },
               };
             } else {
@@ -640,6 +646,65 @@
               truncated: payload.truncated === true,
               meta: payload.meta && typeof payload.meta === 'object' ? payload.meta : {},
             };
+            if (sourceType === 'pdf') {
+              if (!scannedPdfOcr?.extract) {
+                importedDocument = {
+                  ...importedDocument,
+                  meta: {
+                    ...importedDocument.meta,
+                    documentPdfPartialOcrSkipped: true,
+                  },
+                };
+                setPasteError(
+                  studyInputPasteError,
+                  t(
+                    'ui.document.partial_ocr_skipped_warning',
+                    'Some scanned PDF pages could not be recognized; imported available text instead.',
+                  ),
+                );
+              } else {
+                try {
+                  const ocrDocument = await scannedPdfOcr.extract(file, {
+                    signal: controller.signal,
+                    onProgress: renderScannedPdfProgress,
+                  });
+                  if (Number(ocrDocument.ocrPageCount) > 0) {
+                    decoded = { text: ocrDocument.text, encoding: ocrDocument.encoding };
+                    importedDocument = {
+                      ...importedDocument,
+                      truncated: ocrDocument.truncated === true,
+                      meta: {
+                        ...importedDocument.meta,
+                        pages: Number(ocrDocument.pageCount) || 0,
+                        scannedPdfOcr: Number(ocrDocument.ocrPageCount) > 0,
+                        pdfHybridOcr: true,
+                        ocrPages: Array.isArray(ocrDocument.ocrPages) ? ocrDocument.ocrPages : [],
+                        inspectedPages: Number(ocrDocument.inspectedPageCount) || 0,
+                        textPageCount: Number(ocrDocument.textPageCount) || 0,
+                        ocrPageCount: Number(ocrDocument.ocrPageCount) || 0,
+                        emptyPageCount: Number(ocrDocument.emptyPageCount) || 0,
+                      },
+                    };
+                  }
+                } catch (error) {
+                  if (controller.signal.aborted || error?.name === 'AbortError') throw error;
+                  importedDocument = {
+                    ...importedDocument,
+                    meta: {
+                      ...importedDocument.meta,
+                      documentPdfPartialOcrSkipped: true,
+                    },
+                  };
+                  setPasteError(
+                    studyInputPasteError,
+                    t(
+                      'ui.document.partial_ocr_skipped_warning',
+                      'Some scanned PDF pages could not be recognized; imported available text instead.',
+                    ),
+                  );
+                }
+              }
+            }
           }
         } else {
           decoded = decodeDocumentBuffer(await file.arrayBuffer());

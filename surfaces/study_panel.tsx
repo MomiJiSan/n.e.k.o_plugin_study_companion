@@ -440,6 +440,7 @@ const ENTRY_TIMEOUT_MS: Record<string, number> = {
   study_status: 15000,
   study_get_settings_config: 15000,
   study_ocr_snapshot: 60000,
+  study_ocr_document_capabilities: 15000,
   study_ocr_document_page: 45000,
   study_set_mode: 15000,
   study_explain_text: 120000,
@@ -1477,11 +1478,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       document_parse_permission_denied: ['ui.error.document_parse_permission_denied', 'This panel is not permitted to parse documents.'],
       document_pdf_ocr_disabled: ['ui.error.document_pdf_ocr_disabled', 'Document OCR is disabled in Study Companion settings.'],
       document_pdf_ocr_unavailable: ['ui.error.document_pdf_ocr_unavailable', 'The configured document OCR backend is unavailable.'],
-      document_pdf_ocr_too_many_pages: ['ui.error.document_pdf_ocr_too_many_pages', 'Scanned PDFs are limited to 20 pages.'],
+      document_pdf_ocr_too_many_pages: ['ui.error.document_pdf_ocr_too_many_pages', 'PDF inspection supports up to 40 pages, with OCR on up to 20 candidate pages.'],
       document_pdf_render_failed: ['ui.error.document_pdf_render_failed', 'The scanned PDF page could not be rendered.'],
       document_pdf_page_too_large: ['ui.error.document_pdf_page_too_large', 'A scanned PDF page exceeds the OCR image limit.'],
       document_pdf_ocr_timeout: ['ui.error.document_pdf_ocr_timeout', 'Scanned PDF OCR timed out.'],
       document_pdf_ocr_failed: ['ui.error.document_pdf_ocr_failed', 'Scanned PDF OCR failed.'],
+      document_pdf_ocr_busy: ['ui.error.document_pdf_ocr_busy', 'Document OCR is busy. Please retry shortly.'],
     };
     const candidate = error as { code?: unknown; message?: unknown } | null;
     const code = error instanceof StudyDocumentError
@@ -1508,15 +1510,30 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       if (isParsedStudyDocumentFile(file)) {
         const definition = assertParsedStudyDocumentFile(file);
         let response: unknown;
+        let hostParseSucceeded = false;
         try {
           response = await props.api.parseDocument(file, {
             timeoutMs: STUDY_DOCUMENT_PARSE_TIMEOUT_MS,
             signal: controller.signal,
           });
+          hostParseSucceeded = true;
         } catch (error) {
           if (!shouldFallbackToScannedPdfOcr(definition.sourceType, error)) throw error;
+        }
+        if (controller.signal.aborted) return;
+        const raw = response && typeof response === 'object' ? response as Record<string, unknown> : {};
+        const hostPayload = raw.document && typeof raw.document === 'object'
+          ? raw.document as Record<string, unknown>
+          : raw;
+        if (definition.sourceType === 'pdf') {
           const scannedPdfOcr = createScannedPdfOcrController({
             assetBaseUrl: scannedPdfAssetBaseUrl(props.plugin?.id),
+            callCapabilities: (signal) => callHostedPlugin(
+              props.api,
+              'study_ocr_document_capabilities',
+              {},
+              { signal, timeoutMs: timeoutForEntry('study_ocr_document_capabilities') },
+            ),
             callPageOcr: (args, signal) => callHostedPlugin(
               props.api,
               'study_ocr_document_page',
@@ -1524,32 +1541,50 @@ export default function StudyPanel(props: PluginSurfaceProps) {
               { signal, timeoutMs: timeoutForEntry('study_ocr_document_page') },
             ),
           });
-          const ocr = await scannedPdfOcr.extract(file, {
-            signal: controller.signal,
-            onProgress: (progress) => {
-              if (mountedRef.current && documentControllerRef.current === controller) {
-                setDocumentOcrProgress(progress);
-              }
-            },
-          });
-          loaded = parsedStudyDocument(file, {
-            name: file.name,
-            sourceType: 'pdf',
-            mime: 'application/pdf',
-            originalSize: file.size,
-            encoding: ocr.encoding,
-            truncated: ocr.truncated,
-            content: ocr.text,
-            meta: { scannedPdfOcr: true, pages: ocr.pageCount },
-          });
-        }
-        if (!loaded) {
-          if (controller.signal.aborted) return;
-          const raw = response && typeof response === 'object' ? response as Record<string, unknown> : {};
-          const payload = raw.document && typeof raw.document === 'object'
-            ? raw.document as Record<string, unknown>
-            : raw;
-          loaded = parsedStudyDocument(file, payload);
+          try {
+            const ocr = await scannedPdfOcr.extract(file, {
+              signal: controller.signal,
+              onProgress: (progress) => {
+                if (mountedRef.current && documentControllerRef.current === controller) {
+                  setDocumentOcrProgress(progress);
+                }
+              },
+            });
+            if (hostParseSucceeded && ocr.ocrPageCount === 0) {
+              loaded = parsedStudyDocument(file, hostPayload);
+            } else {
+              loaded = parsedStudyDocument(file, {
+                name: file.name,
+                sourceType: 'pdf',
+                mime: 'application/pdf',
+                originalSize: file.size,
+                encoding: ocr.encoding,
+                truncated: ocr.truncated,
+                content: ocr.text,
+                meta: {
+                  scannedPdfOcr: ocr.ocrPageCount > 0,
+                  pdfHybridOcr: true,
+                  pages: ocr.pageCount,
+                  inspectedPages: ocr.inspectedPageCount,
+                  textPageCount: ocr.textPageCount,
+                  ocrPageCount: ocr.ocrPageCount,
+                  emptyPageCount: ocr.emptyPageCount,
+                  ocrPages: ocr.ocrPages,
+                },
+              });
+            }
+          } catch (error) {
+            if (controller.signal.aborted || !hostParseSucceeded) throw error;
+            const existingMeta = hostPayload.meta && typeof hostPayload.meta === 'object'
+              ? hostPayload.meta as Record<string, unknown>
+              : {};
+            loaded = parsedStudyDocument(file, {
+              ...hostPayload,
+              meta: { ...existingMeta, documentPdfPartialOcrSkipped: true },
+            });
+          }
+        } else if (hostParseSucceeded) {
+          loaded = parsedStudyDocument(file, hostPayload);
         }
       } else {
         loaded = await readStudyDocument(file, controller.signal);
@@ -2793,6 +2828,14 @@ export default function StudyPanel(props: PluginSurfaceProps) {
                 {studyDocument.meta.scannedPdfOcr === true
                   ? t('ui.document.ocr_truncated_warning', 'OCR text was truncated at 32,000 characters. Only the retained text will be analyzed.')
                   : t('ui.document.truncated_warning', 'The document exceeded the extraction limit. Only the extracted portion will be analyzed.')}
+              </small>
+            ) : null}
+            {studyDocument.meta.documentPdfPartialOcrSkipped === true ? (
+              <small className="study-panel__document-warning">
+                {t(
+                  'ui.document.partial_ocr_skipped_warning',
+                  'Some scanned pages could not be checked with OCR. The available document text was imported instead.',
+                )}
               </small>
             ) : null}
             <small>{studyDocument.modified

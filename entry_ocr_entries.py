@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import threading
 from typing import Any
 
 from .entry_common import (
@@ -24,9 +25,10 @@ from .interactive_screenshot import (
 )
 from .models import OcrSnapshot
 
-_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS = 45.0
+_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS = 35.0
 _DOCUMENT_PAGE_MAX_PIXELS = 8_000_000
 _DOCUMENT_PAGE_MAX_BYTES = 6 * 1024 * 1024
+_DOCUMENT_PAGE_OCR_GATE = threading.BoundedSemaphore(1)
 _DOCUMENT_PAGE_DATA_URL_PREFIXES = (
     "data:image/jpeg;base64,",
     "data:image/png;base64,",
@@ -95,15 +97,54 @@ def _document_page_ocr_payload(snapshot: OcrSnapshot) -> dict[str, str]:
     }
 
 
-def _release_document_page_image(task: Any, image: Any) -> None:
+def _document_page_ocr_status(owner: Any) -> dict[str, Any]:
+    backend_name = "rapidocr"
+    pipeline = getattr(owner, "_ocr_pipeline", None)
+    config = getattr(owner, "_cfg", None)
+    if config is None and pipeline is not None:
+        config = getattr(pipeline, "_config", None)
+    enabled = bool(getattr(config, "ocr_enabled", True))
+    payload: dict[str, Any] = {
+        "protocol": 1,
+        "enabled": enabled,
+        "ready": False,
+        "backend": backend_name,
+        "max_page_pixels": _DOCUMENT_PAGE_MAX_PIXELS,
+        "max_image_bytes": _DOCUMENT_PAGE_MAX_BYTES,
+        "diagnostic": "document_pdf_ocr_unavailable",
+    }
+    if not enabled:
+        payload["diagnostic"] = "document_pdf_ocr_disabled"
+        return payload
+
+    if pipeline is None:
+        return payload
+
     try:
-        task.exception()
-    except BaseException:
-        pass
-    try:
-        image.close()
+        resolve_backend = getattr(pipeline, "_resolve_ocr_backend", None)
+        backend = resolve_backend() if callable(resolve_backend) else None
+        if backend is None:
+            backend = getattr(pipeline, "_ocr_backend", None)
+        is_available = getattr(backend, "is_available", None)
+        if backend is None or (callable(is_available) and not bool(is_available())):
+            return payload
     except Exception:
-        pass
+        return payload
+
+    payload["ready"] = True
+    payload["diagnostic"] = "ready"
+    return payload
+
+
+def _run_document_page_ocr(owner: Any, image: Any) -> OcrSnapshot:
+    try:
+        return owner._ocr_pipeline.recognize_document_page(image)
+    finally:
+        try:
+            image.close()
+        except Exception:
+            pass
+        _DOCUMENT_PAGE_OCR_GATE.release()
 
 
 def _release_decoded_document_page(task: Any) -> None:
@@ -520,6 +561,29 @@ class _OcrEntriesMixin:
         return Ok(payload)
 
     @plugin_entry(
+        id="study_ocr_document_capabilities",
+        name="Study OCR Document Capabilities",
+        description="Inspect document OCR availability and resource limits.",
+        input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+        timeout=10.0,
+        llm_result_fields=[
+            "protocol",
+            "enabled",
+            "ready",
+            "backend",
+            "max_page_pixels",
+            "max_image_bytes",
+            "diagnostic",
+        ],
+    )
+    async def study_ocr_document_capabilities(self, **_):
+        payload = await asyncio.to_thread(
+            _document_page_ocr_status,
+            self,
+        )
+        return Ok(payload)
+
+    @plugin_entry(
         id="study_ocr_document_page",
         name="Study OCR Document Page",
         description="Recognize one validated JPEG/PNG page from an imported document.",
@@ -535,7 +599,7 @@ class _OcrEntriesMixin:
             "required": ["image_data_url"],
             "additionalProperties": False,
         },
-        timeout=50.0,
+        timeout=40.0,
         llm_result_fields=["status", "diagnostic", "backend"],
     )
     async def study_ocr_document_page(self, image_data_url: str, **_):
@@ -564,9 +628,42 @@ class _OcrEntriesMixin:
         except (TypeError, ValueError, OSError) as exc:
             return Err(SdkError(str(exc)))
 
-        ocr_task = asyncio.create_task(
-            asyncio.to_thread(self._ocr_pipeline.recognize_document_page, image)
-        )
+        if not _DOCUMENT_PAGE_OCR_GATE.acquire(blocking=False):
+            try:
+                image.close()
+            except Exception:
+                pass
+            return Ok(
+                {
+                    "text": "",
+                    "status": "busy",
+                    "diagnostic": "document_pdf_ocr_busy",
+                    "backend": backend_name,
+                }
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+            ocr_task = loop.run_in_executor(
+                None,
+                _run_document_page_ocr,
+                self,
+                image,
+            )
+        except Exception:
+            try:
+                image.close()
+            except Exception:
+                pass
+            _DOCUMENT_PAGE_OCR_GATE.release()
+            return Ok(
+                {
+                    "text": "",
+                    "status": "ocr_failed",
+                    "diagnostic": "document_pdf_ocr_failed",
+                    "backend": backend_name,
+                }
+            )
         try:
             snapshot = await asyncio.wait_for(
                 asyncio.shield(ocr_task),
@@ -590,16 +687,6 @@ class _OcrEntriesMixin:
                     "backend": backend_name,
                 }
             )
-        finally:
-            if ocr_task.done():
-                try:
-                    image.close()
-                except Exception:
-                    pass
-            else:
-                ocr_task.add_done_callback(
-                    lambda task: _release_document_page_image(task, image)
-                )
         return Ok(_document_page_ocr_payload(snapshot))
 
     @plugin_entry(

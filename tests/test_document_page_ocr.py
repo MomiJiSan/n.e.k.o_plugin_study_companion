@@ -258,6 +258,59 @@ def _make_pipeline(modules: Any, backend: _Backend, *, enabled: bool = True):
     )
 
 
+@pytest.mark.parametrize(
+    ("enabled", "pipeline_factory", "ready", "diagnostic"),
+    [
+        (
+            False,
+            lambda modules: _make_pipeline(modules, _Backend()),
+            False,
+            "document_pdf_ocr_disabled",
+        ),
+        (True, lambda _modules: None, False, "document_pdf_ocr_unavailable"),
+        (
+            True,
+            lambda modules: _make_pipeline(modules, _Backend(available=False)),
+            False,
+            "document_pdf_ocr_unavailable",
+        ),
+        (True, lambda modules: _make_pipeline(modules, _Backend()), True, "ready"),
+    ],
+)
+def test_document_ocr_capabilities_report_stable_readiness(
+    document_ocr_modules: Any,
+    enabled: bool,
+    pipeline_factory: Any,
+    ready: bool,
+    diagnostic: str,
+) -> None:
+    pipeline = pipeline_factory(document_ocr_modules)
+    owner = SimpleNamespace(
+        _ocr_pipeline=pipeline,
+        _cfg=SimpleNamespace(ocr_enabled=enabled),
+    )
+    try:
+        result = asyncio.run(
+            document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_capabilities(
+                owner
+            )
+        )
+    finally:
+        if pipeline is not None:
+            pipeline.close()
+
+    assert isinstance(result, _Ok)
+    assert result.value == {
+        "protocol": 1,
+        "enabled": enabled,
+        "ready": ready,
+        "backend": "rapidocr",
+        "max_page_pixels": 8_000_000,
+        "max_image_bytes": 6 * 1024 * 1024,
+        "diagnostic": diagnostic,
+    }
+
+
 def test_pipeline_document_page_isolated_from_live_vision_state(
     document_ocr_modules: Any,
 ) -> None:
@@ -388,6 +441,20 @@ def test_document_page_decoder_enforces_six_mib_limit(
         )
 
 
+def test_document_page_decoder_accepts_exact_six_mib_boundary(
+    document_ocr_modules: Any,
+) -> None:
+    raw = b"\xff\xd8\xff" + b"x" * (6 * 1024 * 1024 - 3)
+    encoded = base64.b64encode(raw).decode("ascii")
+
+    image = document_ocr_modules.entry._decode_document_page_data_url(
+        f"data:image/jpeg;base64,{encoded}"
+    )
+
+    assert image.mode == "RGB"
+    image.close()
+
+
 def test_document_page_entry_runs_ocr_in_thread_without_touching_owner_state(
     document_ocr_modules: Any,
 ) -> None:
@@ -436,6 +503,57 @@ def test_document_page_entry_runs_ocr_in_thread_without_touching_owner_state(
     assert document_ocr_modules.image_api.last_image.closed is True
 
 
+def test_document_page_entry_rejects_concurrent_worker_as_busy(
+    document_ocr_modules: Any,
+) -> None:
+    worker_started = threading.Event()
+    finish_worker = threading.Event()
+
+    class BlockingPipeline:
+        calls = 0
+
+        def recognize_document_page(self, _image: Any) -> _OcrSnapshot:
+            self.calls += 1
+            worker_started.set()
+            assert finish_worker.wait(timeout=1.0)
+            return _OcrSnapshot(text="first", status="ok", backend="rapidocr")
+
+    pipeline = BlockingPipeline()
+    owner = SimpleNamespace(
+        _ocr_pipeline=pipeline,
+        _cfg=SimpleNamespace(ocr_backend_selection="rapidocr"),
+    )
+    encoded = base64.b64encode(b"\xff\xd8\xffpage").decode("ascii")
+    payload = f"data:image/jpeg;base64,{encoded}"
+
+    async def scenario() -> tuple[Any, Any]:
+        first_task = asyncio.create_task(
+            document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page(
+                owner, payload
+            )
+        )
+        assert await asyncio.to_thread(worker_started.wait, 1.0)
+        second = await document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page(
+            owner, payload
+        )
+        finish_worker.set()
+        first = await first_task
+        return first, second
+
+    first, second = asyncio.run(scenario())
+
+    assert isinstance(first, _Ok)
+    assert first.value["text"] == "first"
+    assert isinstance(second, _Ok)
+    assert second.value == {
+        "text": "",
+        "status": "busy",
+        "diagnostic": "document_pdf_ocr_busy",
+        "backend": "rapidocr",
+    }
+    assert pipeline.calls == 1
+
+
 def test_document_page_entry_releases_decode_result_after_cancellation(
     document_ocr_modules: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -480,36 +598,112 @@ def test_document_page_entry_releases_decode_result_after_cancellation(
     asyncio.run(scenario())
 
 
+def test_document_page_entry_cancellation_keeps_gate_until_worker_cleanup(
+    document_ocr_modules: Any,
+) -> None:
+    worker_started = threading.Event()
+    finish_worker = threading.Event()
+    worker_finished = threading.Event()
+    worker_image: list[Any] = []
+
+    class BlockingPipeline:
+        def recognize_document_page(self, image: Any) -> _OcrSnapshot:
+            worker_image.append(image)
+            worker_started.set()
+            assert finish_worker.wait(timeout=1.0)
+            worker_finished.set()
+            return _OcrSnapshot(text="late", status="ok", backend="rapidocr")
+
+    owner = SimpleNamespace(
+        _ocr_pipeline=BlockingPipeline(),
+        _cfg=SimpleNamespace(ocr_backend_selection="rapidocr"),
+    )
+    encoded = base64.b64encode(b"\xff\xd8\xffpage").decode("ascii")
+    payload = f"data:image/jpeg;base64,{encoded}"
+
+    async def scenario() -> Any:
+        task = asyncio.create_task(
+            document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page(
+                owner, payload
+            )
+        )
+        assert await asyncio.to_thread(worker_started.wait, 1.0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert worker_image[0].closed is False
+
+        busy = await document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page(
+            owner, payload
+        )
+        finish_worker.set()
+        assert await asyncio.to_thread(worker_finished.wait, 1.0)
+        for _ in range(100):
+            if worker_image[0].closed:
+                return busy
+            await asyncio.sleep(0.001)
+        pytest.fail("worker image was not released")
+
+    busy = asyncio.run(scenario())
+
+    assert isinstance(busy, _Ok)
+    assert busy.value["diagnostic"] == "document_pdf_ocr_busy"
+    assert worker_image[0].closed is True
+
+
 def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
     document_ocr_modules: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     entry = document_ocr_modules.entry
     monkeypatch.setattr(entry, "_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS", 0.005)
+    worker_started = threading.Event()
+    finish_worker = threading.Event()
     worker_finished = threading.Event()
 
     class SlowPipeline:
-        def recognize_document_page(self, _image: Any) -> _OcrSnapshot:
-            time.sleep(0.02)
-            worker_finished.set()
-            return _OcrSnapshot(text="late text", status="ok", backend="rapidocr")
+        calls = 0
 
+        def recognize_document_page(self, _image: Any) -> _OcrSnapshot:
+            self.calls += 1
+            if self.calls == 1:
+                worker_started.set()
+                assert finish_worker.wait(timeout=1.0)
+            worker_finished.set()
+            return _OcrSnapshot(
+                text=f"worker text {self.calls}",
+                status="ok",
+                backend="rapidocr",
+            )
+
+    pipeline = SlowPipeline()
     owner = SimpleNamespace(
-        _ocr_pipeline=SlowPipeline(),
+        _ocr_pipeline=pipeline,
         _cfg=SimpleNamespace(ocr_backend_selection="rapidocr"),
     )
     encoded = base64.b64encode(b"\xff\xd8\xffpage").decode("ascii")
+    payload = f"data:image/jpeg;base64,{encoded}"
 
-    async def scenario() -> Any:
-        result = await entry._OcrEntriesMixin.study_ocr_document_page(
-            owner,
-            f"data:image/jpeg;base64,{encoded}",
+    async def scenario() -> tuple[Any, Any, Any]:
+        timed_out = await entry._OcrEntriesMixin.study_ocr_document_page(
+            owner, payload
         )
+        assert worker_started.is_set()
+        busy = await entry._OcrEntriesMixin.study_ocr_document_page(owner, payload)
+        assert worker_finished.is_set() is False
+        finish_worker.set()
         assert await asyncio.to_thread(worker_finished.wait, 1.0)
-        await asyncio.sleep(0)
-        return result
+        recovered = None
+        for _ in range(100):
+            recovered = await entry._OcrEntriesMixin.study_ocr_document_page(
+                owner, payload
+            )
+            if recovered.value.get("status") != "busy":
+                return timed_out, busy, recovered
+            await asyncio.sleep(0.001)
+        pytest.fail("document OCR gate did not recover after worker completion")
 
-    result = asyncio.run(scenario())
+    result, busy, recovered = asyncio.run(scenario())
 
     assert isinstance(result, _Ok)
     assert result.value == {
@@ -518,6 +712,11 @@ def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
         "diagnostic": "document_pdf_ocr_timeout",
         "backend": "rapidocr",
     }
+    assert isinstance(busy, _Ok)
+    assert busy.value["diagnostic"] == "document_pdf_ocr_busy"
+    assert isinstance(recovered, _Ok)
+    assert recovered.value["text"] == "worker text 2"
+    assert pipeline.calls == 2
     assert document_ocr_modules.image_api.last_image.closed is True
 
 
@@ -577,11 +776,31 @@ def test_document_page_entry_reports_uninitialized_pipeline(
 def test_document_page_entry_metadata_keeps_ocr_text_out_of_llm_results(
     document_ocr_modules: Any,
 ) -> None:
-    metadata = document_ocr_modules.entry._OcrEntriesMixin.study_ocr_document_page.meta
+    entry = document_ocr_modules.entry._OcrEntriesMixin
+    metadata = entry.study_ocr_document_page.meta
     schema = metadata["input_schema"]
 
+    assert document_ocr_modules.entry._DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS == 35.0
     assert metadata["llm_result_fields"] == ["status", "diagnostic", "backend"]
+    assert metadata["timeout"] == 40.0
     assert "text" not in metadata["llm_result_fields"]
     assert schema["required"] == ["image_data_url"]
     assert schema["additionalProperties"] is False
     assert schema["properties"]["image_data_url"]["maxLength"] == 8_388_640
+
+    capability_metadata = entry.study_ocr_document_capabilities.meta
+    assert capability_metadata["timeout"] == 10.0
+    assert capability_metadata["input_schema"] == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+    assert capability_metadata["llm_result_fields"] == [
+        "protocol",
+        "enabled",
+        "ready",
+        "backend",
+        "max_page_pixels",
+        "max_image_bytes",
+        "diagnostic",
+    ]

@@ -14,11 +14,13 @@ ERROR_KEYS = {
     "ui.error.document_pdf_page_too_large",
     "ui.error.document_pdf_ocr_timeout",
     "ui.error.document_pdf_ocr_failed",
+    "ui.error.document_pdf_ocr_busy",
 }
 DOCUMENT_KEYS = {
     "ui.document.scanned_pdf_ocr",
     "ui.document.progress_ocr_pages",
     "ui.document.ocr_truncated_warning",
+    "ui.document.partial_ocr_skipped_warning",
 }
 NO_READABLE_TEXT = {
     "en": "No readable text was found.",

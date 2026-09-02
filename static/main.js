@@ -14,6 +14,7 @@ const KNOWLEDGE_SUBJECT_OPTIONS = ['math', 'english', 'chinese', 'physics', 'che
 const ENTRY_TIMEOUT_MS = {
   study_status: 15000,
   study_ocr_snapshot: 100000,
+  study_ocr_document_capabilities: 15000,
   study_ocr_document_page: 45000,
   study_set_mode: 15000,
   study_explain_text: 120000,
