@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import pytest
-from targeted_question_contract import (
-    canonicalize_targeted_question,
-    validate_targeted_question,
-)
+
+_contract = importlib.import_module("targeted_question_contract")
+canonicalize_targeted_question = _contract.canonicalize_targeted_question
+validate_targeted_question = _contract.validate_targeted_question
 
 
 def _valid_payload(**overrides: Any) -> dict[str, Any]:
