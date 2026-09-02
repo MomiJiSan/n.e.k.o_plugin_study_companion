@@ -169,17 +169,27 @@ class CognitiveExtractor:
                 ),
                 "allowed_hypotheses": hypotheses,
                 "extraction_rules": [
-                    "Use only evidence grounded in the learner answer and evaluation.",
-                    "Do not infer intelligence, personality, learning style, or a permanent trait.",
-                    "Use only an allowed hypothesis code.",
-                    "Return an empty evidence list when the available facts are insufficient.",
-                    "Identify the relevant answer location in every evidence_span.",
+                    "Ground every item in the learner answer/evaluation and use only allowed codes.",
+                    "Return support for an exhibited mechanism and counter when a correct answer directly disproves it.",
+                    "No inner factor means omission; an attempted wrong factor is not omission.",
+                    "Return [] when evidence is insufficient; never infer traits or learning style.",
+                    "Every evidence_span must identify the relevant answer location.",
                 ],
                 "output_contract": {
+                    "top_level": "object with only an evidence array",
                     "max_evidence": 3,
                     "directions": ["support", "counter"],
-                    "evidence_span_required": True,
                     "empty_evidence_allowed": True,
+                    "required_item_fields": [
+                        "hypothesis_code",
+                        "direction",
+                        "strength",
+                        "extractor_confidence",
+                        "evidence_span",
+                    ],
+                    "no_other_fields": True,
+                    "strength_and_confidence": "JSON numbers in [0,1]",
+                    "evidence_span": "non-empty answer location/excerpt",
                 },
             }
 

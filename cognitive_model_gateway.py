@@ -25,7 +25,10 @@ from .study_model_gateway import StudyModelGateway
 _SYSTEM_INSTRUCTION = (
     "Extract only falsifiable misconception evidence grounded in the supplied "
     "structured attempt. Use only allowed hypothesis codes. Return one JSON "
-    "object matching the supplied output contract, with no prose or code fence."
+    "object matching every required field in the supplied output contract, "
+    "with no additional fields, prose, or code fence. Strength and "
+    "extractor_confidence must each be JSON numbers from 0 through 1. The "
+    "top level must be {\"evidence\": [...]}, never a bare array."
 )
 
 

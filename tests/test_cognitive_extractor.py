@@ -124,6 +124,20 @@ async def test_extracts_valid_evidence_through_bounded_neutral_request() -> None
     assert request.max_output_tokens == 321
     assert request.timeout_seconds == 2.5
     assert request.payload["evaluation"]["verdict"] == "wrong"  # type: ignore[index]
+    output_contract = request.payload["output_contract"]  # type: ignore[assignment]
+    assert output_contract["top_level"] == "object with only an evidence array"  # type: ignore[index]
+    assert output_contract["required_item_fields"] == [  # type: ignore[index]
+        "hypothesis_code",
+        "direction",
+        "strength",
+        "extractor_confidence",
+        "evidence_span",
+    ]
+    assert output_contract["no_other_fields"] is True  # type: ignore[index]
+    assert any(
+        "counter" in rule
+        for rule in request.payload["extraction_rules"]  # type: ignore[union-attr]
+    )
     assert _count_tokens(__import__("json").dumps(
         request.payload,
         ensure_ascii=False,
