@@ -237,6 +237,7 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
 
     mixins = {
         "entry_checkin_entries": "_CheckinEntriesMixin",
+        "entry_cognitive_entries": "_CognitiveEntriesMixin",
         "entry_communication_pomodoro_events": "_CommunicationPomodoroEventsMixin",
         "entry_communication_tutor_events": "_CommunicationTutorEventsMixin",
         "entry_document_analysis_jobs": "_DocumentAnalysisJobsEntriesMixin",

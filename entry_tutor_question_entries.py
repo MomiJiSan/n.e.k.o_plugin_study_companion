@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from functools import wraps
 from types import SimpleNamespace
 
@@ -12,6 +14,18 @@ from .adaptive_learning import (
     QuestionInstance,
     QuestionPlan,
     TopicRef,
+)
+from .adaptive_learning.cognitive_delivery import (
+    PreparedCognitiveIntervention,
+    abandoned_intervention_event,
+    committed_question_event,
+    prepare_cognitive_intervention,
+    reviewed_question_payload,
+    validate_reviewed_question,
+)
+from .adaptive_learning.cognitive_intervention import (
+    hypothesis_ref_from_payload,
+    hypothesis_ref_payload,
 )
 from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import build_question_plan
@@ -94,6 +108,132 @@ def _with_question_generation_reservation(function):
 TARGETED_SELECTION_TTL_SECONDS = 10 * 60
 TARGETED_HINT_MAX_CHARS = 240
 TARGETED_GENERATION_TIMEOUT_SECONDS = 125.0
+_COGNITIVE_QUESTION_INTENTS = frozenset({"misconception_probe", "misconception_repair", "transfer_check"})
+_COGNITIVE_ABANDON_TIMEOUT_SECONDS = 2.0
+
+
+def _cognitive_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _consume_cognitive_abandonment_task(task: asyncio.Task[Any]) -> None:
+    try:
+        task.result()
+    except BaseException:
+        pass
+
+
+def _warn_cognitive_abandonment(owner: Any, message: str, *args: Any) -> None:
+    logger = getattr(owner, "logger", None) or getattr(owner, "_logger", None)
+    warning = getattr(logger, "warning", None)
+    if callable(warning):
+        try:
+            warning(message, *args)
+        except Exception:
+            pass
+
+
+async def _record_cognitive_abandonment_best_effort(
+    owner: Any,
+    committed_event: Any,
+    *,
+    reason: str,
+) -> bool:
+    """Bound cancellation cleanup without hiding the publishing failure."""
+
+    record_event = getattr(
+        getattr(owner, "_store", None),
+        "record_cognitive_intervention_event",
+        None,
+    )
+    if not callable(record_event):
+        _warn_cognitive_abandonment(
+            owner,
+            "cognitive abandonment ledger is unavailable",
+        )
+        return False
+    try:
+        abandoned = abandoned_intervention_event(
+            committed_event,
+            reason=reason,
+        )
+    except Exception as exc:
+        _warn_cognitive_abandonment(
+            owner,
+            "cognitive abandonment event creation failed: {}",
+            exc,
+        )
+        return False
+
+    task = asyncio.create_task(asyncio.to_thread(record_event, asdict(abandoned)))
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(task),
+            timeout=_COGNITIVE_ABANDON_TIMEOUT_SECONDS,
+        )
+    except asyncio.CancelledError:
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(task),
+                timeout=_COGNITIVE_ABANDON_TIMEOUT_SECONDS,
+            )
+        except BaseException as exc:
+            _warn_cognitive_abandonment(
+                owner,
+                "cognitive abandonment cancellation drain failed: {}",
+                exc,
+            )
+        if not task.done():
+            task.add_done_callback(_consume_cognitive_abandonment_task)
+        succeeded = task.done() and not task.cancelled() and task.exception() is None
+    except (asyncio.TimeoutError, Exception) as exc:
+        _warn_cognitive_abandonment(
+            owner,
+            "cognitive abandonment persistence failed: {}",
+            exc,
+        )
+        if not task.done():
+            task.add_done_callback(_consume_cognitive_abandonment_task)
+        return False
+    else:
+        succeeded = True
+
+    wake_projection = getattr(owner, "_request_cognitive_projection", None) if succeeded else None
+    if callable(wake_projection):
+        try:
+            wake_projection()
+        except Exception:
+            pass
+    return succeeded
+
+
+def _cognitive_question_fields(targeted_context: dict[str, Any] | None, *, topic_id: str) -> dict[str, Any]:
+    context = dict(targeted_context or {})
+    intent = str(context.get("learning_intent") or "practice").strip()
+    hypothesis = hypothesis_ref_from_payload(context.get("hypothesis_target"), topic_id=topic_id)
+    strategy = str(context.get("repair_strategy") or "").strip()
+    decision_id = str(context.get("cognitive_decision_id") or "").strip()
+    if intent not in _COGNITIVE_QUESTION_INTENTS or hypothesis is None or not strategy or not decision_id:
+        return {
+            "learning_intent": "practice",
+            "hypothesis_target": None,
+            "repair_strategy": "",
+            "cognitive_decision_id": "",
+            "cognitive_validator_version": "",
+            "diagnostic_validation_id": "",
+            "cognitive_blueprint_id": "",
+            "cognitive_question_family_id": "",
+        }
+    return {
+        "learning_intent": intent,
+        "hypothesis_target": hypothesis,
+        "repair_strategy": strategy,
+        "cognitive_decision_id": decision_id,
+        "cognitive_validator_version": str(context.get("cognitive_validator_version") or "").strip(),
+        "diagnostic_validation_id": str(context.get("diagnostic_validation_id") or "").strip(),
+        "cognitive_blueprint_id": str(context.get("cognitive_blueprint_id") or "").strip(),
+        "cognitive_question_family_id": str(context.get("cognitive_question_family_id") or "").strip(),
+    }
 
 
 def _image_only_question_prompt(language: str) -> str:
@@ -313,6 +453,121 @@ async def _canonical_validation_relations_for_target(owner: Any, *, selected_top
 
 
 class _TutorQuestionEntriesMixin:
+    async def _abandon_current_cognitive_intervention(
+        self,
+        *,
+        topic_id: str,
+        hypothesis_code: str,
+        action: str,
+    ) -> bool:
+        """Abandon one still-current cognitive question before user override."""
+
+        if str(action or "").strip() not in {
+            "dismiss",
+            "suppress",
+            "delete",
+            "replace",
+        }:
+            return False
+        async with self._lock:
+            current = dict(getattr(self._state, "current_question", {}) or {})
+        if current.get("attempt_evaluated"):
+            return False
+        binding = current.get("target_binding")
+        private_binding = binding if isinstance(binding, dict) else {}
+        hypothesis = hypothesis_ref_from_payload(
+            private_binding.get("cognitive_hypothesis_target"),
+            topic_id=str(topic_id or "").strip(),
+        )
+        decision_id = str(private_binding.get("cognitive_decision_id") or "").strip()
+        question_id = str(current.get("question_id") or "").strip()
+        attempt_id = str(current.get("attempt_id") or "").strip()
+        if (
+            hypothesis is None
+            or hypothesis.code != str(hypothesis_code or "").strip()
+            or not decision_id
+            or not question_id
+        ):
+            return False
+        list_events = getattr(
+            getattr(self, "_store", None),
+            "list_cognitive_intervention_events",
+            None,
+        )
+        record_event = getattr(
+            getattr(self, "_store", None),
+            "record_cognitive_intervention_event",
+            None,
+        )
+        if not callable(list_events) or not callable(record_event):
+            raise RuntimeError("cognitive intervention ledger is unavailable")
+        rows = await asyncio.to_thread(
+            list_events,
+            decision_id=decision_id,
+            event_types=("question_committed",),
+            limit=10,
+        )
+        committed = next(
+            (
+                row
+                for row in rows
+                if str(row.get("question_id") or "").strip() == question_id
+                and str((row.get("hypothesis_target") or {}).get("code") or "").strip() == hypothesis.code
+            ),
+            None,
+        )
+        if not isinstance(committed, dict):
+            return False
+        abandoned = dict(committed)
+        abandoned.update(
+            {
+                "event_id": f"cognitive-event:{uuid.uuid4().hex}",
+                "event_type": "intervention_abandoned",
+                "attempt_id": "",
+                "evaluation_verdict": "",
+                "abandonment_reason": f"user_{str(action or '').strip()}",
+                "created_at": _cognitive_now_iso(),
+            }
+        )
+        abandoned.pop("event_seq", None)
+        await asyncio.to_thread(record_event, abandoned)
+        wake_projection = getattr(self, "_request_cognitive_projection", None)
+        if callable(wake_projection):
+            try:
+                wake_projection()
+            except Exception:
+                # The committed ledger fact leaves the topic stale, so a
+                # later answer/startup wake can safely retry projection.
+                pass
+
+        async with self._lock:
+            live = getattr(self._state, "current_question", {})
+            if (
+                str(live.get("question_id") or "").strip() != question_id
+                or str(live.get("attempt_id") or "").strip() != attempt_id
+            ):
+                return False
+            live_binding = live.get("target_binding")
+            if isinstance(live_binding, dict):
+                for key in tuple(live_binding):
+                    if key.startswith("cognitive_") or key == "diagnostic_validation_id":
+                        live_binding.pop(key, None)
+            for key in (
+                "learning_intent",
+                "hypothesis_target",
+                "repair_strategy",
+                "cognitive_decision_id",
+                "cognitive_validator_version",
+                "diagnostic_validation_id",
+                "cognitive_blueprint_id",
+                "cognitive_question_family_id",
+            ):
+                live.pop(key, None)
+        persist = getattr(self, "_persist_state", None)
+        if callable(persist):
+            await persist()
+        return True
+
     def _resolved_learning_plan_service(self):
         """Return the optional plan service without requiring constructor changes."""
 
@@ -336,9 +591,7 @@ class _TutorQuestionEntriesMixin:
             ) from exc
         return dict(payload) if isinstance(payload, dict) else None
 
-    def _validate_learning_plan_selection_context(
-        self, context: dict[str, Any]
-    ) -> None:
+    def _validate_learning_plan_selection_context(self, context: dict[str, Any]) -> None:
         if str(context.get("selection_domain") or "") != "learning_plan":
             return
         plan_id = str(context.get("learning_plan_id") or "").strip()
@@ -377,9 +630,7 @@ class _TutorQuestionEntriesMixin:
                 code="LEARNING_PLAN_CHANGED",
             )
         eligible = {
-            str(value or "").strip()
-            for value in (active.get("eligible_topic_ids") or [])
-            if str(value or "").strip()
+            str(value or "").strip() for value in (active.get("eligible_topic_ids") or []) if str(value or "").strip()
         }
         if not topic_id or topic_id not in eligible:
             raise SdkError(
@@ -838,6 +1089,7 @@ class _TutorQuestionEntriesMixin:
                     "practice_scope": scope.to_public_dict(),
                     "scope_topic_count": len(scope.eligible_topic_ids),
                     "mastery_overview": params.get("mastery_overview") or [],
+                    "eligible_topic_ids": list(scope.eligible_topic_ids),
                 }
             )
         else:
@@ -848,6 +1100,7 @@ class _TutorQuestionEntriesMixin:
                     "scope_revision": int(getattr(self._state, "practice_scope_revision", 0) or 0),
                     "practice_scope": {},
                     "scope_topic_count": 0,
+                    "eligible_topic_ids": (list(plan_scope.eligible_topic_ids) if plan_scope else []),
                 }
             )
             if plan_scope is not None and active_plan is not None:
@@ -878,7 +1131,37 @@ class _TutorQuestionEntriesMixin:
         targeted_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         async with self._lock:
+            previous_question = dict(getattr(self._state, "current_question", {}) or {})
             active_mode = self._state.active_mode
+        previous_binding = previous_question.get("target_binding")
+        previous_binding = previous_binding if isinstance(previous_binding, dict) else {}
+        previous_topic = str(
+            previous_binding.get("target_topic_id")
+            or previous_question.get("selected_topic_id")
+            or previous_question.get("topic")
+            or ""
+        ).strip()
+        previous_hypothesis = hypothesis_ref_from_payload(
+            previous_binding.get("cognitive_hypothesis_target"),
+            topic_id=previous_topic,
+        )
+        if previous_hypothesis is not None and not previous_question.get("attempt_evaluated"):
+            try:
+                abandoned = await self._abandon_current_cognitive_intervention(
+                    topic_id=previous_topic,
+                    hypothesis_code=previous_hypothesis.code,
+                    action="replace",
+                )
+            except Exception as exc:
+                raise SdkError(
+                    "the previous cognitive intervention could not be safely abandoned",
+                    code="COGNITIVE_INTERVENTION_ABANDON_FAILED",
+                ) from exc
+            if not abandoned:
+                raise SdkError(
+                    "the previous cognitive intervention could not be safely abandoned",
+                    code="COGNITIVE_INTERVENTION_ABANDON_FAILED",
+                )
         question_type_mapping = None
         extra_context = {
             "source": source,
@@ -949,23 +1232,15 @@ class _TutorQuestionEntriesMixin:
             if targeted_context
             else {}
         )
-        selected_topic_id = str(
-            (targeted_context or {}).get("selected_topic_id") or topic or ""
-        ).strip()
-        selected_topic_name = str(
-            (targeted_context or {}).get("selected_topic_name") or selected_topic_id
-        ).strip()
-        selection_reason = str(
-            (targeted_context or {}).get("selection_reason") or "recommended"
-        )
-        if selection_reason not in {
-            "wrong_retry", "due_review", "weak_topic", "recommended", "default"
-        }:
+        selected_topic_id = str((targeted_context or {}).get("selected_topic_id") or topic or "").strip()
+        selected_topic_name = str((targeted_context or {}).get("selected_topic_name") or selected_topic_id).strip()
+        selection_reason = str((targeted_context or {}).get("selection_reason") or "recommended")
+        if selection_reason == "retry":
+            selection_reason = "wrong_retry"
+        if selection_reason not in {"wrong_retry", "due_review", "weak_topic", "recommended", "default"}:
             selection_reason = "recommended"
         planned_difficulty = (
-            dict((targeted_context or {}).get("question_params") or {}).get(
-                "planned_difficulty"
-            )
+            dict((targeted_context or {}).get("question_params") or {}).get("planned_difficulty")
             if targeted_context
             else 0
         )
@@ -980,29 +1255,137 @@ class _TutorQuestionEntriesMixin:
             )
         if not targeted_context:
             planned_difficulty = 0
-        plan = QuestionPlan(
+        cognitive_fields = _cognitive_question_fields(
+            None,
+            topic_id=selected_topic_id,
+        )
+        retry_binding = dict(
+            dict((targeted_context or {}).get("question_params") or {}).get("retry_wrong_question") or {}
+        )
+        origin_wrong_question_id = (
+            str(retry_binding.get("id") or "").strip()
+            if selection_reason == "wrong_retry"
+            and str(retry_binding.get("topic_id") or "").strip() == selected_topic_id
+            else ""
+        )
+        eligible_topic_ids = tuple(
+            dict.fromkeys(
+                str(topic_id or "").strip()
+                for topic_id in ((targeted_context or {}).get("eligible_topic_ids") or ())
+                if str(topic_id or "").strip()
+            )
+        )
+        plan_target_binding = (
+            {
+                "plan_id": str(targeted_context.get("selection_context_id") or "").strip(),
+                "target_topic_id": selected_topic_id,
+                "selection_reason": selection_reason,
+                "eligible_topic_ids": eligible_topic_ids,
+                "learning_plan_id": str(targeted_context.get("learning_plan_id") or "").strip(),
+                "learning_plan_revision": int(targeted_context.get("learning_plan_revision") or 0),
+                "scope_key": str(targeted_context.get("scope_key") or "").strip(),
+                "scope_revision": int(targeted_context.get("scope_revision") or 0),
+                "origin_wrong_question_id": origin_wrong_question_id,
+                "source_question_id": source_question_id,
+            }
+            if targeted_context
+            else {}
+        )
+        original_plan = QuestionPlan(
             plan_id=str((targeted_context or {}).get("selection_context_id") or ""),
             selection=PracticeSelection(
                 reason=selection_reason,
                 target_topic=TopicRef(id=selected_topic_id, name=selected_topic_name),
-                origin_wrong_question_id=str(
-                    dict((targeted_context or {}).get("question_params") or {})
-                    .get("retry_wrong_question", {})
-                    .get("id")
-                    or ""
-                ),
+                eligible_topic_ids=eligible_topic_ids,
+                origin_wrong_question_id=origin_wrong_question_id or None,
             ),
             difficulty=planned_difficulty,
-            question_type=(
-                question_type_mapping.machine_question_type
-                if question_type_mapping is not None
-                else ""
-            ),
+            question_type=(question_type_mapping.machine_question_type if question_type_mapping is not None else ""),
             mode=active_mode,
             source_question_id=source_question_id,
+            target_binding=plan_target_binding,
             scope_key=str((targeted_context or {}).get("scope_key") or ""),
             scope_revision=int((targeted_context or {}).get("scope_revision") or 0),
         )
+        plan = original_plan
+        prepared_cognitive: PreparedCognitiveIntervention | None = None
+        cognitive_validation = None
+        repair_question_family_id = ""
+        cognitive_fallback = bool((targeted_context or {}).get("_cognitive_fallback"))
+        if targeted_context and not cognitive_fallback:
+            propose = getattr(
+                getattr(self, "_knowledge_tracker", None),
+                "propose_cognitive_intent",
+                None,
+            )
+            if callable(propose):
+                try:
+                    decision = await asyncio.to_thread(propose, original_plan)
+                    candidate = prepare_cognitive_intervention(decision)
+                    if candidate is not None:
+                        record_event = getattr(
+                            getattr(self, "_store", None),
+                            "record_cognitive_intervention_event",
+                            None,
+                        )
+                        if not callable(record_event):
+                            candidate = None
+                        else:
+                            await asyncio.to_thread(
+                                record_event,
+                                asdict(candidate.proposal_event),
+                            )
+                    if candidate is not None and candidate.active:
+                        blueprint = candidate.blueprint
+                        if blueprint is None:
+                            raise RuntimeError("active cognitive decision has no blueprint")
+                        prepared_cognitive = candidate
+                        plan = candidate.proposed_plan
+                        hypothesis = plan.hypothesis_target
+                        cognitive_fields = {
+                            "learning_intent": plan.learning_intent,
+                            "hypothesis_target": hypothesis,
+                            "repair_strategy": plan.repair_strategy,
+                            "cognitive_decision_id": candidate.decision_id,
+                            "cognitive_validator_version": "",
+                            "diagnostic_validation_id": "",
+                            "cognitive_blueprint_id": blueprint.blueprint_id,
+                            "cognitive_question_family_id": (blueprint.question_family_id),
+                        }
+                        if plan.learning_intent == "transfer_check" and hypothesis:
+                            list_events = getattr(
+                                getattr(self, "_store", None),
+                                "list_cognitive_intervention_events",
+                                None,
+                            )
+                            if callable(list_events):
+                                raw_prior_events = await asyncio.to_thread(
+                                    list_events,
+                                    topic_id=plan.target_topic.id,
+                                    hypothesis_code=hypothesis.code,
+                                    event_types=("attempt_committed",),
+                                    limit=200,
+                                )
+                                prior_events = raw_prior_events if isinstance(raw_prior_events, list) else []
+                                repair_question_family_id = next(
+                                    (
+                                        str(item.get("question_family_id") or "").strip()
+                                        for item in reversed(prior_events)
+                                        if str(item.get("learning_intent") or "").strip() == "misconception_repair"
+                                        and str(item.get("evaluation_verdict") or "").strip() == "correct"
+                                        and str(item.get("question_family_id") or "").strip()
+                                    ),
+                                    "",
+                                )
+                except Exception:
+                    # Shadow/Active cognition is optional.  An unavailable
+                    # reader, ledger, or blueprint yields the original plan.
+                    prepared_cognitive = None
+                    plan = original_plan
+                    cognitive_fields = _cognitive_question_fields(
+                        None,
+                        topic_id=selected_topic_id,
+                    )
 
         async def generate_candidate(
             request: QuestionGenerationRequest,
@@ -1010,17 +1393,26 @@ class _TutorQuestionEntriesMixin:
             generation_context = dict(request.context)
             if validation_failure:
                 generation_context["generation_feedback"] = validation_failure
-            candidate_reply = await self._agent.question_generate(
-                source_text,
-                mode=active_mode,
-                context=generation_context,
-            )
+            if prepared_cognitive is not None:
+                reviewed_payload = reviewed_question_payload(prepared_cognitive)
+                reviewed_payload["question_id"] = f"q_{uuid.uuid4().hex}"
+                reviewed_payload["attempt_id"] = f"a_{uuid.uuid4().hex}"
+                candidate_reply = TutorReply(
+                    operation=LLM_OPERATION_QUESTION_GENERATE,
+                    input_text=source_text,
+                    reply=str(reviewed_payload["question"]),
+                    payload=reviewed_payload,
+                )
+            else:
+                candidate_reply = await self._agent.question_generate(
+                    source_text,
+                    mode=active_mode,
+                    context=generation_context,
+                )
             candidate_payload = dict(candidate_reply.payload or {})
             repair_codes: tuple[str, ...] = ()
-            if targeted_context:
-                candidate_payload = enforce_mapped_question_type(
-                    candidate_payload, question_type_mapping
-                )
+            if targeted_context and prepared_cognitive is None:
+                candidate_payload = enforce_mapped_question_type(candidate_payload, question_type_mapping)
                 candidate_payload["target_topic_id"] = selected_topic_id
                 candidate_payload, repair_codes = canonicalize_targeted_question(
                     candidate_payload,
@@ -1067,7 +1459,16 @@ class _TutorQuestionEntriesMixin:
                     },
                     mode=active_mode,
                     source_question_id=source_question_id,
+                    target_binding=plan.target_binding,
+                    scope_key=plan.scope_key,
+                    scope_revision=plan.scope_revision,
                     status="generated",
+                    learning_intent=plan.learning_intent,
+                    hypothesis_target=plan.hypothesis_target,
+                    repair_strategy=plan.repair_strategy,
+                    cognitive_decision_id=cognitive_fields["cognitive_decision_id"],
+                    cognitive_validator_version=cognitive_fields["cognitive_validator_version"],
+                    diagnostic_validation_id=cognitive_fields["diagnostic_validation_id"],
                 ),
                 payload=candidate_payload,
                 raw_result=normalized_reply,
@@ -1077,7 +1478,7 @@ class _TutorQuestionEntriesMixin:
             _request: QuestionGenerationRequest,
             generation: QuestionGenerationResult,
         ) -> QuestionValidationResult:
-            nonlocal validation_failure
+            nonlocal cognitive_validation, validation_failure
             if not targeted_context or generation.question is None:
                 return QuestionValidationResult(valid=True)
             candidate_payload = dict(generation.question.public_payload)
@@ -1090,11 +1491,24 @@ class _TutorQuestionEntriesMixin:
                 expected_difficulty=planned_difficulty,
             )
             if not structural.valid:
-                validation_failure = "Structural validation failed: " + ", ".join(
-                    structural.errors
+                validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
+                return QuestionValidationResult(valid=False, errors=tuple(structural.errors), raw_result=structural)
+            if prepared_cognitive is not None:
+                cognitive_validation = validate_reviewed_question(
+                    prepared_cognitive,
+                    generation.question,
+                    repair_question_family_id=repair_question_family_id,
                 )
+                if not cognitive_validation.valid:
+                    validation_failure = "Cognitive validation failed: " + ", ".join(cognitive_validation.errors)
+                    return QuestionValidationResult(
+                        valid=False,
+                        errors=tuple(cognitive_validation.errors),
+                        raw_result=cognitive_validation,
+                    )
                 return QuestionValidationResult(
-                    valid=False, errors=tuple(structural.errors), raw_result=structural
+                    valid=True,
+                    raw_result=cognitive_validation,
                 )
             validation_reply = await self._agent.question_validate(
                 context=_question_validation_context(
@@ -1103,17 +1517,11 @@ class _TutorQuestionEntriesMixin:
                     canonical_relations=canonical_relations,
                 ),
             )
-            if not semantic_validation_passed(
-                dict(validation_reply.payload or {}), degraded=validation_reply.degraded
-            ):
+            if not semantic_validation_passed(dict(validation_reply.payload or {}), degraded=validation_reply.degraded):
                 validation_failure = "Semantic validation failed: " + str(
-                    (validation_reply.payload or {}).get("reason")
-                    or validation_reply.diagnostic
-                    or "retry"
+                    (validation_reply.payload or {}).get("reason") or validation_reply.diagnostic or "retry"
                 )
-                return QuestionValidationResult(
-                    valid=False, errors=(validation_failure,), raw_result=validation_reply
-                )
+                return QuestionValidationResult(valid=False, errors=(validation_failure,), raw_result=validation_reply)
             generation.question.public_payload.update(candidate_payload)
             return QuestionValidationResult(valid=True, raw_result=validation_reply)
 
@@ -1133,10 +1541,64 @@ class _TutorQuestionEntriesMixin:
                 )
             )
         except QuestionGenerationFailure as exc:
+            if prepared_cognitive is not None and targeted_context:
+                record_event = getattr(
+                    getattr(self, "_store", None),
+                    "record_cognitive_intervention_event",
+                    None,
+                )
+                if callable(record_event):
+                    try:
+                        abandoned = abandoned_intervention_event(
+                            prepared_cognitive.proposal_event,
+                            reason="question_validation_failed",
+                        )
+                        await asyncio.to_thread(record_event, asdict(abandoned))
+                        wake_projection = getattr(self, "_request_cognitive_projection", None)
+                        if callable(wake_projection):
+                            try:
+                                wake_projection()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                fallback_context = {
+                    **targeted_context,
+                    "_cognitive_fallback": True,
+                }
+                return await self._generate_question_payload_impl(
+                    source_text=source_text,
+                    topic=topic,
+                    source=source,
+                    source_question_id=source_question_id,
+                    vision_image_payload=vision_image_payload,
+                    targeted_context=fallback_context,
+                )
             raise SdkError(
                 validation_failure or str(exc) or "generated question failed validation",
                 code="QUESTION_VALIDATION_FAILED",
             ) from exc
+        if prepared_cognitive is not None:
+            if cognitive_validation is None or not cognitive_validation.valid or not cognitive_validation.validation_id:
+                fallback_context = {
+                    **dict(targeted_context or {}),
+                    "_cognitive_fallback": True,
+                }
+                return await self._generate_question_payload_impl(
+                    source_text=source_text,
+                    topic=topic,
+                    source=source,
+                    source_question_id=source_question_id,
+                    vision_image_payload=vision_image_payload,
+                    targeted_context=fallback_context,
+                )
+            question_instance = replace(
+                question_instance,
+                cognitive_validator_version=cognitive_validation.validator_version,
+                diagnostic_validation_id=cognitive_validation.validation_id,
+            )
+            cognitive_fields["cognitive_validator_version"] = cognitive_validation.validator_version
+            cognitive_fields["diagnostic_validation_id"] = cognitive_validation.validation_id
         reply = question_instance.generator_metadata.get("reply")
         if not isinstance(reply, TutorReply):
             raise SdkError("generated question is missing its internal reply")
@@ -1157,16 +1619,77 @@ class _TutorQuestionEntriesMixin:
                     "practice scope changed during question generation",
                     code="SELECTION_SCOPE_CHANGED",
                 )
+        committed_cognitive_event = None
+        if prepared_cognitive is not None:
+            try:
+                committed_cognitive_event = committed_question_event(
+                    prepared_cognitive,
+                    question_id=question_instance.question_id,
+                    validation=cognitive_validation,
+                )
+                record_event = getattr(
+                    getattr(self, "_store", None),
+                    "record_cognitive_intervention_event",
+                    None,
+                )
+                if not callable(record_event):
+                    raise RuntimeError("cognitive intervention ledger is unavailable")
+                await asyncio.to_thread(
+                    record_event,
+                    asdict(committed_cognitive_event),
+                )
+                wake_projection = getattr(self, "_request_cognitive_projection", None)
+                if callable(wake_projection):
+                    try:
+                        wake_projection()
+                    except Exception:
+                        # Projection is asynchronous and optional; the dirty
+                        # generation prevents stale Active reads meanwhile.
+                        pass
+            except Exception:
+                fallback_context = {
+                    **dict(targeted_context or {}),
+                    "_cognitive_fallback": True,
+                }
+                return await self._generate_question_payload_impl(
+                    source_text=source_text,
+                    topic=topic,
+                    source=source,
+                    source_question_id=source_question_id,
+                    vision_image_payload=vision_image_payload,
+                    targeted_context=fallback_context,
+                )
         public_payload = None
         if targeted_context:
+            target_binding = _server_target_binding(
+                targeted_context,
+                generated_at=reply.created_at,
+            )
+            target_binding.update(dict(plan.target_binding))
+            if question_instance.hypothesis_target is not None:
+                target_binding.update(
+                    {
+                        "plan_id": question_instance.plan_id,
+                        "selection_reason": plan.selection.reason,
+                        "learning_plan_id": str(targeted_context.get("learning_plan_id") or "").strip(),
+                        "learning_plan_revision": int(targeted_context.get("learning_plan_revision") or 0),
+                        "scope_key": plan.scope_key,
+                        "scope_revision": plan.scope_revision,
+                        "cognitive_learning_intent": (question_instance.learning_intent),
+                        "cognitive_hypothesis_target": hypothesis_ref_payload(question_instance.hypothesis_target),
+                        "cognitive_repair_strategy": (question_instance.repair_strategy),
+                        "cognitive_decision_id": (question_instance.cognitive_decision_id),
+                        "cognitive_validator_version": (question_instance.cognitive_validator_version),
+                        "diagnostic_validation_id": cognitive_fields["diagnostic_validation_id"],
+                        "cognitive_blueprint_id": cognitive_fields["cognitive_blueprint_id"],
+                        "cognitive_question_family_id": cognitive_fields["cognitive_question_family_id"],
+                    }
+                )
             private_payload = _question_private_payload(
                 dict(reply.payload or {}),
                 {
                     "source": "targeted_question",
-                    "target_binding": _server_target_binding(
-                        targeted_context,
-                        generated_at=reply.created_at,
-                    ),
+                    "target_binding": target_binding,
                     "selected_topic_id": targeted_context.get("selected_topic_id") or "",
                     "topic": targeted_context.get("selected_topic_id") or "",
                     "selected_topic_name": targeted_context.get("selected_topic_name") or "",
@@ -1202,24 +1725,34 @@ class _TutorQuestionEntriesMixin:
             "payload": metadata_payload,
             "screen_classification": tutor_context.get("screen_classification") or {},
         }
-        if targeted_context:
-            async with self._practice_scope_write_lock():
-                await asyncio.to_thread(
-                    self._validate_learning_plan_selection_context,
-                    targeted_context,
-                )
-                async with self._lock:
-                    active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
-                    active_scope = self._resolve_active_practice_scope()
-                    active_scope_key = active_scope.scope_key if active_scope else ""
-                if (
-                    int(targeted_context.get("scope_revision") or 0) != active_revision
-                    or str(targeted_context.get("scope_key") or "").strip() != active_scope_key
-                ):
-                    raise SdkError(
-                        "practice scope changed during question generation",
-                        code="SELECTION_SCOPE_CHANGED",
+        try:
+            if targeted_context:
+                async with self._practice_scope_write_lock():
+                    await asyncio.to_thread(
+                        self._validate_learning_plan_selection_context,
+                        targeted_context,
                     )
+                    async with self._lock:
+                        active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
+                        active_scope = self._resolve_active_practice_scope()
+                        active_scope_key = active_scope.scope_key if active_scope else ""
+                    if (
+                        int(targeted_context.get("scope_revision") or 0) != active_revision
+                        or str(targeted_context.get("scope_key") or "").strip() != active_scope_key
+                    ):
+                        raise SdkError(
+                            "practice scope changed during question generation",
+                            code="SELECTION_SCOPE_CHANGED",
+                        )
+                    payload = await self._finalize_tutor_call(
+                        LLM_OPERATION_QUESTION_GENERATE,
+                        reply,
+                        history_kind=LLM_OPERATION_QUESTION_GENERATE,
+                        metadata=finalize_metadata,
+                        extra_context=tutor_context,
+                        public_payload=public_payload,
+                    )
+            else:
                 payload = await self._finalize_tutor_call(
                     LLM_OPERATION_QUESTION_GENERATE,
                     reply,
@@ -1228,15 +1761,14 @@ class _TutorQuestionEntriesMixin:
                     extra_context=tutor_context,
                     public_payload=public_payload,
                 )
-        else:
-            payload = await self._finalize_tutor_call(
-                LLM_OPERATION_QUESTION_GENERATE,
-                reply,
-                history_kind=LLM_OPERATION_QUESTION_GENERATE,
-                metadata=finalize_metadata,
-                extra_context=tutor_context,
-                public_payload=public_payload,
-            )
+        except BaseException:
+            if committed_cognitive_event is not None:
+                await _record_cognitive_abandonment_best_effort(
+                    self,
+                    committed_cognitive_event,
+                    reason="question_commit_not_published",
+                )
+            raise
         payload["screen_classification"] = tutor_context.get("screen_classification") or {}
         if targeted_context:
             # Usage means an accepted question was committed as the current

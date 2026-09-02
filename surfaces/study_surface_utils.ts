@@ -247,6 +247,116 @@ export const BRAND_CSS = `
     overflow-wrap: anywhere;
   }
 
+  .study-panel__cognitive-notice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid rgba(183, 121, 31, 0.24);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 247, 226, 0.72);
+  }
+
+  .study-panel__cognitive-notice p {
+    min-width: 220px;
+    flex: 1 1 300px;
+    margin: 0;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .study-panel__cognitive-notice small {
+    flex: 1 0 100%;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .study-panel__cognitive-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    display: flex;
+    justify-content: flex-end;
+    background: rgba(15, 23, 42, 0.28);
+  }
+
+  .study-panel__cognitive-drawer-panel {
+    display: flex;
+    width: min(440px, calc(100vw - 24px));
+    height: 100%;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    padding: 18px;
+    border-left: 1px solid rgba(31, 41, 36, 0.14);
+    background: var(--paper-strong);
+    box-shadow: -18px 0 48px rgba(15, 23, 42, 0.18);
+  }
+
+  .study-panel__cognitive-drawer-panel > header {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .study-panel__cognitive-drawer-panel h2,
+  .study-panel__cognitive-drawer-panel p {
+    margin: 0;
+  }
+
+  .study-panel__cognitive-drawer-panel header span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .study-panel__cognitive-drawer-panel ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .study-panel__cognitive-drawer-panel li {
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid rgba(31, 41, 36, 0.12);
+    border-radius: var(--radius-sm);
+    background: rgba(248, 251, 249, 0.88);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .study-panel__cognitive-drawer-panel li strong {
+    color: var(--ink);
+  }
+
+  .study-panel__cognitive-control-status {
+    min-height: 20px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .study-panel__cognitive-actions {
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .study-panel__cognitive-delete:not(:disabled) {
+    color: #9f2f2f;
+  }
+
   .study-panel__model-runtime {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr)) auto;

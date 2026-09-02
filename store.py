@@ -8,6 +8,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .adaptive_learning.cognitive_contracts import (
+    DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+    DEFAULT_COGNITIVE_MODEL_VERSION,
+)
 from .knowledge_quality import (
     DEFAULT_TRUSTED_NEGATIVE_THRESHOLD,
     KnowledgeCandidateStatus,
@@ -31,6 +35,35 @@ from .store_captured_questions import (
     list_captured_questions,
     purge_expired_captured_questions,
     save_captured_question,
+)
+from .store_cognitive import (
+    claim_cognitive_projections,
+    claim_cognitive_topic_projections,
+    complete_cognitive_projection,
+    complete_cognitive_topic_projection,
+    get_cognitive_projection_input,
+    get_cognitive_topic_projection_state,
+    is_cognitive_hypothesis_suppressed,
+    list_cognitive_evidence,
+    list_cognitive_hypothesis_current,
+    list_cognitive_hypothesis_snapshots,
+    list_cognitive_projection_queue,
+    list_cognitive_topic_projection_queue,
+    list_cognitive_user_controls,
+    mark_cognitive_projection_failed,
+    mark_cognitive_topic_projection_dirty,
+    mark_cognitive_topic_projection_failed,
+    record_cognitive_user_control,
+    replace_cognitive_hypothesis_snapshots,
+    upsert_cognitive_hypothesis_snapshot,
+)
+from .store_cognitive import (
+    enqueue_cognitive_projection as _enqueue_cognitive_projection,
+)
+from .store_cognitive_intervention import (
+    insert_cognitive_intervention_event,
+    list_cognitive_intervention_events,
+    record_cognitive_intervention_event,
 )
 from .store_fsrs import (
     append_mastery_snapshot,
@@ -796,6 +829,10 @@ class StudyStore:
         source_question_id: str | None = None,
         used_hint: bool | None = None,
         enqueue_mastery_v2: bool = False,
+        enqueue_cognitive_projection: bool = False,
+        cognitive_extractor_version: str = DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+        cognitive_model_version: str = DEFAULT_COGNITIVE_MODEL_VERSION,
+        cognitive_intervention_event: dict[str, Any] | None = None,
         history_limit: int = _DEFAULT_APPEND_ONLY_HISTORY_LIMIT,
     ) -> dict[str, Any]:
         session_key = str(session_id or "default")
@@ -835,7 +872,7 @@ class StudyStore:
                         ).fetchone()
                     if existing_attempt is not None:
                         conn.commit()
-                        return {
+                        duplicate_result: dict[str, Any] = {
                             "ok": True,
                             "duplicate_attempt": True,
                             "topic_id": str(existing_attempt["topic_id"] or ""),
@@ -845,6 +882,12 @@ class StudyStore:
                             "wrong_question_id": "",
                             "wrong_question_attempt": {},
                         }
+                        if cognitive_intervention_event:
+                            duplicate_result["cognitive_intervention_event"] = {
+                                "recorded": False,
+                                "error": "duplicate_attempt",
+                            }
+                        return duplicate_result
                 if topic_upsert_data:
                     step = "topic_upsert"
                     self._batch_upsert_topic(conn, topic_upsert_data)
@@ -870,12 +913,41 @@ class StudyStore:
                     used_hint=used_hint,
                     attempt_id=attempt_key,
                 )
+                if cognitive_intervention_event:
+                    step = "cognitive_intervention"
+                cognitive_intervention_result = (
+                    self._batch_write_cognitive_intervention(
+                        conn,
+                        event=cognitive_intervention_event,
+                        attempt_id=attempt_key,
+                        attempt_facts_written=attempt_facts_written,
+                        expected_topic_id=topic_key,
+                        expected_verdict=str(eval_result.get("verdict") or "").strip(),
+                    )
+                )
                 if enqueue_mastery_v2 and attempt_facts_written:
                     step = "mastery_v2_enqueue"
                     enqueue_mastery_projection(
                         self,
                         conn,
                         attempt_id=attempt_key,
+                    )
+                if (
+                    enqueue_cognitive_projection
+                    and attempt_facts_written
+                    and topic_key
+                ):
+                    step = "cognitive_projection_enqueue"
+                    if not str(cognitive_extractor_version or "").strip():
+                        raise ValueError(
+                            "cognitive_extractor_version is required when projection is enabled"
+                        )
+                    _enqueue_cognitive_projection(
+                        self,
+                        conn,
+                        attempt_id=attempt_key,
+                        extractor_version=cognitive_extractor_version,
+                        model_version=cognitive_model_version,
                     )
                 step = "qa_record"
                 self._batch_write_qa_record(
@@ -955,11 +1027,73 @@ class StudyStore:
                     topic_key,
                 )
                 raise
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "wrong_question_id": wrong_question_id,
             "wrong_question_attempt": wrong_question_attempt_result,
         }
+        if cognitive_intervention_event:
+            result["cognitive_intervention_event"] = cognitive_intervention_result
+        return result
+
+    def _batch_write_cognitive_intervention(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        event: dict[str, Any] | None,
+        attempt_id: str,
+        attempt_facts_written: bool,
+        expected_topic_id: str,
+        expected_verdict: str,
+    ) -> dict[str, Any]:
+        outcome: dict[str, Any] = {"recorded": False, "error": ""}
+        if not event:
+            return outcome
+        payload = dict(event)
+        event_attempt_id = str(payload.get("attempt_id") or "").strip()
+        event_question_id = str(payload.get("question_id") or "").strip()
+        event_verdict = str(payload.get("evaluation_verdict") or "").strip()
+        binding = payload.get("binding")
+        hypothesis = payload.get("hypothesis_target")
+        event_topic_id = (
+            str(binding.get("topic_id") or "").strip()
+            if isinstance(binding, dict)
+            else ""
+        )
+        hypothesis_topic_id = (
+            str(hypothesis.get("topic_id") or "").strip()
+            if isinstance(hypothesis, dict)
+            else ""
+        )
+        if not attempt_facts_written or not attempt_id:
+            raise ValueError("cognitive intervention event requires a new attempt")
+        if str(payload.get("event_type") or "").strip() != "attempt_committed":
+            raise ValueError("answer transaction accepts only attempt_committed")
+        if event_attempt_id != attempt_id:
+            raise ValueError("cognitive intervention event attempt_id is detached")
+        if (
+            not event_topic_id
+            or event_topic_id != expected_topic_id
+            or hypothesis_topic_id != expected_topic_id
+        ):
+            raise ValueError("cognitive intervention event topic is detached")
+        attempt_row = conn.execute(
+            """
+            SELECT question_id, topic_id FROM attempts WHERE attempt_id = ?
+            """,
+            (attempt_id,),
+        ).fetchone()
+        if (
+            attempt_row is None
+            or str(attempt_row["question_id"] or "") != event_question_id
+            or str(attempt_row["topic_id"] or "") != expected_topic_id
+        ):
+            raise ValueError("cognitive intervention event is detached from attempt facts")
+        if event_verdict != expected_verdict:
+            raise ValueError("cognitive intervention verdict differs from evaluation")
+        insert_cognitive_intervention_event(self, conn, payload)
+        outcome["recorded"] = True
+        return outcome
 
     def _batch_write_answer_candidates_noncritical(
         self,
@@ -1672,6 +1806,29 @@ StudyStore._trim_append_only_rows = _trim_append_only_rows  # type: ignore[metho
 StudyStore._load_seed_if_empty = _load_seed_if_empty  # type: ignore[method-assign]
 StudyStore.get_attempt_fact = get_attempt_fact  # type: ignore[method-assign]
 StudyStore.enqueue_mastery_projection = enqueue_mastery_projection  # type: ignore[method-assign]
+StudyStore.enqueue_cognitive_projection = _enqueue_cognitive_projection  # type: ignore[method-assign]
+StudyStore.list_cognitive_projection_queue = list_cognitive_projection_queue  # type: ignore[method-assign]
+StudyStore.claim_cognitive_projections = claim_cognitive_projections  # type: ignore[method-assign]
+StudyStore.get_cognitive_projection_input = get_cognitive_projection_input  # type: ignore[method-assign]
+StudyStore.complete_cognitive_projection = complete_cognitive_projection  # type: ignore[method-assign]
+StudyStore.mark_cognitive_projection_failed = mark_cognitive_projection_failed  # type: ignore[method-assign]
+StudyStore.mark_cognitive_topic_projection_dirty = mark_cognitive_topic_projection_dirty  # type: ignore[method-assign]
+StudyStore.get_cognitive_topic_projection_state = get_cognitive_topic_projection_state  # type: ignore[method-assign]
+StudyStore.list_cognitive_topic_projection_queue = list_cognitive_topic_projection_queue  # type: ignore[method-assign]
+StudyStore.claim_cognitive_topic_projections = claim_cognitive_topic_projections  # type: ignore[method-assign]
+StudyStore.complete_cognitive_topic_projection = complete_cognitive_topic_projection  # type: ignore[method-assign]
+StudyStore.mark_cognitive_topic_projection_failed = mark_cognitive_topic_projection_failed  # type: ignore[method-assign]
+StudyStore.list_cognitive_evidence = list_cognitive_evidence  # type: ignore[method-assign]
+StudyStore.upsert_cognitive_hypothesis_snapshot = upsert_cognitive_hypothesis_snapshot  # type: ignore[method-assign]
+StudyStore.replace_cognitive_hypothesis_snapshots = replace_cognitive_hypothesis_snapshots  # type: ignore[method-assign]
+StudyStore.list_cognitive_hypothesis_snapshots = list_cognitive_hypothesis_snapshots  # type: ignore[method-assign]
+StudyStore.list_cognitive_hypothesis_current = list_cognitive_hypothesis_current  # type: ignore[method-assign]
+StudyStore.record_cognitive_user_control = record_cognitive_user_control  # type: ignore[method-assign]
+StudyStore.list_cognitive_user_controls = list_cognitive_user_controls  # type: ignore[method-assign]
+StudyStore.is_cognitive_hypothesis_suppressed = is_cognitive_hypothesis_suppressed  # type: ignore[method-assign]
+StudyStore.record_cognitive_intervention_event = record_cognitive_intervention_event  # type: ignore[method-assign]
+StudyStore.insert_cognitive_intervention_event = insert_cognitive_intervention_event  # type: ignore[method-assign]
+StudyStore.list_cognitive_intervention_events = list_cognitive_intervention_events  # type: ignore[method-assign]
 StudyStore.list_mastery_projection_queue = list_mastery_projection_queue  # type: ignore[method-assign]
 StudyStore.claim_mastery_projections = claim_mastery_projections  # type: ignore[method-assign]
 StudyStore.mark_mastery_projection_failed = mark_mastery_projection_failed  # type: ignore[method-assign]

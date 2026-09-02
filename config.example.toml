@@ -23,3 +23,13 @@ math_expression_enabled = false
 v2_shadow_enabled = false
 read_model = "v1"
 model_version = "mastery-v2-shadow-1"
+
+# Cognitive Evidence Engine V2. Every behavioral surface is independently
+# disabled by default. V2 is bounded to one server-validated concept cluster.
+[cognitive]
+projection_enabled = false
+read_mode = "off" # off / shadow / active
+intent_policy = "off" # off / shadow / on
+ui_enabled = false
+model_version = "cognitive-v1"
+supported_topics = ["calculus.chain_rule", "college_chain_rule"]

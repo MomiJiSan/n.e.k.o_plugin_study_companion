@@ -70,6 +70,16 @@ max_core_topics = 12
 max_prerequisite_topics = 5
 auto_generate_next_question = false
 
+# Cognitive Evidence Engine V2. Projection, reading, question intent, and UI
+# are independent opt-ins and remain fail closed by default.
+[cognitive]
+projection_enabled = false
+read_mode = "off" # off / shadow / active
+intent_policy = "off" # off / shadow / on
+ui_enabled = false
+model_version = "cognitive-v1"
+supported_topics = ["calculus.chain_rule", "college_chain_rule"]
+
 [study_companion.communication]
 enabled = true
 solution_narration_enabled = true

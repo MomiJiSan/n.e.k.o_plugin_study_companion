@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 # isort: split
@@ -234,3 +236,40 @@ async def test_tracker_adapter_maps_every_tracker_input_from_typed_attempt() -> 
     assert kwargs["question"]["source_question_id"] == "source-override"
     assert kwargs["question"]["target_binding"] == {"origin_wrong_question_id": "wrong-1"}
     assert kwargs["eval_result"]["verdict"] == "correct"
+
+
+@pytest.mark.asyncio
+async def test_tracker_adapter_propagates_server_cognitive_provenance() -> None:
+    question = replace(
+        _question(),
+        learning_intent="misconception_repair",
+        repair_strategy="complete_inner_derivative",
+        cognitive_decision_id="decision-1",
+        cognitive_validator_version="validator-v2",
+        diagnostic_validation_id="validation-1",
+    )
+    attempt = EvaluatedAttempt(
+        attempt_id="attempt-cognitive",
+        question=question,
+        learner_answer="2*x*cos(x^2)",
+        evaluation=EvaluationResult(
+            verdict="correct",
+            score=100,
+            details={"verdict": "correct", "score": 100},
+        ),
+    )
+    received: list[dict[str, object]] = []
+
+    class Tracker:
+        def on_answer(self, **kwargs):
+            received.append(kwargs)
+            return {"knowledge_tracking_status": "updated"}
+
+    await StudyTrackerCommitAdapter(Tracker()).commit_evaluated_attempt(attempt)
+
+    persisted = received[0]["question"]
+    assert persisted["learning_intent"] == "misconception_repair"
+    assert persisted["repair_strategy"] == "complete_inner_derivative"
+    assert persisted["diagnostic_validation_id"] == "validation-1"
+    assert persisted["cognitive_decision_id"] == "decision-1"
+    assert persisted["cognitive_validator_version"] == "validator-v2"

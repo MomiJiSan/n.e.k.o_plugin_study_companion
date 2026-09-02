@@ -22,6 +22,22 @@ SelectionReason = Literal[
     "recommended",
     "default",
 ]
+LearningIntent = Literal[
+    "practice",
+    "readiness_probe",
+    "misconception_probe",
+    "misconception_repair",
+    "transfer_check",
+    "retention_check",
+]
+RepairStrategy = Literal[
+    "",
+    "compare_steps",
+    "complete_inner_derivative",
+    "structure_classification",
+    "minimal_change",
+    "cross_form_transfer",
+]
 QuestionStatus = Literal["planned", "generated", "validated", "failed", "answered"]
 EvaluationVerdict = Literal["correct", "partial", "wrong", "dont_know"]
 
@@ -55,6 +71,23 @@ class PracticeSelection:
 
 
 @dataclass(frozen=True, slots=True)
+class HypothesisRef:
+    """Compact reference to one versioned cognitive hypothesis projection."""
+
+    hypothesis_id: str
+    topic_id: str
+    code: str
+    status: str
+    probability: float
+    model_version: str
+    # Exact projection provenance is optional for legacy/shadow callers.  An
+    # active cognitive validator requires a concrete snapshot and generation.
+    source_snapshot_id: str = ""
+    source_attempt_id: str = ""
+    projection_generation: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class QuestionPlan:
     """Server-owned intent passed from the planner to the question factory."""
 
@@ -72,10 +105,35 @@ class QuestionPlan:
     target_binding: Mapping[str, Any] = field(default_factory=dict)
     policy_version: str = DEFAULT_PRACTICE_POLICY_VERSION
     schema_version: int = INTERNAL_SCHEMA_VERSION
+    # Appended after every V1 field so legacy positional construction remains
+    # valid while later policy phases can decorate an already selected topic.
+    learning_intent: LearningIntent = "practice"
+    hypothesis_target: HypothesisRef | None = None
+    repair_strategy: RepairStrategy = ""
 
     @property
     def target_topic(self) -> TopicRef:
         return self.selection.target_topic
+
+
+@dataclass(frozen=True, slots=True)
+class LearningActionCandidate:
+    """Shadow-only proposal for the coach's future obligation merger.
+
+    Cognitive policy may submit one of these candidates but never owns the
+    final next-action decision.
+    """
+
+    source: str
+    topic_id: str
+    intent: LearningIntent
+    urgency: float
+    expected_learning_gain: float
+    information_gain: float
+    evidence_refs: tuple[str, ...]
+    satisfies: tuple[str, ...]
+    not_before: str = ""
+    expires_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +164,14 @@ class QuestionInstance:
     created_at: str = ""
     policy_version: str = DEFAULT_QUESTION_POLICY_VERSION
     schema_version: int = INTERNAL_SCHEMA_VERSION
+    # V2 fields are appended so every pre-cognitive positional constructor
+    # remains valid.  A question carries at most one hypothesis by contract.
+    learning_intent: LearningIntent = "practice"
+    hypothesis_target: HypothesisRef | None = None
+    repair_strategy: RepairStrategy = ""
+    cognitive_decision_id: str = ""
+    cognitive_validator_version: str = ""
+    diagnostic_validation_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Mapping, TypedDict, cast
 
 from .constants import (
     MODE_COMPANION,
@@ -54,6 +54,20 @@ PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
         "question_style",
         "_answer_reference_answer_consistent",
         "attempt_evaluated",
+        # Cognitive intervention provenance stays server-side.  In
+        # particular, HypothesisRef contains an internal score which V2 must
+        # never present as a calibrated user-facing probability.
+        "learning_intent",
+        "hypothesis_target",
+        "cognitive_hypothesis_target",
+        "repair_strategy",
+        "cognitive_decision_id",
+        "cognitive_validator_version",
+        "diagnostic_validation_id",
+        "cognitive_blueprint_id",
+        "cognitive_question_family_id",
+        "competing_hypothesis_codes",
+        "diagnostic_signature",
     }
 )
 
@@ -411,6 +425,79 @@ class MasteryConfig:
         return asdict(self)
 
 
+COGNITIVE_V1_MODEL_VERSION = "cognitive-v1"
+COGNITIVE_V1_SUPPORTED_TOPICS = (
+    "calculus.chain_rule",
+    "college_chain_rule",
+)
+CognitiveReadMode = Literal["off", "shadow", "active"]
+CognitiveIntentPolicyMode = Literal["off", "shadow", "on"]
+
+
+@dataclass(slots=True)
+class CognitiveConfig:
+    """Fail-closed switches for the Cognitive Evidence Engine V2.
+
+    This is deliberately a standalone configuration contract in PR0. Runtime
+    wiring is deferred so merely parsing the section cannot enqueue work, read
+    projections, alter question intent, or expose UI.
+    """
+
+    projection_enabled: bool = False
+    read_mode: CognitiveReadMode = "off"
+    intent_policy: CognitiveIntentPolicyMode = "off"
+    ui_enabled: bool = False
+    model_version: str = COGNITIVE_V1_MODEL_VERSION
+    supported_topics: tuple[str, ...] = COGNITIVE_V1_SUPPORTED_TOPICS
+
+    def __post_init__(self) -> None:
+        self.projection_enabled = self.projection_enabled if isinstance(self.projection_enabled, bool) else False
+        read_mode = str(self.read_mode or "off").strip().lower()
+        self.read_mode = cast(
+            CognitiveReadMode,
+            read_mode if read_mode in {"off", "shadow", "active"} else "off",
+        )
+        intent_policy = str(self.intent_policy or "off").strip().lower()
+        self.intent_policy = cast(
+            CognitiveIntentPolicyMode,
+            intent_policy if intent_policy in {"off", "shadow", "on"} else "off",
+        )
+        self.ui_enabled = self.ui_enabled if isinstance(self.ui_enabled, bool) else False
+        model_version = str(self.model_version or "").strip()
+        self.model_version = (
+            model_version if model_version == COGNITIVE_V1_MODEL_VERSION else COGNITIVE_V1_MODEL_VERSION
+        )
+        if not isinstance(self.supported_topics, (list, tuple)):
+            self.supported_topics = ()
+        else:
+            allowed_topics = set(COGNITIVE_V1_SUPPORTED_TOPICS)
+            self.supported_topics = tuple(
+                dict.fromkeys(
+                    topic
+                    for raw_topic in self.supported_topics
+                    if isinstance(raw_topic, str) and (topic := raw_topic.strip()) in allowed_topics
+                )
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def build_cognitive_config(raw: Mapping[str, Any]) -> CognitiveConfig:
+    """Parse the isolated top-level ``cognitive`` section without side effects."""
+
+    section = raw.get("cognitive")
+    cognitive = section if isinstance(section, Mapping) else {}
+    return CognitiveConfig(
+        projection_enabled=cognitive.get("projection_enabled", False),
+        read_mode=cognitive.get("read_mode", "off"),
+        intent_policy=cognitive.get("intent_policy", "off"),
+        ui_enabled=cognitive.get("ui_enabled", False),
+        model_version=cognitive.get("model_version", COGNITIVE_V1_MODEL_VERSION),
+        supported_topics=cognitive.get("supported_topics", COGNITIVE_V1_SUPPORTED_TOPICS),
+    )
+
+
 @dataclass(slots=True)
 class AdaptiveLoopConfig:
     next_step_preview_enabled: bool = True
@@ -422,28 +509,18 @@ class AdaptiveLoopConfig:
 
     def __post_init__(self) -> None:
         self.next_step_preview_enabled = (
-            self.next_step_preview_enabled
-            if isinstance(self.next_step_preview_enabled, bool)
-            else True
+            self.next_step_preview_enabled if isinstance(self.next_step_preview_enabled, bool) else True
         )
         self.material_learning_plans_enabled = (
-            self.material_learning_plans_enabled
-            if isinstance(self.material_learning_plans_enabled, bool)
-            else False
+            self.material_learning_plans_enabled if isinstance(self.material_learning_plans_enabled, bool) else False
         )
-        self.auto_prepare_plan = (
-            self.auto_prepare_plan if isinstance(self.auto_prepare_plan, bool) else True
-        )
+        self.auto_prepare_plan = self.auto_prepare_plan if isinstance(self.auto_prepare_plan, bool) else True
         self.max_core_topics = _clamp_int_or_default(self.max_core_topics, 1, 12, 12)
-        self.max_prerequisite_topics = _clamp_int_or_default(
-            self.max_prerequisite_topics, 0, 5, 5
-        )
+        self.max_prerequisite_topics = _clamp_int_or_default(self.max_prerequisite_topics, 0, 5, 5)
         # This remains opt-in false even if a malformed string such as "true"
         # is supplied. Answer submission must never trigger hidden LLM work.
         self.auto_generate_next_question = (
-            self.auto_generate_next_question
-            if isinstance(self.auto_generate_next_question, bool)
-            else False
+            self.auto_generate_next_question if isinstance(self.auto_generate_next_question, bool) else False
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -481,9 +558,7 @@ class StudyConfig:
     rapidocr_lang_type: str = "ch"
     rapidocr_model_type: str = "mobile"
     rapidocr_ocr_version: str = "PP-OCRv4"
-    _rapidocr_lang_type_diagnostic: str = field(
-        default="", init=False, repr=False, compare=False
-    )
+    _rapidocr_lang_type_diagnostic: str = field(default="", init=False, repr=False, compare=False)
     llm_call_timeout_seconds: float = 30.0
     llm_vision_enabled: bool = False
     llm_vision_max_image_px: int = 768
@@ -512,6 +587,7 @@ class StudyConfig:
     assessment: AssessmentConfig = field(default_factory=AssessmentConfig)
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
     adaptive_loop: AdaptiveLoopConfig = field(default_factory=AdaptiveLoopConfig)
+    cognitive: CognitiveConfig = field(default_factory=CognitiveConfig)
 
     def __post_init__(self) -> None:
         self.mode = normalize_mode(self.mode)
@@ -586,6 +662,10 @@ class StudyConfig:
                 AdaptiveLoopConfig(**self.adaptive_loop)
                 if isinstance(self.adaptive_loop, dict)
                 else AdaptiveLoopConfig()
+            )
+        if not isinstance(self.cognitive, CognitiveConfig):
+            self.cognitive = (
+                CognitiveConfig(**self.cognitive) if isinstance(self.cognitive, dict) else CognitiveConfig()
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1002,20 +1082,12 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             ),
         ),
         adaptive_loop=AdaptiveLoopConfig(
-            next_step_preview_enabled=_bool(
-                adaptive_loop, "next_step_preview_enabled", True
-            ),
-            material_learning_plans_enabled=_bool(
-                adaptive_loop, "material_learning_plans_enabled", False
-            ),
+            next_step_preview_enabled=_bool(adaptive_loop, "next_step_preview_enabled", True),
+            material_learning_plans_enabled=_bool(adaptive_loop, "material_learning_plans_enabled", False),
             auto_prepare_plan=_bool(adaptive_loop, "auto_prepare_plan", True),
             max_core_topics=_int(adaptive_loop, "max_core_topics", 12),
-            max_prerequisite_topics=_int(
-                adaptive_loop, "max_prerequisite_topics", 5
-            ),
-            auto_generate_next_question=_bool(
-                adaptive_loop, "auto_generate_next_question", False
-            ),
+            max_prerequisite_topics=_int(adaptive_loop, "max_prerequisite_topics", 5),
+            auto_generate_next_question=_bool(adaptive_loop, "auto_generate_next_question", False),
         ),
         doc_export=DocExportConfig(
             enabled=_bool(doc_export, "enabled", False, "doc_export_enabled"),
@@ -1154,4 +1226,5 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
             read_model=_str(mastery, "read_model", "v1"),
             model_version=_str(mastery, "model_version", "mastery-v2-shadow-1"),
         ),
+        cognitive=build_cognitive_config(raw),
     )

@@ -189,6 +189,41 @@ type PracticeFeedback = {
   next_step?: AdaptiveNextStep;
 };
 
+type CognitiveEvidenceItem = {
+  evidence_id?: string;
+  direction?: 'support' | 'counter';
+  evidence_span?: string;
+  source_kind?: string;
+  created_at?: string;
+};
+
+type CognitiveHypothesisEvidence = {
+  hypothesis_id?: string;
+  topic_id?: string;
+  hypothesis_code?: string;
+  support_count?: number;
+  diagnostic_support_count?: number;
+  evidence?: CognitiveEvidenceItem[];
+  computed_at?: string;
+};
+
+type CognitiveRestorableControl = {
+  topic_id?: string;
+  hypothesis_code?: string;
+  action?: 'dismiss' | 'suppress' | 'delete';
+  expires_at?: string;
+};
+
+type CognitiveEvidencePayload = {
+  enabled?: boolean;
+  status?: string;
+  topic_id?: string;
+  hypotheses?: CognitiveHypothesisEvidence[];
+  restorable_controls?: CognitiveRestorableControl[];
+};
+
+type CognitiveControlAction = 'dismiss' | 'suppress' | 'delete' | 'restore';
+
 type GeneratedQuestion = {
   question?: string;
   hint?: string;
@@ -523,8 +558,12 @@ const ENTRY_TIMEOUT_MS: Record<string, number> = {
   study_question_context: 30000,
   study_generate_targeted_question: 130000,
   study_evaluate_answer: 75000,
+  study_cognitive_evidence: 15000,
+  study_cognitive_control: 15000,
   study_summarize_session: 90000,
 };
+
+const COGNITIVE_SUPPRESSION_MS = 4 * 60 * 60 * 1000;
 
 const MODE_ORDER: Array<{ id: StudyMode; labelKey: string; fallback: string }> = [
   { id: 'companion', labelKey: 'status.mode.companion', fallback: 'Companion' },
@@ -1140,6 +1179,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [canEvaluateCurrentQuestion, setCanEvaluateCurrentQuestion] = useState(false);
   const [practiceFeedback, setPracticeFeedback] = useState<PracticeFeedback | null>(null);
   const [nextStep, setNextStep] = useState<AdaptiveNextStep | null>(null);
+  const [cognitiveEvidence, setCognitiveEvidence] = useState<CognitiveEvidencePayload | null>(null);
+  const [cognitiveDrawerOpen, setCognitiveDrawerOpen] = useState(false);
+  const [cognitiveControlBusy, setCognitiveControlBusy] = useState(false);
+  const [cognitiveControlStatus, setCognitiveControlStatus] = useState('');
   const [answer, setAnswer] = useState('');
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1173,6 +1216,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const documentControllerRef = useRef<AbortController | null>(null);
   const documentJobControllerRef = useRef<AbortController | null>(null);
   const contextRefreshControllerRef = useRef<AbortController | null>(null);
+  const cognitiveReadControllerRef = useRef<AbortController | null>(null);
+  const cognitiveControlControllerRef = useRef<AbortController | null>(null);
+  const cognitiveAttemptIdRef = useRef('');
   const activePracticeScopeRef = useRef<PracticeScope | null>(null);
   const documentJobIdRef = useRef('');
   const documentPendingStartTokenRef = useRef('');
@@ -1531,11 +1577,170 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     return trimmed.length > 72 ? `${trimmed.slice(0, 72)}...` : trimmed;
   }
 
+  function cognitiveHypothesisLabel(code: string) {
+    const labels: Record<string, [string, string]> = {
+      omit_inner_derivative: [
+        'ui.cognitive.hypothesis.omit_inner_derivative',
+        'omitting the inner derivative',
+      ],
+      differentiate_inner_incorrectly: [
+        'ui.cognitive.hypothesis.differentiate_inner_incorrectly',
+        'differentiating the inner function incorrectly',
+      ],
+      confuse_product_and_chain: [
+        'ui.cognitive.hypothesis.confuse_product_and_chain',
+        'confusing the product and chain rules',
+      ],
+    };
+    const pair = labels[String(code || '')] || [
+      'ui.cognitive.hypothesis.unknown',
+      'a recurring error pattern',
+    ];
+    return t(pair[0], pair[1]);
+  }
+
+  function clearCognitiveEvidence() {
+    cognitiveReadControllerRef.current?.abort();
+    cognitiveReadControllerRef.current = null;
+    cognitiveAttemptIdRef.current = '';
+    setCognitiveEvidence(null);
+    setCognitiveDrawerOpen(false);
+    setCognitiveControlStatus('');
+  }
+
+  async function loadCognitiveEvidence(
+    topicId: string,
+    attemptId: string,
+    options: { force?: boolean } = {},
+  ) {
+    const topicKey = String(topicId || '').trim();
+    const attemptKey = String(attemptId || '').trim();
+    if (!topicKey || !attemptKey) {
+      clearCognitiveEvidence();
+      return;
+    }
+    if (!options.force && cognitiveAttemptIdRef.current === attemptKey) {
+      return;
+    }
+    cognitiveReadControllerRef.current?.abort();
+    const controller = new AbortController();
+    cognitiveReadControllerRef.current = controller;
+    cognitiveAttemptIdRef.current = attemptKey;
+    try {
+      const payload = await callStudyPlugin<CognitiveEvidencePayload>(
+        props.api,
+        'study_cognitive_evidence',
+        props.locale,
+        { topic_id: topicKey, limit: 8 },
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted
+        || !mountedRef.current
+        || questionAttemptIdRef.current !== attemptKey
+      ) {
+        return;
+      }
+      const hypotheses = Array.isArray(payload.hypotheses)
+        ? payload.hypotheses.filter((item) => Boolean(item?.hypothesis_code))
+        : [];
+      const restorableControls = Array.isArray(payload.restorable_controls)
+        ? payload.restorable_controls.filter((item) => Boolean(item?.hypothesis_code))
+        : [];
+      setCognitiveEvidence(
+        payload.enabled === true && (hypotheses.length > 0 || restorableControls.length > 0)
+          ? { ...payload, hypotheses, restorable_controls: restorableControls }
+          : null,
+      );
+      setCognitiveDrawerOpen(false);
+      setCognitiveControlStatus('');
+    } catch (_error) {
+      if (
+        !controller.signal.aborted
+        && mountedRef.current
+        && questionAttemptIdRef.current === attemptKey
+      ) {
+        cognitiveAttemptIdRef.current = '';
+        setCognitiveEvidence(null);
+        setCognitiveDrawerOpen(false);
+        setCognitiveControlStatus('');
+      }
+    } finally {
+      if (cognitiveReadControllerRef.current === controller) {
+        cognitiveReadControllerRef.current = null;
+      }
+    }
+  }
+
+  async function applyCognitiveControl(action: CognitiveControlAction) {
+    const hypothesis = cognitiveEvidence?.hypotheses?.[0];
+    const restorableControl = hypothesis
+      ? undefined
+      : cognitiveEvidence?.restorable_controls?.[0];
+    const target = hypothesis || restorableControl;
+    const topicId = String(target?.topic_id || cognitiveEvidence?.topic_id || '').trim();
+    const hypothesisCode = String(target?.hypothesis_code || '').trim();
+    const attemptId = questionAttemptIdRef.current;
+    if (!topicId || !hypothesisCode || !attemptId || cognitiveControlBusy) {
+      return;
+    }
+    if (action === 'delete' && !window.confirm(t(
+      'ui.cognitive.delete_confirm',
+      'Delete this derived judgment and its cognitive evidence? Your original answers will be kept.',
+    ))) {
+      return;
+    }
+    cognitiveControlControllerRef.current?.abort();
+    const controller = new AbortController();
+    cognitiveControlControllerRef.current = controller;
+    setCognitiveControlBusy(true);
+    setCognitiveControlStatus(t('ui.cognitive.saving', 'Saving your choice...'));
+    try {
+      await callStudyPlugin(
+        props.api,
+        'study_cognitive_control',
+        props.locale,
+        {
+          topic_id: topicId,
+          hypothesis_code: hypothesisCode,
+          action,
+          expires_at: action === 'suppress'
+            ? new Date(Date.now() + COGNITIVE_SUPPRESSION_MS).toISOString()
+            : '',
+        },
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted
+        || !mountedRef.current
+        || questionAttemptIdRef.current !== attemptId
+      ) {
+        return;
+      }
+      setCognitiveControlStatus(t('ui.cognitive.saved', 'Your choice was saved.'));
+      await loadCognitiveEvidence(topicId, attemptId, { force: true });
+    } catch (error) {
+      if (
+        !controller.signal.aborted
+        && mountedRef.current
+        && questionAttemptIdRef.current === attemptId
+      ) {
+        setCognitiveControlStatus(formatPluginError(error));
+      }
+    } finally {
+      if (cognitiveControlControllerRef.current === controller) {
+        cognitiveControlControllerRef.current = null;
+        if (mountedRef.current) setCognitiveControlBusy(false);
+      }
+    }
+  }
+
   function startQuestionAttempt(nextQuestion: GeneratedQuestion) {
     const attemptId = String(nextQuestion.attempt_id || '').trim();
     if (!attemptId || attemptId === questionAttemptIdRef.current) {
       return;
     }
+    clearCognitiveEvidence();
     questionAttemptIdRef.current = attemptId;
     questionStartedAtRef.current = Date.now();
     // The React surface places the generated hint in the visible reply, so
@@ -1553,11 +1758,16 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       if (data.current_question_state === 'evaluated' && data.last_answer_evaluation) {
         setPracticeFeedback(data.last_answer_evaluation);
         setNextStep(data.last_answer_evaluation.next_step || null);
+        void loadCognitiveEvidence(
+          String(data.current_question.selected_topic_id || ''),
+          String(data.current_question.attempt_id || ''),
+        );
         if (data.last_answer_evaluation.feedback) {
           setReply(data.last_answer_evaluation.feedback);
         }
       }
     } else if (data.current_question_state === 'none') {
+      clearCognitiveEvidence();
       setCurrentQuestion(null);
       setCanEvaluateCurrentQuestion(false);
     }
@@ -2705,6 +2915,11 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       setPracticeScopeReviewing(scopeReviewing);
       setPracticeFeedback(data);
       setNextStep(data.next_step || null);
+      void loadCognitiveEvidence(
+        String(currentQuestion.selected_topic_id || ''),
+        String(currentQuestion.attempt_id || ''),
+        { force: true },
+      );
       const updatedPlanProgress = data.learning_update?.plan_progress || data.next_step?.plan_progress;
       if (updatedPlanProgress) {
         setLearningPlan((current) => current ? { ...current, progress: updatedPlanProgress } : current);
@@ -2813,6 +3028,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       documentControllerRef.current = null;
       contextRefreshControllerRef.current?.abort();
       contextRefreshControllerRef.current = null;
+      cognitiveReadControllerRef.current?.abort();
+      cognitiveReadControllerRef.current = null;
+      cognitiveControlControllerRef.current?.abort();
+      cognitiveControlControllerRef.current = null;
     };
   }, [props.locale]);
 
@@ -2887,11 +3106,33 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!cognitiveDrawerOpen) {
+      return undefined;
+    }
+    const closeCognitiveDrawer = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setCognitiveDrawerOpen(false);
+    };
+    document.addEventListener('keydown', closeCognitiveDrawer, true);
+    return () => document.removeEventListener('keydown', closeCognitiveDrawer, true);
+  }, [cognitiveDrawerOpen]);
+
   const stateValue = status.status || 'unknown';
   const stateLabel = t(`status.state.${stateValue}`, stateValue);
   const explainLabel = interactionBusy ? t('ui.button.loading', 'Loading...') : t('ui.button.explain', 'Explain');
   const screenType = status.screen_classification?.screen_type || 'idle';
   const evaluation = status.last_answer_evaluation;
+  const cognitiveHypothesis = cognitiveEvidence?.hypotheses?.[0];
+  const cognitiveRestorableControl = cognitiveHypothesis
+    ? undefined
+    : cognitiveEvidence?.restorable_controls?.[0];
+  const cognitiveTarget = cognitiveHypothesis || cognitiveRestorableControl;
+  const cognitiveLabel = cognitiveHypothesis
+    ? cognitiveHypothesisLabel(String(cognitiveHypothesis.hypothesis_code || ''))
+    : '';
   const handleTextPaste = createPasteHandler(
     {
       setImage: setTextImageValue,
@@ -3503,6 +3744,133 @@ export default function StudyPanel(props: PluginSurfaceProps) {
             </div>
           ) : null}
         </section>
+      ) : null}
+      {practiceFeedback && cognitiveTarget ? (
+        <section className="study-panel__cognitive-notice" aria-live="polite">
+          <p>{cognitiveHypothesis
+            ? tf(
+              'ui.cognitive.notice',
+              'I may have found a recurring error pattern: {hypothesis}. It is supported by {count} pieces of answer evidence.',
+              {
+                hypothesis: cognitiveLabel,
+                count: String(cognitiveHypothesis.support_count || 0),
+              },
+            )
+            : t(
+              'ui.cognitive.hidden_notice',
+              'A learning judgment is hidden. You can restore future tracking here.',
+            )}</p>
+          {cognitiveHypothesis ? (
+            <>
+              <button
+                type="button"
+                disabled={interactionBusy || cognitiveControlBusy}
+                onClick={interactionBusy || cognitiveControlBusy
+                  ? undefined
+                  : () => void generateQuestion()}
+              >
+                {t('ui.cognitive.confirm_with_question', 'Confirm with a question')}
+              </button>
+              <button
+                type="button"
+                aria-expanded={cognitiveDrawerOpen}
+                aria-controls="study-cognitive-evidence-drawer"
+                onClick={() => setCognitiveDrawerOpen(true)}
+              >
+                {t('ui.cognitive.view_evidence', 'View evidence')}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={cognitiveControlBusy}
+              onClick={() => void applyCognitiveControl('restore')}
+            >
+              {t('ui.cognitive.restore', 'Restore')}
+            </button>
+          )}
+          {cognitiveControlStatus ? (
+            <small role="status">{cognitiveControlStatus}</small>
+          ) : null}
+        </section>
+      ) : null}
+      {cognitiveDrawerOpen && cognitiveHypothesis ? (
+        <aside
+          id="study-cognitive-evidence-drawer"
+          className="study-panel__cognitive-drawer"
+          role="dialog"
+          aria-modal={false}
+          aria-labelledby="study-cognitive-evidence-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setCognitiveDrawerOpen(false);
+          }}
+        >
+          <div className="study-panel__cognitive-drawer-panel">
+            <header>
+              <div>
+                <span>{t('ui.cognitive.label', 'Learning evidence')}</span>
+                <h2 id="study-cognitive-evidence-title">
+                  {t('ui.cognitive.title', 'Possible error pattern')}
+                </h2>
+              </div>
+              <button type="button" onClick={() => setCognitiveDrawerOpen(false)}>
+                {t('ui.button.close', 'Close')}
+              </button>
+            </header>
+            <p>{tf(
+              'ui.cognitive.summary',
+              'Possible pattern: {hypothesis}. This is a revisable judgment based only on your structured practice answers.',
+              { hypothesis: cognitiveLabel },
+            )}</p>
+            <ul>
+              {(cognitiveHypothesis.evidence || []).map((item, index) => (
+                <li key={item.evidence_id || `${item.direction || 'evidence'}-${index}`}>
+                  <strong>{item.direction === 'counter'
+                    ? t('ui.cognitive.evidence_counter', 'Counter-evidence')
+                    : t('ui.cognitive.evidence_support', 'Supporting evidence')}</strong>
+                  <span>{String(item.evidence_span || '')}</span>
+                </li>
+              ))}
+              {!cognitiveHypothesis.evidence?.length ? (
+                <li>
+                  <span>{t(
+                    'ui.cognitive.evidence_unavailable',
+                    'Evidence details are temporarily unavailable.',
+                  )}</span>
+                </li>
+              ) : null}
+            </ul>
+            {cognitiveControlStatus ? (
+              <p className="study-panel__cognitive-control-status" role="status">
+                {cognitiveControlStatus}
+              </p>
+            ) : null}
+            <div className="study-panel__actions study-panel__cognitive-actions">
+              <button
+                type="button"
+                disabled={cognitiveControlBusy}
+                onClick={() => void applyCognitiveControl('dismiss')}
+              >
+                {t('ui.cognitive.dismiss', 'This judgment is wrong')}
+              </button>
+              <button
+                type="button"
+                disabled={cognitiveControlBusy}
+                onClick={() => void applyCognitiveControl('suppress')}
+              >
+                {t('ui.cognitive.suppress', 'Not now')}
+              </button>
+              <button
+                type="button"
+                className="study-panel__cognitive-delete"
+                disabled={cognitiveControlBusy}
+                onClick={() => void applyCognitiveControl('delete')}
+              >
+                {t('ui.cognitive.delete', 'Delete judgment')}
+              </button>
+            </div>
+          </div>
+        </aside>
       ) : null}
       <div ref={replySectionRef}>
         <div className="study-panel__reply-label">{t('ui.label.reply', 'Reply')}</div>
