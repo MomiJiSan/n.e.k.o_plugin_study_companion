@@ -24,7 +24,7 @@ def test_static_ocr_settings_use_rapidocr_language_contract() -> None:
         assert f'<option value="{value}"' in index
     assert '<input id="settingsOcrLanguages"' not in index
     assert './dependency-controller.js?v=study-rapidocr-only-0.2.1' in index
-    assert './main.js?v=study-scanned-pdf-hybrid-0.2.3' in index
+    assert './main.js?v=study-scanned-pdf-hybrid-0.2.4' in index
     assert "const rapidocr = config.rapidocr || {};" in main
     assert "rapidocr.lang_type" in main
     assert "ocr.languages =" not in main

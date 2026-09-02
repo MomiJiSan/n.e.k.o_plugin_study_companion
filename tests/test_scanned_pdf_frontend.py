@@ -73,7 +73,7 @@ def test_scanner_loads_before_document_controller_and_timeout_is_registered() ->
     scanner_position = index.index("./scanned-pdf-ocr.js")
     controller_position = index.index("./document-controller.js")
     assert scanner_position < controller_position
-    assert "./main.js?v=study-scanned-pdf-hybrid-0.2.3" in index
+    assert "./main.js?v=study-scanned-pdf-hybrid-0.2.4" in index
     assert "study_ocr_document_capabilities: 15000" in MAIN.read_text(encoding="utf-8")
     assert "study_ocr_document_page: 45000" in MAIN.read_text(encoding="utf-8")
 

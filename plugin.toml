@@ -4,7 +4,7 @@ name = "Study Companion"
 description = "An adaptive study companion that can classify the screen, generate questions, evaluate answers, explain concepts, and summarize sessions."
 short_description = "OCR, tutoring, and session summaries for study sessions."
 keywords = ["study", "ocr", "tutor", "concept", "learning"]
-version = "0.2.3"
+version = "0.2.4"
 type = "plugin"
 entry = "plugin.plugins.study_companion:StudyCompanionPlugin"
 
