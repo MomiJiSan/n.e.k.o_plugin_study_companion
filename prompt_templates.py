@@ -143,6 +143,15 @@ STUDY_QUESTION_GENERATE_REQUIREMENTS = (
     "15. Output must match this JSON structure:\n"
 )
 
+STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS = (
+    "Additional requirements for targeted questions:\n"
+    "1. reference_answer must exactly copy answer.\n"
+    "2. accepted_answers must include answer, contain at most 12 unique items, "
+    "and each item must be at most 500 characters.\n"
+    "3. difficulty must exactly copy "
+    "context.knowledge_question_params.suggested_difficulty.\n"
+)
+
 STUDY_ANSWER_EVALUATE_SYSTEM_PROMPT = (
     "You are a conservative study answer evaluator. "
     "Judge only what the context supports. Return exactly one valid JSON object."
