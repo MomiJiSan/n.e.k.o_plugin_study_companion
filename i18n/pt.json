@@ -722,7 +722,7 @@
     "ui.error.document_no_readable_text":  "Nenhum texto legível foi encontrado.",
     "ui.error.document_pdf_ocr_disabled":  "O reconhecimento de PDF digitalizado exige que o OCR esteja ativado nas configurações do Study Companion.",
     "ui.error.document_pdf_ocr_unavailable":  "O mecanismo de OCR configurado está indisponível. Verifique as dependências de OCR nas configurações do Study Companion.",
-    "ui.error.document_pdf_ocr_too_many_pages":  "O reconhecimento de PDF digitalizado aceita até 20 páginas.",
+    "ui.error.document_pdf_ocr_too_many_pages":  "A inspeção de PDF aceita até 40 páginas, com OCR em até 20 páginas candidatas.",
     "ui.error.document_pdf_render_failed":  "Não foi possível renderizar uma página do PDF digitalizado.",
     "ui.error.document_pdf_page_too_large":  "Uma página do PDF digitalizado é grande demais para ser reconhecida com segurança.",
     "ui.error.document_pdf_ocr_timeout":  "O reconhecimento do PDF digitalizado esgotou o tempo. Tente novamente.",

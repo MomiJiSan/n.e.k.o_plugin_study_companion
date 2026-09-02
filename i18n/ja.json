@@ -722,7 +722,7 @@
     "ui.error.document_no_readable_text":  "読み取り可能な文字が見つかりません。",
     "ui.error.document_pdf_ocr_disabled":  "スキャン PDF の文字認識には、Study Companion の設定で OCR を有効にする必要があります。",
     "ui.error.document_pdf_ocr_unavailable":  "文字認識を利用できません。Study Companion の設定で状態を確認してください。",
-    "ui.error.document_pdf_ocr_too_many_pages":  "スキャン PDF の文字認識は 20 ページまで対応しています。",
+    "ui.error.document_pdf_ocr_too_many_pages":  "PDF は最大 40 ページまで確認でき、OCR は候補ページ最大 20 ページまで対応します。",
     "ui.error.document_pdf_render_failed":  "スキャン PDF のページを描画できませんでした。",
     "ui.error.document_pdf_page_too_large":  "スキャン PDF のページが大きすぎるため、安全に文字を認識できません。",
     "ui.error.document_pdf_ocr_timeout":  "スキャン PDF の文字認識がタイムアウトしました。再試行してください。",

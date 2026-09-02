@@ -1478,7 +1478,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       document_parse_permission_denied: ['ui.error.document_parse_permission_denied', 'This panel is not permitted to parse documents.'],
       document_pdf_ocr_disabled: ['ui.error.document_pdf_ocr_disabled', 'Document OCR is disabled in Study Companion settings.'],
       document_pdf_ocr_unavailable: ['ui.error.document_pdf_ocr_unavailable', 'The configured document OCR backend is unavailable.'],
-      document_pdf_ocr_too_many_pages: ['ui.error.document_pdf_ocr_too_many_pages', 'Scanned PDFs are limited to 20 pages.'],
+      document_pdf_ocr_too_many_pages: ['ui.error.document_pdf_ocr_too_many_pages', 'PDF inspection supports up to 40 pages, with OCR on up to 20 candidate pages.'],
       document_pdf_render_failed: ['ui.error.document_pdf_render_failed', 'The scanned PDF page could not be rendered.'],
       document_pdf_page_too_large: ['ui.error.document_pdf_page_too_large', 'A scanned PDF page exceeds the OCR image limit.'],
       document_pdf_ocr_timeout: ['ui.error.document_pdf_ocr_timeout', 'Scanned PDF OCR timed out.'],

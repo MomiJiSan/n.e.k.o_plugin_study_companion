@@ -722,7 +722,7 @@
     "ui.error.document_no_readable_text":  "읽을 수 있는 텍스트가 없습니다.",
     "ui.error.document_pdf_ocr_disabled":  "스캔 PDF를 인식하려면 Study Companion 설정에서 OCR을 활성화해야 합니다.",
     "ui.error.document_pdf_ocr_unavailable":  "문자 인식을 사용할 수 없습니다. Study Companion 설정에서 상태를 확인하세요.",
-    "ui.error.document_pdf_ocr_too_many_pages":  "스캔 PDF 인식은 최대 20페이지까지 지원합니다.",
+    "ui.error.document_pdf_ocr_too_many_pages":  "PDF는 최대 40페이지까지 검사하며, OCR은 후보 페이지 중 최대 20페이지까지 지원합니다.",
     "ui.error.document_pdf_render_failed":  "스캔 PDF 페이지를 렌더링할 수 없습니다.",
     "ui.error.document_pdf_page_too_large":  "스캔 PDF 페이지가 너무 커서 안전하게 인식할 수 없습니다.",
     "ui.error.document_pdf_ocr_timeout":  "스캔 PDF 인식 시간이 초과되었습니다. 다시 시도하세요.",

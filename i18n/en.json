@@ -722,7 +722,7 @@
     "ui.error.document_no_readable_text":  "No readable text was found.",
     "ui.error.document_pdf_ocr_disabled":  "Scanned PDF recognition requires OCR to be enabled in Study Companion settings.",
     "ui.error.document_pdf_ocr_unavailable":  "Text recognition is unavailable. Check it in Study Companion settings.",
-    "ui.error.document_pdf_ocr_too_many_pages":  "Scanned PDF recognition supports up to 20 pages.",
+    "ui.error.document_pdf_ocr_too_many_pages":  "PDF inspection supports up to 40 pages, with OCR on up to 20 candidate pages.",
     "ui.error.document_pdf_render_failed":  "A scanned PDF page could not be rendered.",
     "ui.error.document_pdf_page_too_large":  "A scanned PDF page is too large to recognize safely.",
     "ui.error.document_pdf_ocr_timeout":  "Scanned PDF recognition timed out. Please retry.",
