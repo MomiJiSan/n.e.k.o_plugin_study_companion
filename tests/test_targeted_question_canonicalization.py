@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from targeted_question_contract import (
     canonicalize_targeted_question,
     validate_targeted_question,
