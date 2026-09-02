@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+# isort: split
 from adaptive_learning.cognitive_catalog import (
     COGNITIVE_CATALOG_V1,
     COLLEGE_CHAIN_RULE_TOPIC_ID,

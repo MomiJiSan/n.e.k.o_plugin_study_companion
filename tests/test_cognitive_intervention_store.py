@@ -9,6 +9,7 @@ from types import ModuleType
 
 import pytest
 
+# isort: split
 from adaptive_learning.cognitive_projection import CognitiveProjector
 
 ROOT = Path(__file__).resolve().parents[1]

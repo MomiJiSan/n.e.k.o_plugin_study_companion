@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+# isort: split
 from adaptive_learning.cognitive_delivery import (
     abandoned_intervention_event,
     committed_question_event,

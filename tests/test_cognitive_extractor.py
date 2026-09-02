@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+# isort: split
 from adaptive_learning.cognitive_catalog import (
     CHAIN_RULE_TOPIC_ID,
     COGNITIVE_CATALOG_V1,

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+# isort: split
 from adaptive_learning.cognitive_contracts import (
     CognitiveEvidenceDraft,
     CognitiveExtractionInput,
