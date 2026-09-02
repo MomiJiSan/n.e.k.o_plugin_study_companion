@@ -933,9 +933,17 @@ class _TutorContextSupportMixin:
             reply.payload = dict(duplicate_existing)
             async with _plugin_lock(self._lock):
                 self._state.last_answer_evaluation = dict(duplicate_existing)
-        await _await_completion_on_cancel(
-            self._persist_state(), logger=getattr(self, "logger", None)
-        )
+        async with _plugin_lock(self._lock):
+            previous_last_error = self._state.last_error
+            self._state.last_error = ""
+            try:
+                await _await_completion_on_cancel(
+                    self._persist_state(), logger=getattr(self, "logger", None)
+                )
+            except Exception:
+                if not self._state.last_error:
+                    self._state.last_error = previous_last_error
+                raise
         if public_payload is not None:
             payload = {
                 "operation": reply.operation,
