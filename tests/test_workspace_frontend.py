@@ -224,6 +224,14 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     assert "handleAdvancedSettingsKeydown" in main
     assert "advancedToggleBtn?.focus?.()" in main
 
+    save_settings = main[
+        main.index("async function saveSettingsConfig") : main.index("async function createRun")
+    ]
+    assert "setAdvancedSettingsOpen(false);" in save_settings
+    assert save_settings.index("setAdvancedSettingsOpen(false);") < save_settings.index(
+        "} catch (error) {"
+    )
+
 
 def test_knowledge_map_pr2_host_and_stale_response_contracts() -> None:
     index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")

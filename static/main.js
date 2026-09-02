@@ -2314,6 +2314,7 @@ async function saveSettingsConfig(statusTarget = settingsConfigStatus) {
     }
     setSettingsConfigStatus('ui.status.config_saved', 'Saved', statusTarget);
     window.parent.postMessage({type: 'neko-plugin-context-invalidated'}, window.location.origin);
+    setAdvancedSettingsOpen(false);
     if (surfaceDrawer?.dataset.open === 'true' && surfaceDrawer.dataset.surfaceId === 'note-exporter') {
       const activeExporter = surfaceDrawerBody?.querySelector('[data-surface="note-exporter"]');
       if (activeExporter?.dataset.notebookSelection === 'true') {
