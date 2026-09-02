@@ -232,7 +232,9 @@ CHAIN_RULE_HYPOTHESES = (
         code="omit_inner_derivative",
         description=(
             "The learner differentiates the outer function but omits the "
-            "derivative of the inner function."
+            "derivative of the inner function entirely. If a non-constant "
+            "inner-derivative factor is attempted but is mathematically "
+            "wrong, use differentiate_inner_incorrectly instead."
         ),
         availability="active",
         competing_hypothesis_codes=(
@@ -245,7 +247,9 @@ CHAIN_RULE_HYPOTHESES = (
         code="differentiate_inner_incorrectly",
         description=(
             "The learner attempts the chain rule but differentiates the inner "
-            "function incorrectly."
+            "function incorrectly. This requires an attempted non-constant "
+            "inner-derivative factor; a completely absent factor belongs to "
+            "omit_inner_derivative."
         ),
         competing_hypothesis_codes=("omit_inner_derivative",),
     ),

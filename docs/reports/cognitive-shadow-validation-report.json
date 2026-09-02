@@ -1,0 +1,896 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-02T15:47:34.113103Z",
+  "scope": {
+    "topics": [
+      "calculus.chain_rule",
+      "college_chain_rule"
+    ],
+    "active_hypotheses": [
+      "omit_inner_derivative"
+    ],
+    "shadow_hypotheses": [
+      "differentiate_inner_incorrectly",
+      "confuse_product_and_chain"
+    ],
+    "terminal_stage": "monitored"
+  },
+  "sample_set": {
+    "path": "tests/fixtures/cognitive_chain_rule_shadow_samples.json",
+    "count": 22,
+    "standard": 15,
+    "adversarial": 7
+  },
+  "reference_contract_evaluation": {
+    "sample_count": 22,
+    "exact_match_count": 22,
+    "exact_match_rate": 1.0,
+    "expected_item_recall": 1.0,
+    "unexpected_item_rate": 0.0,
+    "non_empty_span_rate": 1.0,
+    "failure_reasons": {},
+    "hypothesis_metrics": {
+      "omit_inner_derivative": {
+        "expected": 5,
+        "predicted": 5,
+        "matched": 5,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "differentiate_inner_incorrectly": {
+        "expected": 5,
+        "predicted": 5,
+        "matched": 5,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "confuse_product_and_chain": {
+        "expected": 6,
+        "predicted": 6,
+        "matched": 6,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    },
+    "adversarial": {
+      "sample_count": 7,
+      "exact_match_count": 7,
+      "unexpected_evidence_count": 0,
+      "safe_failure_count": 0
+    },
+    "rows": [
+      {
+        "id": "omit-sin-square",
+        "kind": "standard",
+        "expected": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "omit-exp-affine",
+        "kind": "standard",
+        "expected": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "omit-log-affine",
+        "kind": "standard",
+        "expected": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "omit-polynomial-power",
+        "kind": "standard",
+        "expected": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "omit_inner_derivative",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "counter-omit",
+        "kind": "standard",
+        "expected": [
+          [
+            "omit_inner_derivative",
+            "counter"
+          ]
+        ],
+        "actual": [
+          [
+            "omit_inner_derivative",
+            "counter"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "inner-sin-cube",
+        "kind": "standard",
+        "expected": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "inner-exp-square",
+        "kind": "standard",
+        "expected": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "inner-log-quartic",
+        "kind": "standard",
+        "expected": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "inner-root-cube",
+        "kind": "standard",
+        "expected": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "differentiate_inner_incorrectly",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "counter-inner",
+        "kind": "standard",
+        "expected": [
+          [
+            "differentiate_inner_incorrectly",
+            "counter"
+          ]
+        ],
+        "actual": [
+          [
+            "differentiate_inner_incorrectly",
+            "counter"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "confuse-sin-square-product",
+        "kind": "standard",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "confuse-exp-affine-product",
+        "kind": "standard",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "confuse-cos-affine-product",
+        "kind": "standard",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "confuse-power-product",
+        "kind": "standard",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "support"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "counter-confusion",
+        "kind": "standard",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "counter"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "counter"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-sign-only",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-outer-only",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-dont-know",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-unrelated-answer",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-invent-code",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-json-injection",
+        "kind": "adversarial",
+        "expected": [],
+        "actual": [],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      },
+      {
+        "id": "adversarial-correct-with-product-word",
+        "kind": "adversarial",
+        "expected": [
+          [
+            "confuse_product_and_chain",
+            "counter"
+          ]
+        ],
+        "actual": [
+          [
+            "confuse_product_and_chain",
+            "counter"
+          ]
+        ],
+        "status": "success",
+        "failure_reason": "",
+        "exact_match": true
+      }
+    ]
+  },
+  "model_unavailable_fail_closed": {
+    "passed": true,
+    "status": "failed",
+    "failure_reason": "model_unavailable",
+    "evidence_count": 0
+  },
+  "targeted_tests": {
+    "passed": true,
+    "exit_code": 0,
+    "duration_seconds": 3.378,
+    "files": [
+      "tests/test_cognitive_extractor.py",
+      "tests/test_cognitive_model_gateway.py",
+      "tests/test_cognitive_projection.py",
+      "tests/test_cognitive_store.py",
+      "tests/test_cognitive_v2_projection_store.py",
+      "tests/test_cognitive_state_policy.py",
+      "tests/test_cognitive_intervention_validation.py",
+      "tests/test_cognitive_answer_event_integration.py",
+      "tests/test_cognitive_delivery.py",
+      "tests/test_cognitive_shadow_validation.py"
+    ],
+    "summary": [
+      "140 passed in 2.68s"
+    ]
+  },
+  "engineering_checks": [
+    {
+      "requirement": "乱序、并发、lease 接管、版本重跑、全量重建一致性",
+      "status": "PASS",
+      "evidence": [
+        "test_cognitive_shadow_validation.py",
+        "test_cognitive_projection.py",
+        "test_cognitive_store.py",
+        "test_cognitive_v2_projection_store.py"
+      ]
+    },
+    {
+      "requirement": "同题重试与同模板变体去重",
+      "status": "PASS",
+      "evidence": [
+        "test_cognitive_projection.py"
+      ]
+    },
+    {
+      "requirement": "probe → repair → transfer → monitored",
+      "status": "PASS",
+      "evidence": [
+        "test_cognitive_shadow_validation.py",
+        "test_cognitive_projection.py",
+        "test_cognitive_intervention_validation.py"
+      ]
+    },
+    {
+      "requirement": "所有权边界与失效绑定 fail-closed",
+      "status": "PASS",
+      "evidence": [
+        "test_cognitive_state_policy.py",
+        "test_cognitive_intervention_validation.py",
+        "test_cognitive_answer_event_integration.py"
+      ]
+    }
+  ],
+  "answer_commit_latency": {
+    "environment": "synthetic_local_sqlite_provisional",
+    "iterations_per_arm": 200,
+    "warmup_per_arm": 20,
+    "off": {
+      "p50_ms": 0.7369,
+      "p95_ms": 1.1187
+    },
+    "on": {
+      "p50_ms": 0.8429,
+      "p95_ms": 1.2098
+    },
+    "p95_delta_ms": 0.0911,
+    "gate_ms": 5.0,
+    "gate_passed": true,
+    "notes": "Measures only the synchronous atomic enqueue path; no LLM call is in the answer transaction."
+  },
+  "configured_model_preliminary": {
+    "status": "EVALUATED_WITH_SAFE_FAILURES",
+    "runtime": {
+      "group": "agent",
+      "model": "qwen3.7-plus-2026-05-26",
+      "provider_type": "openai_compatible",
+      "configured": true,
+      "credential_configured": true,
+      "transport": "openai_compatible",
+      "transport_supported": true,
+      "vision_capability": "not_applicable",
+      "api_source": "neko_managed",
+      "provider_code": "qwen",
+      "is_free": null,
+      "endpoint_hint": "dashscope.aliyuncs.com"
+    },
+    "reason": "",
+    "evaluation": {
+      "sample_count": 22,
+      "exact_match_count": 13,
+      "exact_match_rate": 0.5909090909090909,
+      "expected_item_recall": 0.4375,
+      "unexpected_item_rate": 0.0,
+      "non_empty_span_rate": 1.0,
+      "failure_reasons": {
+        "invalid_model_output": 8
+      },
+      "hypothesis_metrics": {
+        "omit_inner_derivative": {
+          "expected": 5,
+          "predicted": 2,
+          "matched": 2,
+          "precision": 1.0,
+          "recall": 0.4
+        },
+        "differentiate_inner_incorrectly": {
+          "expected": 5,
+          "predicted": 1,
+          "matched": 1,
+          "precision": 1.0,
+          "recall": 0.2
+        },
+        "confuse_product_and_chain": {
+          "expected": 6,
+          "predicted": 4,
+          "matched": 4,
+          "precision": 1.0,
+          "recall": 0.6666666666666666
+        }
+      },
+      "adversarial": {
+        "sample_count": 7,
+        "exact_match_count": 7,
+        "unexpected_evidence_count": 0,
+        "safe_failure_count": 0
+      },
+      "rows": [
+        {
+          "id": "omit-sin-square",
+          "kind": "standard",
+          "expected": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "omit-exp-affine",
+          "kind": "standard",
+          "expected": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "omit-log-affine",
+          "kind": "standard",
+          "expected": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "omit-polynomial-power",
+          "kind": "standard",
+          "expected": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "actual": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "counter-omit",
+          "kind": "standard",
+          "expected": [
+            [
+              "omit_inner_derivative",
+              "counter"
+            ]
+          ],
+          "actual": [
+            [
+              "omit_inner_derivative",
+              "counter"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "inner-sin-cube",
+          "kind": "standard",
+          "expected": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "inner-exp-square",
+          "kind": "standard",
+          "expected": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "actual": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "inner-log-quartic",
+          "kind": "standard",
+          "expected": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "inner-root-cube",
+          "kind": "standard",
+          "expected": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "counter-inner",
+          "kind": "standard",
+          "expected": [
+            [
+              "differentiate_inner_incorrectly",
+              "counter"
+            ]
+          ],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": false
+        },
+        {
+          "id": "confuse-sin-square-product",
+          "kind": "standard",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "confuse-exp-affine-product",
+          "kind": "standard",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "confuse-cos-affine-product",
+          "kind": "standard",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "confuse-power-product",
+          "kind": "standard",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "actual": [],
+          "status": "failed",
+          "failure_reason": "invalid_model_output",
+          "exact_match": false
+        },
+        {
+          "id": "counter-confusion",
+          "kind": "standard",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "counter"
+            ]
+          ],
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "counter"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-sign-only",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-outer-only",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-dont-know",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-unrelated-answer",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-invent-code",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-json-injection",
+          "kind": "adversarial",
+          "expected": [],
+          "actual": [],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        },
+        {
+          "id": "adversarial-correct-with-product-word",
+          "kind": "adversarial",
+          "expected": [
+            [
+              "confuse_product_and_chain",
+              "counter"
+            ]
+          ],
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "counter"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
+        }
+      ]
+    }
+  },
+  "gates": {
+    "engineering_simulation": "PASS",
+    "read_only": "NOT_RELEASED",
+    "personal_beta": "NOT_RELEASED",
+    "active_local": "NOT_RELEASED"
+  },
+  "real_user_gates": {
+    "seven_day_shadow": "NOT_EVALUATED",
+    "thirty_structured_attempts": "NOT_EVALUATED",
+    "ten_question_families": "NOT_EVALUATED",
+    "supported_human_precision": "NOT_EVALUATED",
+    "real_user_denial_rate": "NOT_EVALUATED",
+    "five_complete_intervention_loops": "NOT_EVALUATED"
+  },
+  "boundary_assertion": "Cognitive Engine changed no Coach topic selection, Mastery, FSRS, course progress, or wrong-question state in this validation.",
+  "limitations": [
+    "Synthetic samples and simulations are not real-user release evidence.",
+    "Configured-model results are preliminary and do not calibrate probabilities.",
+    "The latency benchmark is local SQLite only and excludes asynchronous extraction.",
+    "No full test suite was run."
+  ]
+}
