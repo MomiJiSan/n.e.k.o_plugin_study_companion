@@ -51,6 +51,151 @@ def _attempt_signal_values(kwargs: Mapping[str, object]) -> tuple[int | None, bo
 
 
 class _TutorAnswerEntriesMixin:
+    def _learning_update_evidence(
+        self,
+        *,
+        topic_id: str,
+        payload: Mapping[str, object],
+        question_payload: Mapping[str, object],
+        mastery_status: str,
+    ) -> dict:
+        """Read post-commit display facts without changing the answer transaction."""
+
+        store = self._knowledge_tracker.store
+        wrong_status = ""
+        binding = question_payload.get("target_binding")
+        origin_wrong_id = str(
+            (binding.get("origin_wrong_question_id") if isinstance(binding, Mapping) else "")
+            or ""
+        ).strip()
+        if origin_wrong_id:
+            get_wrong = getattr(store, "get_wrong_question", None)
+            wrong = get_wrong(origin_wrong_id) if callable(get_wrong) else None
+            if isinstance(wrong, Mapping):
+                wrong_status = str(wrong.get("status") or "").strip()
+        if not wrong_status:
+            active_wrong = store.list_wrong_questions(
+                limit=1,
+                topic_id=topic_id,
+                statuses=("active", "retrying"),
+            )
+            if active_wrong:
+                wrong_status = str((active_wrong[0] or {}).get("status") or "active").strip()
+
+        next_review_at = ""
+        get_fsrs_card = getattr(store, "get_fsrs_card", None)
+        card_row = get_fsrs_card(topic_id) if callable(get_fsrs_card) else None
+        card = card_row.get("card") if isinstance(card_row, Mapping) else None
+        if isinstance(card, Mapping):
+            next_review_at = str(card.get("due") or "").strip()
+
+        def optional_float(value: object) -> float | None:
+            try:
+                return float(value) if value is not None else None
+            except (TypeError, ValueError, OverflowError):
+                return None
+
+        return {
+            "status": "updated",
+            "topic_id": topic_id,
+            "mastery_before": optional_float(payload.get("mastery_before")),
+            "mastery_after": optional_float(payload.get("mastery_after")),
+            "mastery_status": str(mastery_status or "insufficient_evidence"),
+            "wrong_question_status": wrong_status,
+            "next_review_at": next_review_at,
+        }
+
+    async def _build_adaptive_next_step(
+        self,
+        *,
+        question_payload: Mapping[str, object],
+        learning_update: dict,
+        validated_target: bool,
+        knowledge_tracking_status: str,
+    ) -> tuple[dict, dict]:
+        if knowledge_tracking_status == "qa_only" or not validated_target:
+            not_applicable = {"status": "not_applicable"}
+            return not_applicable, {
+                "status": "not_applicable",
+                "action": "choose_scope",
+                "available_now": False,
+            }
+
+        adaptive_loop = getattr(getattr(self, "_cfg", None), "adaptive_loop", None)
+        preview_enabled = getattr(
+            adaptive_loop,
+            "next_step_preview_enabled",
+            getattr(getattr(self, "_cfg", None), "next_step_preview_enabled", True),
+        )
+        if preview_enabled is False:
+            return learning_update, {
+                "status": "disabled",
+                "action": "choose_scope",
+                "available_now": False,
+            }
+
+        try:
+            plan_id = str(question_payload.get("learning_plan_id") or "").strip()
+            plan_progress: dict = {}
+            if plan_id:
+                service_provider = getattr(self, "_learning_plan_service", None)
+                service = service_provider() if callable(service_provider) else service_provider
+                reconcile = getattr(service, "reconcile", None)
+                if not callable(reconcile):
+                    raise RuntimeError("learning plan service unavailable")
+                plan_status = await asyncio.to_thread(reconcile, plan_id)
+                if isinstance(plan_status, Mapping):
+                    plan_progress = dict(plan_status.get("progress") or {})
+                    learning_update["plan_progress"] = plan_progress
+                    if str(plan_status.get("status") or "") == "completed":
+                        return learning_update, {
+                            "status": "ready",
+                            "action": "summarize_plan",
+                            "learning_plan_id": plan_id,
+                            "plan_progress": plan_progress,
+                            "available_now": True,
+                        }
+
+            build_context = getattr(self, "_build_targeted_question_context", None)
+            if not callable(build_context):
+                raise RuntimeError("adaptive question context unavailable")
+            context = await asyncio.to_thread(build_context)
+            if not isinstance(context, Mapping) or context.get("no_data"):
+                next_review_at = str(learning_update.get("next_review_at") or "").strip()
+                return learning_update, {
+                    "status": "ready",
+                    "action": "wait_until" if next_review_at else "choose_scope",
+                    "wait_until": next_review_at,
+                    "available_now": False,
+                    "plan_progress": plan_progress,
+                }
+            reason = str(context.get("selection_reason") or "recommended")
+            action = "review_due" if reason == "due_review" else "generate_question"
+            return learning_update, {
+                "status": "ready",
+                "action": action,
+                "selection_context_id": str(context.get("selection_context_id") or ""),
+                "expires_at": context.get("expires_at") or 0,
+                "reason": reason,
+                "topic_id": str(context.get("selected_topic_id") or ""),
+                "topic_name": str(context.get("selected_topic_name") or ""),
+                "difficulty": context.get("difficulty") or 3,
+                "available_now": bool(context.get("selection_context_id")),
+                "selection_domain": str(context.get("selection_domain") or "global"),
+                "learning_plan_id": str(context.get("learning_plan_id") or ""),
+                "learning_plan_revision": context.get("learning_plan_revision") or 0,
+                "plan_progress": dict(context.get("plan_progress") or plan_progress),
+            }
+        except Exception as exc:
+            logger = getattr(self, "logger", None)
+            if logger is not None:
+                logger.warning("study adaptive next step preview failed: {}", exc)
+            return learning_update, {
+                "status": "temporarily_unavailable",
+                "action": "choose_scope",
+                "available_now": False,
+            }
+
     def _deterministic_assessment_flags(self) -> dict[str, bool]:
         """Read only explicit opt-in assessment switches from runtime config."""
 
@@ -221,6 +366,7 @@ class _TutorAnswerEntriesMixin:
             topic_id
             and str(payload.get("knowledge_tracking_status") or "") != "qa_only"
         )
+        target_bound = validated_target
         mastery_snapshot = None
         has_active_wrong_question = False
         active_scope_matches = False
@@ -245,7 +391,7 @@ class _TutorAnswerEntriesMixin:
                         question_payload
                     )
                 )
-        return build_practice_outcome(
+        outcome = build_practice_outcome(
             verdict=payload.get("verdict"),
             practice_scope=(
                 question_payload.get("practice_scope")
@@ -257,6 +403,42 @@ class _TutorAnswerEntriesMixin:
             mastery_snapshot=mastery_snapshot,
             has_active_wrong_question=has_active_wrong_question,
         )
+        knowledge_tracking_status = str(
+            payload.get("knowledge_tracking_status") or ""
+        ).strip()
+        if knowledge_tracking_status == "qa_only" or not target_bound:
+            learning_update: dict = {"status": "not_applicable"}
+        else:
+            try:
+                learning_update = await asyncio.to_thread(
+                    self._learning_update_evidence,
+                    topic_id=topic_id,
+                    payload=payload,
+                    question_payload=question_payload,
+                    mastery_status=str(outcome.get("mastery_status") or ""),
+                )
+            except Exception as exc:
+                logger = getattr(self, "logger", None)
+                if logger is not None:
+                    logger.warning("study learning update enrichment failed: {}", exc)
+                learning_update = {
+                    "status": "temporarily_unavailable",
+                    "topic_id": topic_id,
+                    "mastery_before": payload.get("mastery_before"),
+                    "mastery_after": payload.get("mastery_after"),
+                    "mastery_status": outcome.get("mastery_status") or "",
+                }
+        learning_update, next_step = await self._build_adaptive_next_step(
+            question_payload=question_payload,
+            learning_update=learning_update,
+            validated_target=target_bound,
+            knowledge_tracking_status=knowledge_tracking_status,
+        )
+        return {
+            **outcome,
+            "learning_update": learning_update,
+            "next_step": next_step,
+        }
 
     async def _clear_attempt_evaluation_reservation(
         self, attempt_id: str, *, recover_cached: bool = False
@@ -309,6 +491,8 @@ class _TutorAnswerEntriesMixin:
             "attempt_status",
             "scope_status",
             "mastery_status",
+            "learning_update",
+            "next_step",
         ],
     )
     async def study_evaluate_answer(
@@ -701,6 +885,10 @@ class _TutorAnswerEntriesMixin:
                         self._state.current_question["answer_evaluation_cache"] = (
                             public_eval_cache
                         )
+                        # Persist the same public, post-commit enrichment used
+                        # by the attempt cache so both UIs can restore the
+                        # visible loop state after a refresh or restart.
+                        self._state.last_answer_evaluation = dict(public_eval_cache)
                         final_attempt_state_staged = True
                 await self._persist_state()
             topic = str(

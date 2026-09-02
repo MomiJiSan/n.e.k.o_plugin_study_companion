@@ -49,6 +49,7 @@ if (!outcomeFormatters) {
 }
 let currentMode = 'companion';
 let currentMemoryCard = null;
+let currentNextStep = null;
 let memoryDecks = [];
 let memoryDeckDialogResolve = null;
 let mapRequestId=0;
@@ -87,6 +88,19 @@ const hintText = $id('hintText');
 const feedbackPanel = $id('feedbackPanel');
 const feedbackText = $id('feedbackText');
 const masteryDeltaText = $id('masteryDeltaText');
+const nextStepDetails = $id('nextStepDetails');
+const continueQuestionBtn = $id('continueQuestionBtn');
+const learningPlanCard = $id('learningPlanCard');
+const learningPlanTitle = $id('learningPlanTitle');
+const learningPlanSummary = $id('learningPlanSummary');
+const learningPlanWarning = $id('learningPlanWarning');
+const learningPlanTopics = $id('learningPlanTopics');
+const learningPlanOverride = $id('learningPlanOverride');
+const learningPlanNotice = $id('learningPlanNotice');
+const learningPlanActivateBtn = $id('learningPlanActivateBtn');
+const learningPlanPauseBtn = $id('learningPlanPauseBtn');
+const learningPlanResumeBtn = $id('learningPlanResumeBtn');
+const learningPlanCancelBtn = $id('learningPlanCancelBtn');
 const screenType = $id('screenType');
 const questionStatus = $id('questionStatus');
 const evaluationStatus = $id('evaluationStatus');
@@ -207,6 +221,11 @@ let questionStartedAt = 0;
 let hintRevealed = false;
 let currentSelectionContext = null;
 let currentPracticeScope=null;
+let currentLearningPlanDraft=null;
+let currentLearningPlan=null;
+let currentLearningPlanMapping={};
+let currentLearningPlanTopicIds=[];
+let learningPlanBusy=false;
 let learningProfile = readLearningProfile();
 let knowledgeMapStage = '';
 let lastKnowledgeMapPayload = null;
@@ -342,8 +361,233 @@ function screenLabel(type) {
 
 function selectionReasonLabel(reason) {
   const normalized = String(reason || 'no_data');
-  const known = ['retry', 'due_review', 'weak_topic', 'recommended', 'no_data', 'loading'].includes(normalized);
+  const known = ['retry', 'due_review', 'weak_topic', 'blocked_diagnostic', 'recommended', 'no_data', 'loading'].includes(normalized);
   return known ? t(`ui.practice.reason.${normalized}`, normalized) : normalized;
+}
+
+function wrongQuestionStatusLabel(status) {
+  const normalized = String(status || '').trim();
+  return normalized
+    ? t(`ui.practice.wrong_status.${normalized}`, normalized)
+    : t('ui.practice.wrong_status.none', 'None');
+}
+
+function nextStepActionLabel(action) {
+  const normalized = String(action || 'choose_scope').trim();
+  return t(`ui.practice.next_step.${normalized}`, normalized);
+}
+
+function pluginErrorCode(error) {
+  return String(error?.code || error?.message || '').trim();
+}
+
+function formatLearningPlanError(error) {
+  const code = pluginErrorCode(error);
+  const known = {
+    ACTIVE_LEARNING_PLAN_EXISTS: ['ui.learning_plan.error.active_exists', 'Another learning plan is already active. Pause or cancel it first.'],
+    LEARNING_PLAN_CHANGED: ['ui.learning_plan.error.changed', 'This learning plan changed. Refresh it and try again.'],
+    LEARNING_PLAN_NOT_ACTIVE: ['ui.learning_plan.error.not_active', 'This learning plan is no longer active.'],
+    LEARNING_PLAN_TOPIC_REMOVED: ['ui.learning_plan.error.topic_removed', 'A topic in this learning plan is no longer available.'],
+    LEARNING_PLAN_CORE_TOPIC_REQUIRED: ['ui.learning_plan.error.core_required', 'Keep at least one core topic in the plan.'],
+    LEARNING_PLAN_TOPIC_INJECTION_REJECTED: ['ui.learning_plan.error.invalid_selection', 'Choose only topics proposed for this learning plan.'],
+    SELECTION_CONTEXT_EXPIRED: ['ui.learning_plan.error.context_expired', 'The question selection expired. Refreshing the plan will create a new one.'],
+  };
+  const message = known[code];
+  return message ? t(message[0], message[1]) : formatPluginError(error);
+}
+
+function learningPlanAcceptedTopicIds() {
+  return [...currentLearningPlanTopicIds];
+}
+
+function learningPlanHasSelectedCore() {
+  return (currentLearningPlanDraft?.items || []).some((item) => (
+    item.role === 'core' && currentLearningPlanTopicIds.includes(String(item.topic_id || ''))
+  ));
+}
+
+function renderLearningPlan() {
+  const plan = currentLearningPlanDraft || currentLearningPlan;
+  if (!learningPlanCard) return;
+  learningPlanCard.hidden = !plan?.id;
+  if (!plan?.id) return;
+  const draft = plan.status === 'draft';
+  const progress = plan.progress || {};
+  if (learningPlanTitle) {
+    learningPlanTitle.textContent = draft
+      ? t('ui.learning_plan.draft_title', 'Confirm learning plan')
+      : (plan.display_title || t('ui.learning_plan.default_title', 'Imported learning plan'));
+  }
+  if (learningPlanSummary) {
+    learningPlanSummary.textContent = draft
+      ? tf('ui.learning_plan.detected_topics', 'Detected {count} topics', { count: (plan.items || []).length })
+      : tf('ui.learning_plan.progress_summary', '{mastered} / {total} mastered · {progressing} progressing · {review_due} due', {
+        mastered: progress.mastered || 0,
+        total: progress.total || (plan.items || []).length,
+        progressing: progress.progressing || 0,
+        review_due: progress.review_due || 0,
+      });
+  }
+  const warningParts = [];
+  const unmatched = Number(currentLearningPlanMapping.unmatched_count ?? plan.unmatched_count) || 0;
+  if (draft && unmatched > 0) warningParts.push(tf(
+    'ui.learning_plan.unmatched_warning',
+    '{count} parts of the material could not be matched to existing topics.',
+    { count: unmatched },
+  ));
+  if (draft && currentLearningPlanMapping.truncated) warningParts.push(t(
+    'ui.learning_plan.truncated_warning',
+    'Only the highest-confidence topics are shown. Narrow the material for a more focused plan.',
+  ));
+  if (learningPlanWarning) {
+    learningPlanWarning.textContent = warningParts.join(' ');
+    learningPlanWarning.hidden = warningParts.length === 0;
+  }
+  if (learningPlanTopics) {
+    learningPlanTopics.replaceChildren();
+    (plan.items || []).forEach((item) => {
+      const topicId = String(item.topic_id || '').trim();
+      if (!topicId) return;
+      const row = document.createElement('label');
+      if (draft) {
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = topicId;
+        input.checked = currentLearningPlanTopicIds.includes(topicId);
+        input.disabled = learningPlanBusy;
+        input.addEventListener('change', () => {
+          currentLearningPlanTopicIds = input.checked
+            ? Array.from(new Set([...currentLearningPlanTopicIds, topicId]))
+            : currentLearningPlanTopicIds.filter((id) => id !== topicId);
+          if (learningPlanActivateBtn) learningPlanActivateBtn.disabled = !learningPlanHasSelectedCore();
+        });
+        row.appendChild(input);
+      }
+      const name = document.createElement('span');
+      name.textContent = item.topic_name || topicId;
+      row.appendChild(name);
+      const detail = document.createElement('small');
+      detail.textContent = draft
+        ? `${t(`ui.learning_plan.role.${item.role || 'core'}`, item.role || 'core')} · ${t(`ui.learning_plan.confidence.${item.mapping_confidence || 'medium'}`, item.mapping_confidence || 'medium')}`
+        : t(`ui.learning_plan.item_state.${item.state || 'pending'}`, item.state || 'pending');
+      row.appendChild(detail);
+      learningPlanTopics.appendChild(row);
+    });
+  }
+  const manualOverride = Boolean(currentPracticeScope || currentSelectionContext?.practice_scope)
+    && plan.status === 'active';
+  if (learningPlanOverride) learningPlanOverride.hidden = !manualOverride;
+  if (learningPlanActivateBtn) {
+    learningPlanActivateBtn.hidden = !draft;
+    learningPlanActivateBtn.disabled = learningPlanBusy || !learningPlanHasSelectedCore();
+  }
+  if (learningPlanPauseBtn) {
+    learningPlanPauseBtn.hidden = plan.status !== 'active';
+    learningPlanPauseBtn.disabled = learningPlanBusy;
+  }
+  if (learningPlanResumeBtn) {
+    learningPlanResumeBtn.hidden = plan.status !== 'paused';
+    learningPlanResumeBtn.disabled = learningPlanBusy;
+  }
+  if (learningPlanCancelBtn) {
+    learningPlanCancelBtn.hidden = !['active', 'paused'].includes(plan.status);
+    learningPlanCancelBtn.disabled = learningPlanBusy;
+  }
+}
+
+async function captureLearningPlanDraft(payload = {}) {
+  let draft = payload.learning_plan_draft;
+  if (!draft?.id) return;
+  if (!draft.items?.length) {
+    try {
+      const data = await callPlugin('study_learning_plan_status', { plan_id: draft.id });
+      if (data.plan?.id) draft = data.plan;
+    } catch (_error) {
+      // Keep the compact completion payload visible if detail refresh fails.
+    }
+  }
+  currentLearningPlanDraft = draft;
+  currentLearningPlanMapping = payload.learning_plan_mapping || {};
+  currentLearningPlanTopicIds = (draft.items || [])
+    .map((item) => String(item.topic_id || '').trim())
+    .filter(Boolean);
+  if (learningPlanNotice) learningPlanNotice.textContent = '';
+  renderLearningPlan();
+}
+
+async function refreshLearningPlanStatus() {
+  try {
+    const data = await callPlugin('study_learning_plan_status');
+    currentLearningPlan = data.plan?.id ? data.plan : null;
+    renderLearningPlan();
+  } catch (error) {
+    if (learningPlanNotice) learningPlanNotice.textContent = formatLearningPlanError(error);
+  }
+}
+
+async function activateLearningPlan() {
+  if (!currentLearningPlanDraft?.id || learningPlanBusy) return;
+  learningPlanBusy = true;
+  renderLearningPlan();
+  try {
+    const data = await callPlugin('study_learning_plan_activate', {
+      plan_id: currentLearningPlanDraft.id,
+      revision: Number(currentLearningPlanDraft.revision || 1),
+      accepted_topic_ids: learningPlanAcceptedTopicIds(),
+    });
+    currentLearningPlan = data.plan?.id ? data.plan : null;
+    currentLearningPlanDraft = null;
+    currentLearningPlanMapping = {};
+    currentLearningPlanTopicIds = [];
+    if (learningPlanNotice) learningPlanNotice.textContent = t('ui.learning_plan.activated', 'Learning plan activated.');
+  } catch (error) {
+    if (learningPlanNotice) learningPlanNotice.textContent = formatLearningPlanError(error);
+  } finally {
+    learningPlanBusy = false;
+    renderLearningPlan();
+  }
+}
+
+async function changeLearningPlanStatus(action) {
+  if (!currentLearningPlan?.id || learningPlanBusy) return;
+  learningPlanBusy = true;
+  renderLearningPlan();
+  try {
+    const data = await callPlugin(action === 'pause' ? 'study_learning_plan_pause' : 'study_learning_plan_cancel', {
+      plan_id: currentLearningPlan.id,
+      revision: currentLearningPlan.revision,
+    });
+    currentLearningPlan = data.plan?.id ? data.plan : null;
+    if (learningPlanNotice) learningPlanNotice.textContent = t(
+      `ui.learning_plan.${action}d`,
+      action === 'pause' ? 'Learning plan paused.' : 'Learning plan canceled.',
+    );
+  } catch (error) {
+    if (learningPlanNotice) learningPlanNotice.textContent = formatLearningPlanError(error);
+  } finally {
+    learningPlanBusy = false;
+    renderLearningPlan();
+  }
+}
+
+async function resumeLearningPlan() {
+  if (!currentLearningPlan?.id || currentLearningPlan.status !== 'paused' || learningPlanBusy) return;
+  learningPlanBusy = true;
+  renderLearningPlan();
+  try {
+    const data = await callPlugin('study_learning_plan_activate', {
+      plan_id: currentLearningPlan.id,
+      revision: Number(currentLearningPlan.revision || 1),
+      accepted_topic_ids: (currentLearningPlan.items || []).map((item) => item.topic_id).filter(Boolean),
+    });
+    currentLearningPlan = data.plan?.id ? data.plan : null;
+    if (learningPlanNotice) learningPlanNotice.textContent = t('ui.learning_plan.resumed', 'Learning plan resumed.');
+  } catch (error) {
+    if (learningPlanNotice) learningPlanNotice.textContent = formatLearningPlanError(error);
+  } finally {
+    learningPlanBusy = false;
+    renderLearningPlan();
+  }
 }
 
 function setQuestionContext(data = {}) {
@@ -419,9 +663,12 @@ function setGeneratedQuestion(data = {}) {
 }
 
 function clearFeedback() {
+  currentNextStep = null;
   if (feedbackPanel) feedbackPanel.hidden = true;
   if (feedbackText) feedbackText.textContent = '';
   if (masteryDeltaText) masteryDeltaText.textContent = '';
+  if (nextStepDetails) nextStepDetails.textContent = '';
+  if (continueQuestionBtn) continueQuestionBtn.hidden = true;
   if (evaluationStatus) evaluationStatus.textContent = t('ui.status.ready', 'Ready');
 }
 
@@ -430,8 +677,11 @@ function renderFeedback(data = {}) {
     evaluationStatus.textContent = practiceAttemptMessage(data)
       || (data.verdict ? `${data.verdict}${Number.isFinite(Number(data.score)) ? ` / ${data.score}` : ''}` : '-');
   }
-  const masteryBefore = Number(data.mastery_before);
-  const masteryAfter = Number(data.mastery_after);
+  const learningUpdate = data.learning_update && typeof data.learning_update === 'object'
+    ? data.learning_update
+    : {};
+  const masteryBefore = Number(learningUpdate.mastery_before ?? data.mastery_before);
+  const masteryAfter = Number(learningUpdate.mastery_after ?? data.mastery_after);
   if (masteryDeltaText) {
     masteryDeltaText.textContent = Number.isFinite(masteryBefore) && Number.isFinite(masteryAfter)
       ? tf('ui.practice.mastery_delta_fmt', 'Mastery {before} -> {after}', {
@@ -453,9 +703,46 @@ function renderFeedback(data = {}) {
   if (feedbackText) {
     feedbackText.textContent = lines.join('\n');
   }
-  if (feedbackPanel) {
-    feedbackPanel.hidden = lines.length === 0 && !masteryDeltaText?.textContent;
+  currentNextStep = data.next_step && typeof data.next_step === 'object'
+    ? data.next_step
+    : null;
+  const planProgress = learningUpdate.plan_progress || currentNextStep?.plan_progress || {};
+  const nextLines = [
+    `${t('ui.practice.wrong_status_label', 'Wrong-question status')}: ${wrongQuestionStatusLabel(learningUpdate.wrong_question_status)}`,
+    learningUpdate.next_review_at
+      ? `${t('ui.practice.next_review_label', 'Next review')}: ${new Date(learningUpdate.next_review_at).toLocaleString()}`
+      : `${t('ui.practice.next_review_label', 'Next review')}: ${t('ui.practice.next_review_none', 'Not scheduled')}`,
+    Number(planProgress.total) > 0
+      ? tf('ui.practice.plan_progress_fmt', 'Plan progress: {mastered} / {total}', {
+        mastered: Number(planProgress.mastered || 0),
+        total: Number(planProgress.total || 0),
+      })
+      : '',
+    currentNextStep?.status === 'ready'
+      ? `${t('ui.practice.next_action', 'Next')}: ${nextStepActionLabel(currentNextStep.action)}`
+      : currentNextStep?.status === 'temporarily_unavailable'
+        ? t('ui.practice.next_step.temporarily_unavailable', 'Next-step preview is temporarily unavailable')
+        : '',
+    currentNextStep?.reason
+      ? tf('ui.practice.next_step_reason_fmt', 'Reason: {reason}', {
+        reason: selectionReasonLabel(currentNextStep.reason),
+      })
+      : '',
+  ].filter(Boolean);
+  if (nextStepDetails) nextStepDetails.textContent = nextLines.join('\n');
+  if (continueQuestionBtn) {
+    continueQuestionBtn.hidden = !(
+      currentNextStep?.status === 'ready'
+      && currentNextStep?.available_now === true
+    );
+    continueQuestionBtn.textContent = currentNextStep?.action === 'summarize_plan'
+      ? t('ui.button.view_plan_summary', 'View plan summary')
+      : t('ui.button.continue_next_question', 'Continue to next question');
   }
+  if (feedbackPanel) {
+    feedbackPanel.hidden = lines.length === 0 && nextLines.length === 0 && !masteryDeltaText?.textContent;
+  }
+  renderLearningPlan();
 }
 
 function formatPluginError(error) {
@@ -2596,18 +2883,41 @@ async function explainText(options = {}) {
   await refreshStatus({ updateReply: false }).catch((error) => { if (!n) throw error; setStatus(t('ui.status.reply_ready', 'Reply ready')); });
 }
 
-async function generateQuestion() {
+async function generateQuestion(preferredNextStep = null) {
   currentSelectionContext = null;
   await loadPracticeScope();
-  const context = await loadQuestionContext({ silent: true });
+  let context = preferredNextStep?.selection_context_id
+    ? {
+      selection_context_id: preferredNextStep.selection_context_id,
+      selected_topic_id: preferredNextStep.topic_id,
+      selected_topic_name: preferredNextStep.topic_name,
+      selection_reason: preferredNextStep.reason,
+      selection_domain: preferredNextStep.selection_domain,
+      learning_plan_id: preferredNextStep.learning_plan_id,
+      learning_plan_revision: preferredNextStep.learning_plan_revision,
+      plan_progress: preferredNextStep.plan_progress,
+      no_data: false,
+    }
+    : await loadQuestionContext({ silent: true });
   if (!context || context.no_data || !context.selection_context_id) {
     throw new Error(t('ui.error.no_targeted_question_data', 'Not enough study records to generate a practice question yet.'));
   }
   setStatus(t('ui.status.generating_question', 'Generating question...'));
   clearFeedback();
-  const data = await callPlugin('study_generate_targeted_question', {
-    selection_context_id: context.selection_context_id,
+  const requestQuestion = (selectionContextId) => callPlugin('study_generate_targeted_question', {
+    selection_context_id: selectionContextId,
   });
+  let data;
+  try {
+    data = await requestQuestion(context.selection_context_id);
+  } catch (error) {
+    if (!preferredNextStep?.selection_context_id || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
+      throw error;
+    }
+    context = await loadQuestionContext({ silent: true });
+    if (!context || context.no_data || !context.selection_context_id) throw error;
+    data = await requestQuestion(context.selection_context_id);
+  }
   setStatus(data.degraded
     ? t('ui.status.reply_ready_fallback', 'Reply ready (fallback)')
     : t('ui.status.reply_ready', 'Reply ready'));
@@ -2660,6 +2970,11 @@ async function evaluateAnswer() {
     return;
   }
   renderFeedback(data);
+  const updatedPlanProgress = data.learning_update?.plan_progress || data.next_step?.plan_progress;
+  if (updatedPlanProgress && currentLearningPlan) {
+    currentLearningPlan = { ...currentLearningPlan, progress: updatedPlanProgress };
+    renderLearningPlan();
+  }
   updatePracticeCompletionAction(data);
   const replyLines = [
     practiceAttemptMessage(data),
@@ -2671,6 +2986,14 @@ async function evaluateAnswer() {
   canEvaluateCurrentQuestion = false;
   if (evaluateAnswerBtn) evaluateAnswerBtn.disabled = true;
   await refreshStatus({ updateReply: false });
+}
+
+async function continueAdaptiveLoop() {
+  if (currentNextStep?.action === 'summarize_plan') {
+    await summarizeSession();
+    return;
+  }
+  await generateQuestion(currentNextStep);
 }
 
 async function summarizeSession() {
@@ -2833,6 +3156,10 @@ async function handleNekoCoachAction(action) {
 }
 
 const scannedPdfOcr = window.StudyScannedPdfOcr?.create({ callPlugin });
+async function handleDocumentAnalysisComplete(payload, options = {}) {
+  await captureLearningPlanDraft(payload || {});
+  await refreshStatus(options);
+}
 const documentController = window.StudyDocumentController.create({
   pluginId: PLUGIN_ID,
   callPlugin,
@@ -2844,7 +3171,7 @@ const documentController = window.StudyDocumentController.create({
     scrollReplyIntoView,
     formatPluginError,
   },
-  onAnalysisComplete: refreshStatus,
+  onAnalysisComplete: handleDocumentAnalysisComplete,
   scannedPdfOcr,
 });
 
@@ -2877,6 +3204,11 @@ async function bootstrap() {
   bindButton(explainBtn, explainText);
   documentController.bind();
   bindButton(evaluateAnswerBtn, evaluateAnswer);
+  bindButton(continueQuestionBtn, continueAdaptiveLoop);
+  bindButton(learningPlanActivateBtn, activateLearningPlan);
+  bindButton(learningPlanPauseBtn, () => changeLearningPlanStatus('pause'));
+  bindButton(learningPlanResumeBtn, resumeLearningPlan);
+  bindButton(learningPlanCancelBtn, () => changeLearningPlanStatus('cancel'));
   bindButton(summarizeBtn, summarizeSession);
   nekoCoachActionButtons.forEach((button) => {
     bindButton(button, () => handleNekoCoachAction(button.getAttribute('data-neko-coach-action')));
@@ -3084,6 +3416,7 @@ async function bootstrap() {
   });
   await refreshStatus();
   await loadPracticeScope({ silent: true }).catch(() => null);
+  await refreshLearningPlanStatus();
   await loadQuestionContext({ silent: true });
 }
 

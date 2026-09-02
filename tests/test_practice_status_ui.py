@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,121 @@ def test_both_practice_uis_submit_attempt_signals_without_exposing_answers() -> 
     assert "hintRevealedRef" in hosted
     assert "questionStartedAt" in static
     assert "hintRevealed" in static
+
+
+def test_both_practice_uis_render_next_step_without_automatic_generation() -> None:
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+    markup = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8") + markup
+
+    for source in (hosted, static):
+        assert "learning_update" in source
+        assert "next_step" in source
+        assert "wrong_question_status" in source
+        assert "next_review_at" in source
+        assert "plan_progress" in source
+        assert "SELECTION_CONTEXT_EXPIRED" in source
+        assert "ui.button.continue_next_question" in source
+        assert "ui.practice.next_step_reason_fmt" in source
+
+    assert "onClick={() => void continueAdaptiveLoop()}" in hosted
+    assert "bindButton(continueQuestionBtn, continueAdaptiveLoop)" in static
+    assert 'id="continueQuestionBtn"' in markup
+    # Evaluation only stores and renders the server suggestion. Generation is
+    # reachable exclusively from the explicit Continue button handler.
+    hosted_evaluation = hosted[hosted.index("async function evaluateAnswer") : hosted.index("async function continueAdaptiveLoop")]
+    static_evaluation = static[static.index("async function evaluateAnswer") : static.index("async function continueAdaptiveLoop")]
+    assert "study_generate_targeted_question" not in hosted_evaluation
+    assert "study_generate_targeted_question" not in static_evaluation
+
+
+def test_next_step_i18n_contract_is_complete_in_all_locales() -> None:
+    required = {
+        "ui.practice.reason.blocked_diagnostic",
+        "ui.practice.mastery_label",
+        "ui.practice.wrong_status_label",
+        "ui.practice.wrong_status.active",
+        "ui.practice.wrong_status.retrying",
+        "ui.practice.wrong_status.cooling",
+        "ui.practice.wrong_status.resolved",
+        "ui.practice.next_review_label",
+        "ui.practice.plan_progress_fmt",
+        "ui.practice.next_step.generate_question",
+        "ui.practice.next_step.review_due",
+        "ui.practice.next_step.wait_until",
+        "ui.practice.next_step.summarize_plan",
+        "ui.practice.next_step.choose_scope",
+        "ui.practice.next_step.temporarily_unavailable",
+        "ui.practice.next_step_reason_fmt",
+        "ui.button.continue_next_question",
+        "ui.button.view_plan_summary",
+    }
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+        assert all(str(locale[key]).strip() for key in required), locale_path.name
+
+
+def test_both_uis_confirm_and_control_material_learning_plans() -> None:
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+    markup = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8") + markup
+    controller = (ROOT / "static" / "document-controller.js").read_text(encoding="utf-8")
+
+    for source in (hosted, static):
+        assert "learning_plan_draft" in source
+        assert "learning_plan_mapping" in source
+        assert "study_learning_plan_status" in source
+        assert "study_learning_plan_activate" in source
+        assert "accepted_topic_ids" in source
+        assert "study_learning_plan_pause" in source
+        assert "study_learning_plan_cancel" in source
+        assert "ACTIVE_LEARNING_PLAN_EXISTS" in source
+        assert "LEARNING_PLAN_CHANGED" in source
+        assert "LEARNING_PLAN_TOPIC_REMOVED" in source
+        assert "SELECTION_CONTEXT_EXPIRED" in source
+        assert "ui.learning_plan.override_body" in source
+        assert "ui.learning_plan.resume" in source
+
+    assert "item.role === 'core'" in hosted
+    assert "learningPlanHasSelectedCore()" in static
+    assert "learningPlan.status !== 'paused'" in hosted
+    assert "currentLearningPlan.status !== 'paused'" in static
+    assert 'id="learningPlanActivateBtn"' in markup
+    assert 'id="learningPlanResumeBtn"' in markup
+    assert "await onAnalysisComplete(payload" in controller
+    assert "await refreshAfterAnalysisComplete(data)" in controller
+
+
+def test_learning_plan_i18n_contract_is_complete_in_all_locales() -> None:
+    required = {
+        "ui.learning_plan.draft_title",
+        "ui.learning_plan.detected_topics",
+        "ui.learning_plan.unmatched_warning",
+        "ui.learning_plan.truncated_warning",
+        "ui.learning_plan.confirm_start",
+        "ui.learning_plan.role.core",
+        "ui.learning_plan.role.prerequisite",
+        "ui.learning_plan.confidence.high",
+        "ui.learning_plan.status.active",
+        "ui.learning_plan.status.paused",
+        "ui.learning_plan.progress_summary",
+        "ui.learning_plan.override_body",
+        "ui.learning_plan.pause",
+        "ui.learning_plan.resume",
+        "ui.learning_plan.cancel",
+        "ui.learning_plan.error.active_exists",
+        "ui.learning_plan.error.changed",
+        "ui.learning_plan.error.not_active",
+        "ui.learning_plan.error.topic_removed",
+        "ui.learning_plan.error.core_required",
+        "ui.learning_plan.error.invalid_selection",
+        "ui.learning_plan.error.context_expired",
+    }
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+        assert all(str(locale[key]).strip() for key in required), locale_path.name
 
 
 def test_both_knowledge_maps_activate_explicit_topic_scope() -> None:

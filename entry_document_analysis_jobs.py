@@ -21,6 +21,7 @@ from .document_chunking import (
     split_document,
 )
 from .entry_common import Ok, SdkError, StudyEvent, asyncio, plugin_entry, tr, ui
+from .material_topic_mapper import MaterialMappingInput, MaterialTopicMapper
 from .models import TutorReply, utc_now_iso
 from .study_model_gateway import StudyModelError
 from .tutor_llm_agent_document import (
@@ -112,6 +113,77 @@ class _DocumentAnalysisJobsEntriesMixin:
             manager = DocumentAnalysisJobManager()
             self._document_jobs = manager
         return manager
+
+    def _material_topic_mapper_for_document(self) -> MaterialTopicMapper | None:
+        mapper = getattr(self, "_document_material_topic_mapper", None)
+        if isinstance(mapper, MaterialTopicMapper):
+            return mapper
+        store = getattr(self, "_store", None)
+        if store is None:
+            return None
+        adaptive_loop = getattr(getattr(self, "_cfg", None), "adaptive_loop", None)
+        mapper = MaterialTopicMapper(
+            store,
+            max_core_topics=getattr(adaptive_loop, "max_core_topics", 12),
+            max_prerequisite_topics=getattr(
+                adaptive_loop, "max_prerequisite_topics", 5
+            ),
+            max_prerequisite_depth=2,
+        )
+        self._document_material_topic_mapper = mapper
+        return mapper
+
+    def _prepare_document_learning_plan_draft(
+        self,
+        *,
+        source_digest: str,
+        merged_summary: str,
+        chunk_memos: tuple[str, ...],
+    ) -> dict[str, object] | None:
+        adaptive_loop = getattr(getattr(self, "_cfg", None), "adaptive_loop", None)
+        if not (
+            bool(getattr(adaptive_loop, "material_learning_plans_enabled", False))
+            and bool(getattr(adaptive_loop, "auto_prepare_plan", False))
+        ):
+            return None
+        mapper = self._material_topic_mapper_for_document()
+        if mapper is None:
+            return None
+        mapping = mapper.map(
+            MaterialMappingInput(
+                source_kind="document",
+                merged_summary=merged_summary,
+                chunk_memos=chunk_memos,
+            )
+        )
+        prepared: dict[str, object] = {
+            "draft": None,
+            "unmatched_count": mapping.unmatched_count,
+            "truncated": mapping.truncated,
+        }
+        if not any(
+            candidate.get("role") == "core" for candidate in mapping.candidates
+        ):
+            return prepared
+        service_ref = getattr(self, "_learning_plan_service", None)
+        service = service_ref() if callable(service_ref) else service_ref
+        create_draft = getattr(service, "create_draft", None)
+        if not callable(create_draft):
+            return prepared
+        try:
+            draft = create_draft(
+                source_kind="document",
+                source_digest=str(source_digest or ""),
+                candidates=[dict(candidate) for candidate in mapping.candidates],
+                unmatched_count=mapping.unmatched_count,
+                display_title="",
+            )
+        except Exception:
+            self.logger.warning("material learning plan draft persistence failed")
+            return prepared
+        if isinstance(draft, dict):
+            prepared["draft"] = dict(draft)
+        return prepared
 
     @ui.action()
     @plugin_entry(
@@ -220,6 +292,7 @@ class _DocumentAnalysisJobsEntriesMixin:
                 job_document = runner_state["document"]
                 job_chunks = runner_state["chunks"]
                 memos: list[_DocumentModelResult | None] = []
+                ordered_memos: tuple[str, ...] = ()
                 tasks: list[asyncio.Task[None]] = []
                 try:
                     if analysis_mode == "direct":
@@ -379,6 +452,33 @@ class _DocumentAnalysisJobsEntriesMixin:
                     payload.pop("created_at", None)
                     payload["degraded"] = reply.degraded
                     payload["diagnostic"] = reply.diagnostic
+                    draft_prepare_task = asyncio.create_task(
+                        asyncio.to_thread(
+                            self._prepare_document_learning_plan_draft,
+                            source_digest=job_document.sha256,
+                            merged_summary=reply.reply,
+                            chunk_memos=ordered_memos,
+                        )
+                    )
+                    try:
+                        try:
+                            prepared = await asyncio.shield(draft_prepare_task)
+                        except asyncio.CancelledError:
+                            # The document result is already durable. Drain this
+                            # best-effort side effect and preserve that result.
+                            prepared = await draft_prepare_task
+                    except Exception:
+                        self.logger.warning(
+                            "material learning plan draft preparation failed"
+                        )
+                        prepared = None
+                    if prepared is not None:
+                        payload["learning_plan_mapping"] = {
+                            "unmatched_count": prepared["unmatched_count"],
+                            "truncated": prepared["truncated"],
+                        }
+                        if isinstance(prepared.get("draft"), dict):
+                            payload["learning_plan_draft"] = prepared["draft"]
                     # Internal manager signal: finalization has crossed the
                     # durable history boundary, so a racing user cancellation
                     # must preserve this completed payload.

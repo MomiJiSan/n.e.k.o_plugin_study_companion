@@ -522,6 +522,139 @@ def test_targeted_prompt_rejects_oversized_required_context(
         prompts.ensure_targeted_prompt_context_fits(context)
 
 
+def test_learning_plan_scope_is_used_between_manual_scope_and_global_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_learning_plan_selection_test")
+
+    class Store:
+        def get_topic(self, topic_id):
+            return {"id": topic_id, "name": "Plan topic"}
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _state = SimpleNamespace(practice_scope_revision=4)
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+        def __init__(self):
+            self.scoped_ids = ()
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        def _learning_plan_service(self):
+            return SimpleNamespace(
+                active_selection_scope=lambda: {
+                    "selection_domain": "learning_plan",
+                    "learning_plan_id": "lp-1",
+                    "learning_plan_revision": 3,
+                    "eligible_topic_ids": ["topic-a", "topic-b"],
+                    "progress": {"total": 2, "mastered": 0},
+                }
+            )
+
+        def _scoped_question_params(self, scope):
+            self.scoped_ids = tuple(scope.eligible_topic_ids)
+            return {
+                "target_topic_id": "topic-a",
+                "target_topic": {"id": "topic-a", "name": "Plan topic"},
+                "suggested_difficulty": 2,
+            }
+
+        def _focus_selected_question_params(self, *_args):
+            return None
+
+    result = Subject()._build_targeted_question_context()
+
+    assert result["selection_domain"] == "learning_plan"
+    assert result["learning_plan_id"] == "lp-1"
+    assert result["learning_plan_revision"] == 3
+    assert result["plan_progress"] == {"total": 2, "mastered": 0}
+    assert result["selection_context_id"].startswith("scq_")
+
+
+def test_manual_scope_prevents_learning_plan_selection_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_manual_scope_precedence_test")
+    manual_scope = SimpleNamespace(
+        eligible_topic_ids=("manual-topic",),
+        scope_key="manual-scope",
+        scope_revision=8,
+        to_public_dict=lambda: {"mode": "explicit_topic", "topic_id": "manual-topic"},
+    )
+
+    class Store:
+        def get_topic(self, topic_id):
+            return {"id": topic_id, "name": "Manual topic"}
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _state = SimpleNamespace(practice_scope_revision=8)
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+        def _resolve_active_practice_scope(self):
+            return manual_scope
+
+        def _learning_plan_service(self):
+            raise AssertionError("manual scope must win before plan lookup")
+
+        def _scoped_question_params(self, scope):
+            assert scope is manual_scope
+            return {
+                "target_topic_id": "manual-topic",
+                "target_topic": {"id": "manual-topic", "name": "Manual topic"},
+            }
+
+        def _focus_selected_question_params(self, *_args):
+            return None
+
+    result = Subject()._build_targeted_question_context()
+    assert result["selection_domain"] == "practice_scope"
+    assert result["scope_key"] == "manual-scope"
+
+
+def test_learning_plan_context_rejects_revision_change_before_consumption(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, sdk_error = _load_entries(monkeypatch, "_learning_plan_revision_test")
+    service = SimpleNamespace(
+        active_selection_scope=lambda: {
+            "learning_plan_id": "lp-1",
+            "learning_plan_revision": 2,
+            "eligible_topic_ids": ["topic-a"],
+        },
+        contains_topic=lambda *_args: True,
+    )
+
+    class Store:
+        def get_topic(self, topic_id):
+            return {"id": topic_id}
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _state = SimpleNamespace(practice_scope_revision=0)
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        def _learning_plan_service(self):
+            return service
+
+    subject = Subject()
+    stored = subject._store_targeted_context(
+        {
+            "selection_domain": "learning_plan",
+            "learning_plan_id": "lp-1",
+            "learning_plan_revision": 1,
+            "selected_topic_id": "topic-a",
+            "scope_revision": 0,
+            "scope_key": "",
+        }
+    )
+    with pytest.raises(sdk_error) as caught:
+        subject._load_targeted_context(stored["selection_context_id"])
+    assert caught.value.code == "LEARNING_PLAN_CHANGED"
+
+
 @dataclass
 class _Reply:
     operation: str

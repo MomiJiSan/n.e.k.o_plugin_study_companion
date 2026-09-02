@@ -258,6 +258,8 @@
                 <strong data-i18n="ui.practice.feedback_title">Feedback</strong>
                 <p id="masteryDeltaText"></p>
                 <pre id="feedbackText"></pre>
+                <p id="nextStepDetails"></p>
+                <button id="continueQuestionBtn" class="button button-primary" type="button" data-i18n="ui.button.continue_next_question" hidden>Continue to next question</button>
               </div>
             </details>
 
@@ -342,6 +344,20 @@
                   <button id="studyDocumentAnalyzeBtn" class="button button-primary" type="button" data-i18n="ui.button.analyze_document">Analyze document</button>
                   <button id="studyDocumentCancelBtn" class="button button-secondary" type="button" data-i18n="ui.document.cancel_analysis" hidden>Cancel analysis</button>
                   <button id="studyDocumentRemoveBtn" class="button button-secondary" type="button" data-i18n="ui.button.remove_document">Remove</button>
+                </div>
+              </section>
+              <section id="learningPlanCard" class="study-document-card" aria-live="polite" hidden>
+                <strong id="learningPlanTitle" data-i18n="ui.learning_plan.status_title">Learning plan</strong>
+                <span id="learningPlanSummary"></span>
+                <span id="learningPlanWarning" class="study-document-warning" hidden></span>
+                <div id="learningPlanTopics" role="group" data-i18n-aria-label="ui.learning_plan.topic_candidates" aria-label="Topic candidates"></div>
+                <span id="learningPlanOverride" class="study-document-warning" data-i18n="ui.learning_plan.override_body" hidden>Manual practice scope is taking priority. Clear it to resume this plan.</span>
+                <span id="learningPlanNotice" role="status"></span>
+                <div class="study-document-card__actions">
+                  <button id="learningPlanActivateBtn" class="button button-primary" type="button" data-i18n="ui.learning_plan.confirm_start" hidden>Confirm and start learning</button>
+                  <button id="learningPlanPauseBtn" class="button button-secondary" type="button" data-i18n="ui.learning_plan.pause" hidden>Pause plan</button>
+                  <button id="learningPlanResumeBtn" class="button button-primary" type="button" data-i18n="ui.learning_plan.resume" hidden>Resume plan</button>
+                  <button id="learningPlanCancelBtn" class="button button-secondary" type="button" data-i18n="ui.learning_plan.cancel" hidden>Cancel plan</button>
                 </div>
               </section>
               <div id="studyInputImagePreview" class="study-panel__image-preview" hidden>

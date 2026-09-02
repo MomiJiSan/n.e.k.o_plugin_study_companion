@@ -1120,6 +1120,122 @@ def test_practice_outcome_read_failure_is_conservative_and_does_not_raise(
     assert result["practice_scope_status"] == "active"
 
 
+def test_next_step_preview_reuses_context_without_calling_the_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, _ = _load_answer_entries(
+        monkeypatch, "_next_step_preview_without_llm"
+    )
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        logger = _Logger()
+        _cfg = SimpleNamespace()
+        _agent = SimpleNamespace(
+            question_generate=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("next-step preview must not call the LLM")
+            )
+        )
+
+        def _build_targeted_question_context(self):
+            return {
+                "selection_context_id": "scq-next",
+                "expires_at": 1234.0,
+                "selection_reason": "retry",
+                "selected_topic_id": "topic-a",
+                "selected_topic_name": "Topic A",
+                "difficulty": 2,
+                "selection_domain": "global",
+            }
+
+    learning_update, next_step = asyncio.run(
+        Subject()._build_adaptive_next_step(
+            question_payload={},
+            learning_update={"status": "updated", "topic_id": "topic-a"},
+            validated_target=True,
+            knowledge_tracking_status="",
+        )
+    )
+
+    assert learning_update["status"] == "updated"
+    assert next_step == {
+        "status": "ready",
+        "action": "generate_question",
+        "selection_context_id": "scq-next",
+        "expires_at": 1234.0,
+        "reason": "retry",
+        "topic_id": "topic-a",
+        "topic_name": "Topic A",
+        "difficulty": 2,
+        "available_now": True,
+        "selection_domain": "global",
+        "learning_plan_id": "",
+        "learning_plan_revision": 0,
+        "plan_progress": {},
+    }
+
+
+def test_qa_only_answer_has_no_adaptive_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, _ = _load_answer_entries(
+        monkeypatch, "_next_step_qa_only"
+    )
+
+    learning_update, next_step = asyncio.run(
+        entries._TutorAnswerEntriesMixin()._build_adaptive_next_step(
+            question_payload={},
+            learning_update={"status": "updated"},
+            validated_target=False,
+            knowledge_tracking_status="qa_only",
+        )
+    )
+
+    assert learning_update == {"status": "not_applicable"}
+    assert next_step["status"] == "not_applicable"
+    assert next_step["available_now"] is False
+
+
+def test_completed_learning_plan_returns_summary_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, _ = _load_answer_entries(
+        monkeypatch, "_next_step_completed_plan"
+    )
+    reconciled = []
+
+    class Service:
+        def reconcile(self, plan_id):
+            reconciled.append(plan_id)
+            return {
+                "id": plan_id,
+                "status": "completed",
+                "progress": {"total": 2, "mastered": 2},
+            }
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        logger = _Logger()
+        _cfg = SimpleNamespace()
+
+        def _learning_plan_service(self):
+            return Service()
+
+        def _build_targeted_question_context(self):
+            raise AssertionError("a completed plan must exit before selecting another topic")
+
+    learning_update, next_step = asyncio.run(
+        Subject()._build_adaptive_next_step(
+            question_payload={"learning_plan_id": "lp-1"},
+            learning_update={"status": "updated"},
+            validated_target=True,
+            knowledge_tracking_status="",
+        )
+    )
+
+    assert reconciled == ["lp-1"]
+    assert learning_update["plan_progress"] == {"total": 2, "mastered": 2}
+    assert next_step["action"] == "summarize_plan"
+
+
 @pytest.mark.parametrize(
     ("active_scope_key", "active_revision", "question_revision"),
     [

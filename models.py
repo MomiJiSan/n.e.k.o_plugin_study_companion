@@ -412,6 +412,45 @@ class MasteryConfig:
 
 
 @dataclass(slots=True)
+class AdaptiveLoopConfig:
+    next_step_preview_enabled: bool = True
+    material_learning_plans_enabled: bool = False
+    auto_prepare_plan: bool = True
+    max_core_topics: int = 12
+    max_prerequisite_topics: int = 5
+    auto_generate_next_question: bool = False
+
+    def __post_init__(self) -> None:
+        self.next_step_preview_enabled = (
+            self.next_step_preview_enabled
+            if isinstance(self.next_step_preview_enabled, bool)
+            else True
+        )
+        self.material_learning_plans_enabled = (
+            self.material_learning_plans_enabled
+            if isinstance(self.material_learning_plans_enabled, bool)
+            else False
+        )
+        self.auto_prepare_plan = (
+            self.auto_prepare_plan if isinstance(self.auto_prepare_plan, bool) else True
+        )
+        self.max_core_topics = _clamp_int_or_default(self.max_core_topics, 1, 12, 12)
+        self.max_prerequisite_topics = _clamp_int_or_default(
+            self.max_prerequisite_topics, 0, 5, 5
+        )
+        # This remains opt-in false even if a malformed string such as "true"
+        # is supplied. Answer submission must never trigger hidden LLM work.
+        self.auto_generate_next_question = (
+            self.auto_generate_next_question
+            if isinstance(self.auto_generate_next_question, bool)
+            else False
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class StudyConfig:
     mode: StudyMode = MODE_COMPANION
     default_mode: StudyMode = MODE_COMPANION
@@ -472,6 +511,7 @@ class StudyConfig:
     awareness: AwarenessConfig = field(default_factory=AwarenessConfig)
     assessment: AssessmentConfig = field(default_factory=AssessmentConfig)
     mastery: MasteryConfig = field(default_factory=MasteryConfig)
+    adaptive_loop: AdaptiveLoopConfig = field(default_factory=AdaptiveLoopConfig)
 
     def __post_init__(self) -> None:
         self.mode = normalize_mode(self.mode)
@@ -541,6 +581,12 @@ class StudyConfig:
             )
         if not isinstance(self.mastery, MasteryConfig):
             self.mastery = MasteryConfig(**self.mastery) if isinstance(self.mastery, dict) else MasteryConfig()
+        if not isinstance(self.adaptive_loop, AdaptiveLoopConfig):
+            self.adaptive_loop = (
+                AdaptiveLoopConfig(**self.adaptive_loop)
+                if isinstance(self.adaptive_loop, dict)
+                else AdaptiveLoopConfig()
+            )
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -767,6 +813,13 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
     )
     assessment = raw.get("assessment") if isinstance(raw.get("assessment"), dict) else {}
     mastery = raw.get("mastery") if isinstance(raw.get("mastery"), dict) else {}
+    adaptive_loop = (
+        study.get("adaptive_loop")
+        if isinstance(study.get("adaptive_loop"), dict)
+        else raw.get("adaptive_loop")
+        if isinstance(raw.get("adaptive_loop"), dict)
+        else {}
+    )
     communication = (
         study_companion.get("communication")
         if isinstance(study_companion.get("communication"), dict)
@@ -946,6 +999,22 @@ def build_config(raw: dict[str, Any]) -> StudyConfig:
                 "min_sample_count",
                 3,
                 "knowledge_contribution_min_sample_count",
+            ),
+        ),
+        adaptive_loop=AdaptiveLoopConfig(
+            next_step_preview_enabled=_bool(
+                adaptive_loop, "next_step_preview_enabled", True
+            ),
+            material_learning_plans_enabled=_bool(
+                adaptive_loop, "material_learning_plans_enabled", False
+            ),
+            auto_prepare_plan=_bool(adaptive_loop, "auto_prepare_plan", True),
+            max_core_topics=_int(adaptive_loop, "max_core_topics", 12),
+            max_prerequisite_topics=_int(
+                adaptive_loop, "max_prerequisite_topics", 5
+            ),
+            auto_generate_next_question=_bool(
+                adaptive_loop, "auto_generate_next_question", False
             ),
         ),
         doc_export=DocExportConfig(

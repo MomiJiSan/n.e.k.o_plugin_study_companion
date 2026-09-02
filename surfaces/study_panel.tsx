@@ -37,12 +37,7 @@ type StudyStatus = {
     confidence?: number;
     reason?: string;
   };
-  last_answer_evaluation?: {
-    verdict?: string;
-    score?: number;
-    feedback?: string;
-    next_action?: string;
-  };
+  last_answer_evaluation?: PracticeFeedback & { score?: number };
   last_session_summary?: string;
   current_question?: GeneratedQuestion;
   current_question_state?: 'pending' | 'evaluated' | 'none';
@@ -119,7 +114,79 @@ type QuestionContext = {
   scope_key?: string;
   scope_revision?: number;
   practice_scope?: PracticeScope;
+  selection_domain?: string;
+  learning_plan_id?: string;
+  learning_plan_revision?: number;
+  plan_progress?: PlanProgress;
+  expires_at?: number;
   no_data?: boolean;
+};
+
+type PlanProgress = {
+  total?: number;
+  mastered?: number;
+  progressing?: number;
+  pending?: number;
+  review_due?: number;
+};
+
+type LearningPlanItem = {
+  topic_id?: string;
+  topic_name?: string;
+  role?: 'core' | 'prerequisite' | 'optional';
+  mapping_confidence?: 'high' | 'medium';
+  state?: 'pending' | 'progressing' | 'mastered' | 'review_due';
+};
+
+type LearningPlan = {
+  id?: string;
+  status?: 'draft' | 'active' | 'paused' | 'completed' | 'canceled';
+  revision?: number;
+  display_title?: string;
+  unmatched_count?: number;
+  progress?: PlanProgress;
+  items?: LearningPlanItem[];
+};
+
+type LearningUpdate = {
+  status?: string;
+  topic_id?: string;
+  mastery_before?: number | null;
+  mastery_after?: number | null;
+  mastery_status?: string;
+  wrong_question_status?: string;
+  next_review_at?: string;
+  plan_progress?: PlanProgress;
+};
+
+type AdaptiveNextStep = {
+  status?: string;
+  action?: 'generate_question' | 'review_due' | 'wait_until' | 'summarize_plan' | 'choose_scope';
+  selection_context_id?: string;
+  expires_at?: number;
+  reason?: string;
+  topic_id?: string;
+  topic_name?: string;
+  difficulty?: number;
+  available_now?: boolean;
+  selection_domain?: string;
+  learning_plan_id?: string;
+  learning_plan_revision?: number;
+  plan_progress?: PlanProgress;
+  wait_until?: string;
+};
+
+type PracticeFeedback = {
+  feedback?: string;
+  next_action?: string;
+  summary?: string;
+  reply?: string;
+  attempt_status?: string;
+  verdict?: string;
+  scope_status?: string;
+  mastery_status?: string;
+  learning_update?: LearningUpdate;
+  next_step?: AdaptiveNextStep;
 };
 
 type GeneratedQuestion = {
@@ -164,6 +231,11 @@ type DocumentJobPayload = {
   degraded?: boolean;
   diagnostic?: string;
   document?: DocumentJobMetadata;
+  learning_plan_draft?: LearningPlan;
+  learning_plan_mapping?: {
+    unmatched_count?: number;
+    truncated?: boolean;
+  };
 };
 
 const DOCUMENT_JOB_STORAGE_KEY = 'study_companion.document_analysis_job_id';
@@ -1066,6 +1138,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [practiceScopeReviewing, setPracticeScopeReviewing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<GeneratedQuestion | null>(null);
   const [canEvaluateCurrentQuestion, setCanEvaluateCurrentQuestion] = useState(false);
+  const [practiceFeedback, setPracticeFeedback] = useState<PracticeFeedback | null>(null);
+  const [nextStep, setNextStep] = useState<AdaptiveNextStep | null>(null);
   const [answer, setAnswer] = useState('');
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1085,6 +1159,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [documentOcrProgress, setDocumentOcrProgress] = useState<ScannedPdfOcrProgress | null>(null);
   const [documentOcrCanceling, setDocumentOcrCanceling] = useState(false);
   const [documentJob, setDocumentJob] = useState<DocumentJobState | null>(null);
+  const [learningPlanDraft, setLearningPlanDraft] = useState<LearningPlan | null>(null);
+  const [learningPlan, setLearningPlan] = useState<LearningPlan | null>(null);
+  const [learningPlanTopicIds, setLearningPlanTopicIds] = useState<string[]>([]);
+  const [learningPlanMapping, setLearningPlanMapping] = useState<{ unmatched_count?: number; truncated?: boolean }>({});
+  const [learningPlanBusy, setLearningPlanBusy] = useState(false);
+  const [learningPlanNotice, setLearningPlanNotice] = useState('');
   const questionStartedAtRef = useRef(0);
   const questionAttemptIdRef = useRef('');
   const hintRevealedRef = useRef(false);
@@ -1257,6 +1337,15 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         score: typeof evaluation.score === 'number' ? evaluation.score : undefined,
         feedback: typeof evaluation.feedback === 'string' ? evaluation.feedback : undefined,
         next_action: typeof evaluation.next_action === 'string' ? evaluation.next_action : undefined,
+        attempt_status: typeof evaluation.attempt_status === 'string' ? evaluation.attempt_status : undefined,
+        scope_status: typeof evaluation.scope_status === 'string' ? evaluation.scope_status : undefined,
+        mastery_status: typeof evaluation.mastery_status === 'string' ? evaluation.mastery_status : undefined,
+        learning_update: evaluation.learning_update && typeof evaluation.learning_update === 'object'
+          ? evaluation.learning_update as LearningUpdate
+          : undefined,
+        next_step: evaluation.next_step && typeof evaluation.next_step === 'object'
+          ? evaluation.next_step as AdaptiveNextStep
+          : undefined,
       } : undefined,
       last_session_summary: typeof data.last_session_summary === 'string' ? data.last_session_summary : undefined,
       current_question: currentQuestion ? {
@@ -1338,6 +1427,31 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     };
     const message = messages[String(status || '').trim().toLowerCase()];
     return message ? t(message[0], message[1]) : '';
+  }
+
+  function selectionReasonLabel(reason: unknown) {
+    const normalized = String(reason || 'recommended').trim();
+    const known = new Set(['retry', 'due_review', 'weak_topic', 'blocked_diagnostic', 'recommended', 'no_data']);
+    return known.has(normalized)
+      ? t(`ui.practice.reason.${normalized}`, normalized)
+      : normalized;
+  }
+
+  function wrongQuestionStatusLabel(status: unknown) {
+    const normalized = String(status || '').trim();
+    return normalized
+      ? t(`ui.practice.wrong_status.${normalized}`, normalized)
+      : t('ui.practice.wrong_status.none', 'None');
+  }
+
+  function nextStepActionLabel(action: unknown) {
+    const normalized = String(action || 'choose_scope').trim();
+    return t(`ui.practice.next_step.${normalized}`, normalized);
+  }
+
+  function pluginErrorCode(error: unknown) {
+    const candidate = error as { code?: unknown; message?: unknown } | null;
+    return String(candidate?.code || candidate?.message || '').trim();
   }
 
   function formatTutorDiagnostic(diagnostic?: string, documentOperation = false) {
@@ -1436,8 +1550,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       startQuestionAttempt(data.current_question);
       setQuestion(data.current_question.question);
       setCanEvaluateCurrentQuestion(data.can_evaluate_current_question === true);
-      if (data.current_question_state === 'evaluated' && data.last_answer_evaluation?.feedback) {
-        setReply(data.last_answer_evaluation.feedback);
+      if (data.current_question_state === 'evaluated' && data.last_answer_evaluation) {
+        setPracticeFeedback(data.last_answer_evaluation);
+        setNextStep(data.last_answer_evaluation.next_step || null);
+        if (data.last_answer_evaluation.feedback) {
+          setReply(data.last_answer_evaluation.feedback);
+        }
       }
     } else if (data.current_question_state === 'none') {
       setCurrentQuestion(null);
@@ -1635,6 +1753,145 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     }
   }
 
+  function formatLearningPlanError(error: unknown) {
+    const code = pluginErrorCode(error);
+    const known: Record<string, [string, string]> = {
+      ACTIVE_LEARNING_PLAN_EXISTS: ['ui.learning_plan.error.active_exists', 'Another learning plan is already active. Pause or cancel it first.'],
+      LEARNING_PLAN_CHANGED: ['ui.learning_plan.error.changed', 'This learning plan changed. Refresh it and try again.'],
+      LEARNING_PLAN_NOT_ACTIVE: ['ui.learning_plan.error.not_active', 'This learning plan is no longer active.'],
+      LEARNING_PLAN_TOPIC_REMOVED: ['ui.learning_plan.error.topic_removed', 'A topic in this learning plan is no longer available.'],
+      LEARNING_PLAN_CORE_TOPIC_REQUIRED: ['ui.learning_plan.error.core_required', 'Keep at least one core topic in the plan.'],
+      LEARNING_PLAN_TOPIC_INJECTION_REJECTED: ['ui.learning_plan.error.invalid_selection', 'Choose only topics proposed for this learning plan.'],
+      SELECTION_CONTEXT_EXPIRED: ['ui.learning_plan.error.context_expired', 'The question selection expired. Refreshing the plan will create a new one.'],
+    };
+    const message = known[code];
+    return message ? t(message[0], message[1]) : formatPluginError(error);
+  }
+
+  async function loadLearningPlanStatus(signal?: AbortSignal) {
+    try {
+      const data = await callStudyPlugin<{ active?: boolean; plan?: LearningPlan }>(
+        props.api,
+        'study_learning_plan_status',
+        props.locale,
+        {},
+        signal,
+      );
+      if (!signal?.aborted) {
+        setLearningPlan(data.plan?.id ? data.plan : null);
+      }
+      return data.plan || null;
+    } catch (error) {
+      if (!signal?.aborted) setLearningPlanNotice(formatLearningPlanError(error));
+      return null;
+    }
+  }
+
+  async function captureLearningPlanDraft(payload: DocumentJobPayload, signal?: AbortSignal) {
+    const draft = payload.learning_plan_draft;
+    if (!draft?.id) return;
+    let detailedDraft = draft;
+    if (!draft.items?.length) {
+      try {
+        const data = await callStudyPlugin<{ plan?: LearningPlan }>(
+          props.api,
+          'study_learning_plan_status',
+          props.locale,
+          { plan_id: draft.id },
+          signal,
+        );
+        detailedDraft = data.plan?.id ? data.plan : draft;
+      } catch {
+        // The compact document payload is still useful if detail refresh fails.
+      }
+    }
+    if (signal?.aborted) return;
+    const topicIds = (detailedDraft.items || [])
+      .map((item) => String(item.topic_id || '').trim())
+      .filter(Boolean);
+    setLearningPlanDraft(detailedDraft);
+    setLearningPlanTopicIds(topicIds);
+    setLearningPlanMapping({
+      unmatched_count: payload.learning_plan_mapping?.unmatched_count
+        ?? detailedDraft.unmatched_count,
+      truncated: payload.learning_plan_mapping?.truncated,
+    });
+    setLearningPlanNotice('');
+  }
+
+  async function activateLearningPlan() {
+    if (!learningPlanDraft?.id || learningPlanBusy) return;
+    setLearningPlanBusy(true);
+    setLearningPlanNotice('');
+    try {
+      const data = await callStudyPlugin<{ plan?: LearningPlan }>(
+        props.api,
+        'study_learning_plan_activate',
+        props.locale,
+        {
+          plan_id: learningPlanDraft.id,
+          revision: Number(learningPlanDraft.revision || 1),
+          accepted_topic_ids: learningPlanTopicIds,
+        },
+      );
+      setLearningPlan(data.plan?.id ? data.plan : null);
+      setLearningPlanDraft(null);
+      setLearningPlanMapping({});
+      setLearningPlanNotice(t('ui.learning_plan.activated', 'Learning plan activated.'));
+    } catch (error) {
+      setLearningPlanNotice(formatLearningPlanError(error));
+    } finally {
+      setLearningPlanBusy(false);
+    }
+  }
+
+  async function changeLearningPlanStatus(action: 'pause' | 'cancel') {
+    if (!learningPlan?.id || learningPlanBusy) return;
+    setLearningPlanBusy(true);
+    setLearningPlanNotice('');
+    try {
+      const data = await callStudyPlugin<{ plan?: LearningPlan }>(
+        props.api,
+        action === 'pause' ? 'study_learning_plan_pause' : 'study_learning_plan_cancel',
+        props.locale,
+        { plan_id: learningPlan.id, revision: learningPlan.revision },
+      );
+      setLearningPlan(data.plan?.id ? data.plan : null);
+      setLearningPlanNotice(t(
+        `ui.learning_plan.${action}d`,
+        action === 'pause' ? 'Learning plan paused.' : 'Learning plan canceled.',
+      ));
+    } catch (error) {
+      setLearningPlanNotice(formatLearningPlanError(error));
+    } finally {
+      setLearningPlanBusy(false);
+    }
+  }
+
+  async function resumeLearningPlan() {
+    if (!learningPlan?.id || learningPlan.status !== 'paused' || learningPlanBusy) return;
+    setLearningPlanBusy(true);
+    setLearningPlanNotice('');
+    try {
+      const data = await callStudyPlugin<{ plan?: LearningPlan }>(
+        props.api,
+        'study_learning_plan_activate',
+        props.locale,
+        {
+          plan_id: learningPlan.id,
+          revision: Number(learningPlan.revision || 1),
+          accepted_topic_ids: (learningPlan.items || []).map((item) => item.topic_id).filter(Boolean),
+        },
+      );
+      setLearningPlan(data.plan?.id ? data.plan : null);
+      setLearningPlanNotice(t('ui.learning_plan.resumed', 'Learning plan resumed.'));
+    } catch (error) {
+      setLearningPlanNotice(formatLearningPlanError(error));
+    } finally {
+      setLearningPlanBusy(false);
+    }
+  }
+
   function normalizeDocumentJob(payload: DocumentJobPayload, fallbackJobId = ''): DocumentJobState {
     const totalChunks = Math.max(0, Math.floor(Number(payload.total_chunks ?? payload.chunks) || 0));
     const completedChunks = Math.max(0, Math.min(totalChunks || Number.MAX_SAFE_INTEGER, Math.floor(Number(payload.completed_chunks) || 0)));
@@ -1827,6 +2084,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           setReply(data.degraded
             ? formatTutorDiagnostic(data.diagnostic, true)
             : formatDocumentCompletion(data));
+          await captureLearningPlanDraft(data, controller.signal);
           await acknowledgeDocumentJob(jobId, controller.signal);
           await refreshAfterDocumentCompletion(controller.signal);
           return;
@@ -1956,6 +2214,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         setReply(data?.degraded
           ? formatTutorDiagnostic(data.diagnostic, true)
           : formatDocumentCompletion(data || {}));
+        await captureLearningPlanDraft(data || {}, signal);
         await acknowledgeDocumentJob(jobId, signal);
         setDocumentJob(null);
         return;
@@ -2284,7 +2543,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     }
   }
 
-  async function generateQuestion() {
+  async function generateQuestion(preferredNextStep?: AdaptiveNextStep | null) {
     if (isInteractionBusy()) {
       return;
     }
@@ -2293,12 +2552,24 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     const controller = beginStudyRequest();
     setBusy(true);
     try {
-      setQuestionContext(null);
       const freshScope = await loadPracticeScope(controller.signal);
       if (controller.signal.aborted) {
         return;
       }
-      const context = await loadQuestionContext(controller.signal);
+      let context: QuestionContext | null = preferredNextStep?.selection_context_id
+        ? {
+          selection_context_id: preferredNextStep.selection_context_id,
+          selected_topic_id: preferredNextStep.topic_id,
+          selected_topic_name: preferredNextStep.topic_name,
+          selection_reason: preferredNextStep.reason,
+          selection_domain: preferredNextStep.selection_domain,
+          learning_plan_id: preferredNextStep.learning_plan_id,
+          learning_plan_revision: preferredNextStep.learning_plan_revision,
+          plan_progress: preferredNextStep.plan_progress,
+          expires_at: preferredNextStep.expires_at,
+          no_data: false,
+        }
+        : await loadQuestionContext(controller.signal);
       if (controller.signal.aborted) {
         return;
       }
@@ -2306,7 +2577,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         setReply(t('ui.error.no_targeted_question_data', 'Not enough study records to generate a practice question yet.'));
         return;
       }
-      const data = await callStudyPlugin<GeneratedQuestion & {
+      const requestQuestion = (selectionContextId: string) => callStudyPlugin<GeneratedQuestion & {
         summary?: string;
         reply?: string;
         degraded?: boolean;
@@ -2315,9 +2586,22 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         props.api,
         'study_generate_targeted_question',
         props.locale,
-        { selection_context_id: context.selection_context_id },
+        { selection_context_id: selectionContextId },
         controller.signal,
       );
+      let data;
+      try {
+        data = await requestQuestion(context.selection_context_id);
+      } catch (error) {
+        if (!preferredNextStep?.selection_context_id || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
+          throw error;
+        }
+        context = await loadQuestionContext(controller.signal);
+        if (!context?.selection_context_id || context.no_data) {
+          throw error;
+        }
+        data = await requestQuestion(context.selection_context_id);
+      }
       if (controller.signal.aborted) {
         return;
       }
@@ -2337,6 +2621,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         applyActivePracticeScope(freshScope);
       }
       setQuestionContext({ ...context, ...data, no_data: false, selection_context_id: '' });
+      setPracticeFeedback(null);
+      setNextStep(null);
       setAnswer('');
       setAnswerImage('');
       setReply(data.hint || data.question || data.summary || data.reply || '');
@@ -2387,7 +2673,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     if (answerImage) evalArgs.vision_image_base64 = answerImage;
     let shouldClearAnswerImage = false;
     try {
-      const data = await callStudyPlugin(props.api, 'study_evaluate_answer', props.locale, evalArgs, controller.signal) as {
+      const data = await callStudyPlugin(props.api, 'study_evaluate_answer', props.locale, evalArgs, controller.signal) as PracticeFeedback & {
         feedback?: string;
         next_action?: string;
         summary?: string;
@@ -2417,6 +2703,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         && Boolean(responseScopeKey)
         && responseScopeKey === activeScopeKey;
       setPracticeScopeReviewing(scopeReviewing);
+      setPracticeFeedback(data);
+      setNextStep(data.next_step || null);
+      const updatedPlanProgress = data.learning_update?.plan_progress || data.next_step?.plan_progress;
+      if (updatedPlanProgress) {
+        setLearningPlan((current) => current ? { ...current, progress: updatedPlanProgress } : current);
+      }
       const replyParts = [
         practiceAttemptMessage(data.attempt_status || data.verdict),
         data.mastery_status === 'mastered'
@@ -2443,6 +2735,14 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       }
       endStudyRequest(controller);
     }
+  }
+
+  async function continueAdaptiveLoop() {
+    if (nextStep?.action === 'summarize_plan') {
+      await summarizeSession();
+      return;
+    }
+    await generateQuestion(nextStep);
   }
 
   async function summarizeSession() {
@@ -2492,6 +2792,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     refresh(controller.signal)
       .then(() => refreshModelRuntime(controller.signal))
       .then(() => loadPracticeScope(controller.signal))
+      .then(() => loadLearningPlanStatus(controller.signal))
       .catch((error) => {
         if (controller.signal.aborted) {
           return;
@@ -2724,7 +3025,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         </div>
         <div>
           <span>{t('ui.practice.reason_label', 'Reason')}</span>
-          <strong>{questionContext?.selection_reason || '-'}</strong>
+          <strong>{questionContext?.selection_reason
+            ? selectionReasonLabel(questionContext.selection_reason)
+            : '-'}</strong>
         </div>
       </section>
       <div
@@ -2952,6 +3255,115 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           </div>
         </section>
       ) : null}
+      {learningPlanDraft?.id ? (
+        <section className="study-panel__document-card" aria-live="polite" aria-label={t('ui.learning_plan.draft_title', 'Confirm learning plan')}>
+          <div>
+            <strong>{t('ui.learning_plan.draft_title', 'Confirm learning plan')}</strong>
+            <span>{tf(
+              'ui.learning_plan.detected_topics',
+              'Detected {count} topics',
+              { count: String(learningPlanDraft.items?.length || 0) },
+            )}</span>
+            {Number(learningPlanMapping.unmatched_count || 0) > 0 ? (
+              <small className="study-panel__document-warning">{tf(
+                'ui.learning_plan.unmatched_warning',
+                '{count} parts of the material could not be matched to existing topics.',
+                { count: String(learningPlanMapping.unmatched_count || 0) },
+              )}</small>
+            ) : null}
+            {learningPlanMapping.truncated ? (
+              <small className="study-panel__document-warning">
+                {t('ui.learning_plan.truncated_warning', 'Only the highest-confidence topics are shown. Narrow the material for a more focused plan.')}
+              </small>
+            ) : null}
+          </div>
+          <div role="group" aria-label={t('ui.learning_plan.topic_candidates', 'Topic candidates')}>
+            {(learningPlanDraft.items || []).map((item) => {
+              const topicId = String(item.topic_id || '');
+              return (
+                <label key={topicId}>
+                  <input
+                    type="checkbox"
+                    checked={learningPlanTopicIds.includes(topicId)}
+                    disabled={learningPlanBusy}
+                    onChange={(event) => setLearningPlanTopicIds((current) => (
+                      event.target.checked
+                        ? Array.from(new Set([...current, topicId]))
+                        : current.filter((id) => id !== topicId)
+                    ))}
+                  />
+                  <span>{item.topic_name || topicId}</span>
+                  <small>{[
+                    t(`ui.learning_plan.role.${item.role || 'core'}`, item.role || 'core'),
+                    t(`ui.learning_plan.confidence.${item.mapping_confidence || 'medium'}`, item.mapping_confidence || 'medium'),
+                  ].join(' · ')}</small>
+                </label>
+              );
+            })}
+          </div>
+          <div className="study-panel__actions">
+            <button
+              type="button"
+              disabled={learningPlanBusy || !(learningPlanDraft.items || []).some((item) => (
+                item.role === 'core' && learningPlanTopicIds.includes(String(item.topic_id || ''))
+              ))}
+              onClick={() => void activateLearningPlan()}
+            >
+              {learningPlanBusy
+                ? t('ui.button.loading', 'Loading...')
+                : t('ui.learning_plan.confirm_start', 'Confirm and start learning')}
+            </button>
+          </div>
+        </section>
+      ) : null}
+      {learningPlan?.id ? (
+        <section className="study-panel__state" aria-live="polite" aria-label={t('ui.learning_plan.status_title', 'Learning plan')}>
+          <div>
+            <span>{t('ui.learning_plan.status_title', 'Learning plan')}</span>
+            <strong>{learningPlan.display_title || t('ui.learning_plan.default_title', 'Imported learning plan')}</strong>
+            <small>{t(`ui.learning_plan.status.${learningPlan.status || 'active'}`, learningPlan.status || 'active')}</small>
+          </div>
+          <div>
+            <span>{t('ui.practice.plan_progress_label', 'Plan progress')}</span>
+            <strong>{tf('ui.practice.plan_progress_fmt', '{mastered} / {total}', {
+              mastered: String(learningPlan.progress?.mastered || 0),
+              total: String(learningPlan.progress?.total || learningPlan.items?.length || 0),
+            })}</strong>
+            <small>{tf(
+              'ui.learning_plan.progress_detail',
+              '{progressing} progressing · {pending} pending · {review_due} due',
+              {
+                progressing: String(learningPlan.progress?.progressing || 0),
+                pending: String(learningPlan.progress?.pending || 0),
+                review_due: String(learningPlan.progress?.review_due || 0),
+              },
+            )}</small>
+          </div>
+          {activePracticeScope && learningPlan.status === 'active' ? (
+            <div>
+              <span>{t('ui.learning_plan.override_title', 'Temporarily overridden')}</span>
+              <strong>{t('ui.learning_plan.override_body', 'Manual practice scope is taking priority. Clear it to resume this plan.')}</strong>
+            </div>
+          ) : null}
+          {['active', 'paused'].includes(String(learningPlan.status || '')) ? (
+            <div className="study-panel__actions">
+              {learningPlan.status === 'active' ? (
+                <button type="button" disabled={learningPlanBusy} onClick={() => void changeLearningPlanStatus('pause')}>
+                  {t('ui.learning_plan.pause', 'Pause plan')}
+                </button>
+              ) : (
+                <button type="button" disabled={learningPlanBusy} onClick={() => void resumeLearningPlan()}>
+                  {t('ui.learning_plan.resume', 'Resume plan')}
+                </button>
+              )}
+              <button type="button" disabled={learningPlanBusy} onClick={() => void changeLearningPlanStatus('cancel')}>
+                {t('ui.learning_plan.cancel', 'Cancel plan')}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {learningPlanNotice ? <div className="study-panel__paste-error" role="status">{learningPlanNotice}</div> : null}
       {documentError ? <div className="study-panel__paste-error" role="alert">{documentError}</div> : null}
       {textImage ? (
         <div className="study-panel__image-preview">
@@ -2978,7 +3390,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           ref={generateButtonRef}
           type="button"
           disabled={interactionBusy}
-          onClick={interactionBusy ? undefined : generateQuestion}
+          onClick={interactionBusy ? undefined : () => void generateQuestion()}
         >
           {interactionBusy
             ? t('ui.button.loading', 'Loading...')
@@ -3034,6 +3446,64 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           {interactionBusy ? t('ui.button.loading', 'Loading...') : t('ui.button.summarize_session', 'Summarize Session')}
         </button>
       </div>
+      {practiceFeedback ? (
+        <section className="study-panel__state" aria-live="polite" aria-label={t('ui.practice.feedback_title', 'Feedback')}>
+          <div>
+            <span>{t('ui.practice.mastery_label', 'Mastery')}</span>
+            <strong>{practiceFeedback.learning_update?.mastery_before != null
+              && practiceFeedback.learning_update?.mastery_after != null
+              ? tf('ui.practice.mastery_delta_fmt', '{before} -> {after}', {
+                before: practiceFeedback.learning_update.mastery_before.toFixed(2),
+                after: practiceFeedback.learning_update.mastery_after.toFixed(2),
+              })
+              : t('ui.practice.mastery_unavailable', 'Not available')}</strong>
+          </div>
+          <div>
+            <span>{t('ui.practice.wrong_status_label', 'Wrong-question status')}</span>
+            <strong>{wrongQuestionStatusLabel(practiceFeedback.learning_update?.wrong_question_status)}</strong>
+          </div>
+          <div>
+            <span>{t('ui.practice.next_review_label', 'Next review')}</span>
+            <strong>{practiceFeedback.learning_update?.next_review_at
+              ? new Date(practiceFeedback.learning_update.next_review_at).toLocaleString()
+              : t('ui.practice.next_review_none', 'Not scheduled')}</strong>
+          </div>
+          {practiceFeedback.learning_update?.plan_progress?.total ? (
+            <div>
+              <span>{t('ui.practice.plan_progress_label', 'Plan progress')}</span>
+              <strong>{tf('ui.practice.plan_progress_fmt', '{mastered} / {total}', {
+                mastered: String(practiceFeedback.learning_update.plan_progress.mastered || 0),
+                total: String(practiceFeedback.learning_update.plan_progress.total || 0),
+              })}</strong>
+            </div>
+          ) : null}
+          {nextStep?.status === 'ready' ? (
+            <div>
+              <span>{t('ui.practice.next_action', 'Next')}</span>
+              <strong>{nextStepActionLabel(nextStep.action)}</strong>
+              {nextStep.reason ? <small>{tf(
+                'ui.practice.next_step_reason_fmt',
+                'Reason: {reason}',
+                { reason: selectionReasonLabel(nextStep.reason) },
+              )}</small> : null}
+            </div>
+          ) : nextStep?.status === 'temporarily_unavailable' ? (
+            <div>
+              <span>{t('ui.practice.next_action', 'Next')}</span>
+              <strong>{t('ui.practice.next_step.temporarily_unavailable', 'Next-step preview is temporarily unavailable')}</strong>
+            </div>
+          ) : null}
+          {nextStep?.status === 'ready' && nextStep.available_now ? (
+            <div className="study-panel__actions">
+              <button type="button" disabled={interactionBusy} onClick={() => void continueAdaptiveLoop()}>
+                {nextStep.action === 'summarize_plan'
+                  ? t('ui.button.view_plan_summary', 'View plan summary')
+                  : t('ui.button.continue_next_question', 'Continue to next question')}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <div ref={replySectionRef}>
         <div className="study-panel__reply-label">{t('ui.label.reply', 'Reply')}</div>
         <MathReply text={reply} label={t('ui.label.reply', 'Reply')} />

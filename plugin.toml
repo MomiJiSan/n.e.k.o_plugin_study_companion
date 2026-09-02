@@ -62,6 +62,14 @@ push_to_llm_mode = "read"
 os_signals_enabled = true
 distraction_detection = true
 
+[study.adaptive_loop]
+next_step_preview_enabled = true
+material_learning_plans_enabled = false
+auto_prepare_plan = true
+max_core_topics = 12
+max_prerequisite_topics = 5
+auto_generate_next_question = false
+
 [study_companion.communication]
 enabled = true
 solution_narration_enabled = true
