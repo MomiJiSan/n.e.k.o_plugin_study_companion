@@ -52,12 +52,17 @@
     if (timeLeft(deadline) <= 0) throw new ScannedPdfError('document_pdf_ocr_timeout');
   }
 
-  async function waitWithinDeadline(promise, deadline, onTimeout) {
+  async function waitWithinDeadline(promise, deadline, onTimeout, signal, onAbort) {
+    if (signal?.aborted) {
+      try { (onAbort || onTimeout)?.(); } catch (_error) {}
+      throw abortError();
+    }
     const timeoutMs = timeLeft(deadline);
     if (timeoutMs <= 0) throw new ScannedPdfError('document_pdf_ocr_timeout');
     let timeout;
+    let abortHandler;
     try {
-      return await Promise.race([
+      const pending = [
         Promise.resolve(promise),
         new Promise((_, reject) => {
           timeout = setTimeout(() => {
@@ -65,9 +70,20 @@
             reject(new ScannedPdfError('document_pdf_ocr_timeout'));
           }, timeoutMs);
         }),
-      ]);
+      ];
+      if (signal) {
+        pending.push(new Promise((_, reject) => {
+          abortHandler = () => {
+            try { (onAbort || onTimeout)?.(); } catch (_error) {}
+            reject(abortError());
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
+        }));
+      }
+      return await Promise.race(pending);
     } finally {
       clearTimeout(timeout);
+      if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
     }
   }
 
@@ -88,18 +104,18 @@
     });
   }
 
-  async function encodeJpeg(canvas, deadline) {
+  async function encodeJpeg(canvas, deadline, signal) {
     for (const quality of JPEG_QUALITIES) {
       throwIfExpired(deadline);
-      const blob = await waitWithinDeadline(canvasToBlob(canvas, quality), deadline);
+      const blob = await waitWithinDeadline(canvasToBlob(canvas, quality), deadline, undefined, signal);
       if (blob.size <= MAX_JPEG_BYTES) return blob;
     }
     throw new ScannedPdfError('document_pdf_page_too_large');
   }
 
-  async function blobToBase64(blob, deadline) {
+  async function blobToBase64(blob, deadline, signal) {
     throwIfExpired(deadline);
-    let buffer = await waitWithinDeadline(blob.arrayBuffer(), deadline);
+    let buffer = await waitWithinDeadline(blob.arrayBuffer(), deadline, undefined, signal);
     let bytes = new Uint8Array(buffer);
     const chunks = [];
     const chunkSize = 0x8000;
@@ -148,8 +164,8 @@
     return sourceType === 'pdf' && ['no_readable_text', 'garbled_text'].includes(parseCode);
   }
 
-  async function extractPdfPageText(page, deadline) {
-    const content = await waitWithinDeadline(page.getTextContent(), deadline);
+  async function extractPdfPageText(page, deadline, signal) {
+    const content = await waitWithinDeadline(page.getTextContent(), deadline, undefined, signal);
     if (!Array.isArray(content?.items)) return '';
     let text = '';
     for (const item of content.items) {
@@ -205,12 +221,14 @@
     return 'document_pdf_ocr_unavailable';
   }
 
-  async function destroyPdf(pdfDocument, loadingTask, deadline) {
+  async function destroyPdf(pdfDocument, loadingTask, deadline, signal) {
     try {
       const destroy = pdfDocument?.destroy ? pdfDocument.destroy() : loadingTask?.destroy?.();
       if (destroy) {
         const cleanup = Promise.resolve(destroy).catch(() => undefined);
-        if (timeLeft(deadline) > 0) await waitWithinDeadline(cleanup, deadline);
+        if (!signal?.aborted && timeLeft(deadline) > 0) {
+          await waitWithinDeadline(cleanup, deadline, undefined, signal);
+        }
       }
     } catch (_error) {}
   }
@@ -231,16 +249,21 @@
       let pdfDocument = null;
       try {
         throwIfAborted(signal);
-        const pdfjs = await waitWithinDeadline(pdfJsLoader(), deadline);
+        const pdfjs = await waitWithinDeadline(pdfJsLoader(), deadline, undefined, signal);
         if (!pdfjs?.getDocument || !pdfjs?.GlobalWorkerOptions) {
           throw new ScannedPdfError('document_pdf_render_failed');
         }
         pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-        sourceBuffer = await waitWithinDeadline(file.arrayBuffer(), deadline);
+        sourceBuffer = await waitWithinDeadline(file.arrayBuffer(), deadline, undefined, signal);
         pdfData = new Uint8Array(sourceBuffer);
         sourceBuffer = null;
         loadingTask = pdfjs.getDocument({ data: pdfData, wasmUrl: PDFJS_WASM_URL, iccUrl: PDFJS_ICC_URL });
-        pdfDocument = await waitWithinDeadline(loadingTask.promise, deadline, () => loadingTask?.destroy?.());
+        pdfDocument = await waitWithinDeadline(
+          loadingTask.promise,
+          deadline,
+          () => loadingTask?.destroy?.(),
+          signal,
+        );
         const pageCount = Number(pdfDocument?.numPages);
         if (!Number.isInteger(pageCount) || pageCount <= 0) {
           throw new ScannedPdfError('document_pdf_render_failed');
@@ -255,8 +278,8 @@
           throwIfExpired(deadline);
           let page = null;
           try {
-            page = await waitWithinDeadline(pdfDocument.getPage(pageNumber), deadline);
-            const textLayer = await extractPdfPageText(page, deadline);
+            page = await waitWithinDeadline(pdfDocument.getPage(pageNumber), deadline, undefined, signal);
+            const textLayer = await extractPdfPageText(page, deadline, signal);
             pages.push({ pageNumber, textLayer, classification: classifyPdfPageText(textLayer) });
           } catch (error) {
             if (error instanceof ScannedPdfError) throw error;
@@ -276,6 +299,8 @@
             capabilities = await waitWithinDeadline(
               callCapabilities(signal),
               Math.min(deadline, Date.now() + PAGE_TIMEOUT_MS),
+              undefined,
+              signal,
             );
           } catch (error) {
             if (signal?.aborted || error?.name === 'AbortError') throw abortError();
@@ -310,7 +335,7 @@
             let renderTask = null;
             let imageBase64 = '';
             try {
-              page = await waitWithinDeadline(pdfDocument.getPage(pageNumber), deadline);
+              page = await waitWithinDeadline(pdfDocument.getPage(pageNumber), deadline, undefined, signal);
               const viewport = page.getViewport({ scale: pageScale(page) });
               const width = Math.max(1, Math.round(viewport.width));
               const height = Math.max(1, Math.round(viewport.height));
@@ -327,9 +352,14 @@
               context.fillRect?.(0, 0, width, height);
               context.restore?.();
               renderTask = page.render({ canvasContext: context, viewport });
-              await waitWithinDeadline(renderTask.promise, deadline, () => renderTask?.cancel?.());
-              const jpeg = await encodeJpeg(canvas, deadline);
-              imageBase64 = await blobToBase64(jpeg, deadline);
+              await waitWithinDeadline(
+                renderTask.promise,
+                deadline,
+                () => renderTask?.cancel?.(),
+                signal,
+              );
+              const jpeg = await encodeJpeg(canvas, deadline, signal);
+              imageBase64 = await blobToBase64(jpeg, deadline, signal);
             } catch (error) {
               if (error instanceof ScannedPdfError) throw error;
               throw new ScannedPdfError('document_pdf_render_failed');
@@ -355,6 +385,8 @@
                   pageTimedOut = true;
                   pageController.abort();
                 },
+                pageController.signal,
+                () => pageController.abort(),
               );
               ocrText = normalizePageResult(result);
             } catch (error) {
@@ -400,7 +432,7 @@
         if (error instanceof ScannedPdfError) throw error;
         throw new ScannedPdfError('document_pdf_render_failed');
       } finally {
-        await destroyPdf(pdfDocument, loadingTask, deadline);
+        await destroyPdf(pdfDocument, loadingTask, deadline, signal);
         pdfDocument = null;
         loadingTask = null;
         pdfData = null;

@@ -306,12 +306,23 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
     promise: Promise<T> | T,
     deadline: number,
     onTimeout?: () => void,
+    signal?: AbortSignal,
+    onAbort?: () => void,
   ): Promise<T> {
+    if (signal?.aborted) {
+      try {
+        (onAbort || onTimeout)?.();
+      } catch {
+        // Abort diagnostics must not be replaced by cleanup failures.
+      }
+      throw abortError();
+    }
     const timeoutMs = remaining(deadline);
     if (timeoutMs <= 0) throw new ScannedPdfOcrError('document_pdf_ocr_timeout');
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortHandler: (() => void) | undefined;
     try {
-      return await Promise.race([
+      const pending: Promise<T>[] = [
         Promise.resolve(promise),
         new Promise<T>((_resolve, reject) => {
           timer = setTimer(() => {
@@ -323,24 +334,39 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
             reject(new ScannedPdfOcrError('document_pdf_ocr_timeout'));
           }, timeoutMs);
         }),
-      ]);
+      ];
+      if (signal) {
+        pending.push(new Promise<T>((_resolve, reject) => {
+          abortHandler = () => {
+            try {
+              (onAbort || onTimeout)?.();
+            } catch {
+              // Abort diagnostics must not be replaced by cleanup failures.
+            }
+            reject(abortError());
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
+        }));
+      }
+      return await Promise.race(pending);
     } finally {
       if (timer !== undefined) clearTimer(timer);
+      if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
     }
   }
 
-  async function encodeJpeg(canvas: HTMLCanvasElement, deadline: number) {
+  async function encodeJpeg(canvas: HTMLCanvasElement, deadline: number, signal?: AbortSignal) {
     for (const quality of JPEG_QUALITIES) {
       throwIfExpired(deadline);
-      const blob = await withinDeadline(canvasToBlob(canvas, quality), deadline);
+      const blob = await withinDeadline(canvasToBlob(canvas, quality), deadline, undefined, signal);
       if (blob.size <= SCANNED_PDF_OCR_LIMITS.maxJpegBytes) return blob;
     }
     throw new ScannedPdfOcrError('document_pdf_page_too_large');
   }
 
-  async function blobToBase64(blob: Blob, deadline: number) {
+  async function blobToBase64(blob: Blob, deadline: number, signal?: AbortSignal) {
     throwIfExpired(deadline);
-    const buffer = await withinDeadline(blob.arrayBuffer(), deadline);
+    const buffer = await withinDeadline(blob.arrayBuffer(), deadline, undefined, signal);
     const bytes = new Uint8Array(buffer);
     const chunks: string[] = [];
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -356,6 +382,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
     pdfDocument: PdfDocument | null,
     loadingTask: PdfLoadingTask | null,
     deadline: number,
+    signal?: AbortSignal,
   ) {
     try {
       const destroy = pdfDocument?.destroy
@@ -363,7 +390,9 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
         : loadingTask?.destroy?.();
       if (destroy) {
         const cleanup = Promise.resolve(destroy).catch(() => undefined);
-        if (remaining(deadline) > 0) await withinDeadline(cleanup, deadline);
+        if (!signal?.aborted && remaining(deadline) > 0) {
+          await withinDeadline(cleanup, deadline, undefined, signal);
+        }
       }
     } catch {
       // Cleanup failures must not mask the import result.
@@ -380,7 +409,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
     let workerLease: { worker: Worker; url: string } | null = null;
     try {
       throwIfAborted(signal);
-      const pdfjs = await withinDeadline(loadPdfJs(), deadline);
+      const pdfjs = await withinDeadline(loadPdfJs(), deadline, undefined, signal);
       if (!pdfjs?.getDocument || !pdfjs?.GlobalWorkerOptions) {
         throw new ScannedPdfOcrError('document_pdf_render_failed');
       }
@@ -391,7 +420,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
       } else {
         pdfjs.GlobalWorkerOptions.workerSrc = `${assetBaseUrl}pdf.worker.mjs`;
       }
-      sourceBuffer = await withinDeadline(file.arrayBuffer(), deadline);
+      sourceBuffer = await withinDeadline(file.arrayBuffer(), deadline, undefined, signal);
       pdfData = new Uint8Array(sourceBuffer);
       sourceBuffer = null;
       loadingTask = pdfjs.getDocument({
@@ -403,6 +432,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
         loadingTask.promise,
         deadline,
         () => { void loadingTask?.destroy?.(); },
+        signal,
       );
       const pageCount = Number(pdfDocument?.numPages);
       if (!Number.isInteger(pageCount) || pageCount <= 0) {
@@ -419,8 +449,10 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
         throwIfExpired(deadline);
         let page: PdfPage | null = null;
         try {
-          page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline);
-          const pageText = extractPdfPageText(await withinDeadline(page.getTextContent(), deadline));
+          page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline, undefined, signal);
+          const pageText = extractPdfPageText(
+            await withinDeadline(page.getTextContent(), deadline, undefined, signal),
+          );
           pageTextLayers.push(pageText);
           if (classifyPdfPageText(pageText) === 'ocr-candidate') ocrCandidates.push(pageNumber);
         } catch (error) {
@@ -438,7 +470,12 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
         const capabilitySignal = signal || new AbortController().signal;
         let capabilities: OcrCapabilitiesPayload;
         try {
-          capabilities = await withinDeadline(dependencies.callCapabilities(capabilitySignal), deadline);
+          capabilities = await withinDeadline(
+            dependencies.callCapabilities(capabilitySignal),
+            deadline,
+            undefined,
+            signal,
+          );
         } catch (error) {
           if (signal?.aborted || (error as { name?: unknown } | null)?.name === 'AbortError') {
             throw abortError();
@@ -477,7 +514,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
           let renderTask: ReturnType<PdfPage['render']> | null = null;
           let imageBase64 = '';
           try {
-            page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline);
+            page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline, undefined, signal);
             const viewport = page.getViewport({ scale: pageScale(page) });
             const width = Math.max(1, Math.round(viewport.width));
             const height = Math.max(1, Math.round(viewport.height));
@@ -497,9 +534,14 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
             context.fillRect(0, 0, width, height);
             context.restore();
             renderTask = page.render({ canvasContext: context, viewport });
-            await withinDeadline(renderTask.promise, deadline, () => renderTask?.cancel?.());
-            const jpeg = await encodeJpeg(canvas, deadline);
-            imageBase64 = await blobToBase64(jpeg, deadline);
+            await withinDeadline(
+              renderTask.promise,
+              deadline,
+              () => renderTask?.cancel?.(),
+              signal,
+            );
+            const jpeg = await encodeJpeg(canvas, deadline, signal);
+            imageBase64 = await blobToBase64(jpeg, deadline, signal);
           } catch (error) {
             if (error instanceof ScannedPdfOcrError) throw error;
             throw new ScannedPdfOcrError('document_pdf_render_failed');
@@ -529,6 +571,8 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
                 pageTimedOut = true;
                 pageController.abort();
               },
+              pageController.signal,
+              () => pageController.abort(),
             );
           } catch (error) {
             if (signal?.aborted) throw abortError();
@@ -586,7 +630,7 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
       if (error instanceof ScannedPdfOcrError) throw error;
       throw new ScannedPdfOcrError('document_pdf_render_failed');
     } finally {
-      await destroyPdf(pdfDocument, loadingTask, deadline);
+      await destroyPdf(pdfDocument, loadingTask, deadline, signal);
       const pdfjs = (globalThis as PdfJsGlobal).__studyCompanionPdfJs;
       if (workerLease) {
         if (pdfjs?.GlobalWorkerOptions.workerPort === workerLease.worker) {

@@ -453,6 +453,41 @@ async function run() {
   );
   assert.strictEqual(cancelCalls, 1);
 
+  const loadingCancelState = state();
+  const loadingCancelController = new AbortController();
+  let loadingStarted;
+  const loadingStartedPromise = new Promise((resolve) => { loadingStarted = resolve; });
+  const loadingCanceled = createScannedPdfOcrController({
+    assetBaseUrl: '/plugin/custom_plugin/ui/pdfjs/',
+    createCanvas: () => makeCanvas(loadingCancelState),
+    loadPdfJs: async () => ({
+      GlobalWorkerOptions: {},
+      getDocument() {
+        loadingStarted();
+        return {
+          promise: new Promise(() => {}),
+          async destroy() { loadingCancelState.loadingDestroyed += 1; },
+        };
+      },
+    }),
+    callCapabilities: async () => ({ protocol: 1, ready: true, enabled: true }),
+    callPageOcr: async () => ({ status: 'ok', text: 'unused' }),
+  });
+  const loadingExtraction = loadingCanceled.extract(
+    { async arrayBuffer() { return new ArrayBuffer(1); } },
+    { signal: loadingCancelController.signal },
+  );
+  await loadingStartedPromise;
+  loadingCancelController.abort();
+  await Promise.race([
+    assert.rejects(loadingExtraction, (error) => error && error.name === 'AbortError'),
+    new Promise((_resolve, reject) => setTimeout(
+      () => reject(new Error('loading cancellation did not settle promptly')),
+      250,
+    )),
+  ]);
+  assert.ok(loadingCancelState.loadingDestroyed >= 1);
+
   const timeoutState = state();
   let timedOutSignal;
   const pageTimeout = createScannedPdfOcrController(dependencies(

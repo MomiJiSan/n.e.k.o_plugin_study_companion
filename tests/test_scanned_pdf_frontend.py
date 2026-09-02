@@ -17,6 +17,7 @@ INDEX = ROOT / "static" / "index.html"
 PDFJS = ROOT / "static" / "pdfjs"
 PYPROJECT = ROOT / "pyproject.toml"
 PDF_FIXTURES = ROOT / "tests" / "fixtures" / "pdf"
+GITATTRIBUTES = ROOT / ".gitattributes"
 
 
 def test_scanned_pdf_static_contract() -> None:
@@ -45,9 +46,9 @@ def test_scanned_pdf_static_contract() -> None:
     assert "# Page ${pageNumber}" in scanner
     assert "canvas.width = 0;" in scanner
     assert "canvas.height = 0;" in scanner
-    assert "await destroyPdf(pdfDocument, loadingTask, deadline);" in scanner
-    assert "waitWithinDeadline(canvasToBlob(canvas, quality), deadline)" in scanner
-    assert "waitWithinDeadline(blob.arrayBuffer(), deadline)" in scanner
+    assert "await destroyPdf(pdfDocument, loadingTask, deadline, signal);" in scanner
+    assert "waitWithinDeadline(canvasToBlob(canvas, quality), deadline, undefined, signal)" in scanner
+    assert "waitWithinDeadline(blob.arrayBuffer(), deadline, undefined, signal)" in scanner
     assert "console." not in scanner
     assert "study_start_document_analysis" not in scanner
 
@@ -72,6 +73,7 @@ def test_scanner_loads_before_document_controller_and_timeout_is_registered() ->
     scanner_position = index.index("./scanned-pdf-ocr.js")
     controller_position = index.index("./document-controller.js")
     assert scanner_position < controller_position
+    assert "./main.js?v=study-scanned-pdf-hybrid-0.2.3" in index
     assert "study_ocr_document_capabilities: 15000" in MAIN.read_text(encoding="utf-8")
     assert "study_ocr_document_page: 45000" in MAIN.read_text(encoding="utf-8")
 
@@ -91,6 +93,12 @@ def test_vendored_pdfjs_assets_match_manifest_and_have_no_cdn_imports() -> None:
             r"(?:from\s*|import\s*\(|importScripts\s*\()[\"']https?://",
             source,
         )
+
+
+def test_pdf_fixtures_are_checkout_safe_binary_files() -> None:
+    attributes = GITATTRIBUTES.read_text(encoding="utf-8")
+    assert "tests/fixtures/pdf/*.pdf binary" in attributes
+    assert all(path.read_bytes().startswith(b"%PDF-") for path in PDF_FIXTURES.glob("*.pdf"))
 
 
 def test_real_pdf_fixtures_expose_expected_text_layers() -> None:
@@ -383,6 +391,37 @@ async function run() {{
     (error) => error.name === 'AbortError',
   );
   assert.strictEqual(cancelScan.state.ocrCalls, 1);
+
+  const loadingCanceled = new AbortController();
+  let loadingStarted;
+  let loadingDestroyed = 0;
+  const loadingStartedPromise = new Promise((resolve) => {{ loadingStarted = resolve; }});
+  const loadingCancelScanner = api.create({{
+    canvasFactory: () => makeCanvas({{ canvases: [], removed: 0 }}),
+    loadPdfJs: async () => ({{
+      GlobalWorkerOptions: {{}},
+      getDocument() {{
+        loadingStarted();
+        return {{
+          promise: new Promise(() => {{}}),
+          async destroy() {{ loadingDestroyed += 1; }},
+        }};
+      }},
+    }}),
+    callCapabilities: async () => ({{ protocol: 1, ready: true, enabled: true }}),
+    callPlugin: async () => ({{ status: 'ok', text: 'unused' }}),
+  }});
+  const loadingExtraction = extract(loadingCancelScanner, {{ signal: loadingCanceled.signal }});
+  await loadingStartedPromise;
+  loadingCanceled.abort();
+  await Promise.race([
+    assert.rejects(loadingExtraction, (error) => error.name === 'AbortError'),
+    new Promise((_resolve, reject) => setTimeout(
+      () => reject(new Error('loading cancellation did not settle promptly')),
+      250,
+    )),
+  ]);
+  assert.ok(loadingDestroyed >= 1);
 
   const truncate = makeScanner([''], [{{ status: 'ok', text: 'x'.repeat(33000) }}]);
   const truncated = await extract(truncate.scanner);
