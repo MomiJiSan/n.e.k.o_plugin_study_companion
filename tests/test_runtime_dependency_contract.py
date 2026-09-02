@@ -15,7 +15,7 @@ def _distribution_name(requirement: str) -> str:
     return requirement.partition(">=")[0].partition("<")[0].partition("[")[0].lower()
 
 
-def test_runtime_dependencies_are_direct_and_dev_group_stays_test_only() -> None:
+def _dependency_groups() -> tuple[set[str], set[str]]:
     with PYPROJECT.open("rb") as file:
         configuration = tomllib.load(file)
 
@@ -27,10 +27,24 @@ def test_runtime_dependencies_are_direct_and_dev_group_stays_test_only() -> None
         _distribution_name(requirement)
         for requirement in configuration["dependency-groups"]["dev"]
     }
+    return runtime_dependencies, dev_dependencies
 
-    assert {"httpx", "pillow"} <= runtime_dependencies
+
+def test_runtime_dependencies_are_direct_and_dev_group_stays_test_only() -> None:
+    runtime_dependencies, dev_dependencies = _dependency_groups()
+
+    assert "httpx" in runtime_dependencies
+    assert "pillow" not in runtime_dependencies
+    assert "pillow" in dev_dependencies
     assert {"pytest", "pytest-asyncio"} <= dev_dependencies
-    assert {"httpx", "pillow"}.isdisjoint(dev_dependencies)
+    assert "httpx" not in dev_dependencies
+
+
+def test_native_pillow_is_host_provided_not_plugin_vendored() -> None:
+    runtime_dependencies, dev_dependencies = _dependency_groups()
+
+    assert "pillow" not in runtime_dependencies
+    assert "pillow" in dev_dependencies
 
 
 def test_no_dev_export_resolves_declared_runtime_dependencies() -> None:
@@ -58,4 +72,5 @@ def test_no_dev_export_resolves_declared_runtime_dependencies() -> None:
         for line in completed.stdout.splitlines()
         if line and not line.startswith(("#", "-"))
     }
-    assert {"httpx", "pillow"} <= exported_distributions
+    assert "httpx" in exported_distributions
+    assert "pillow" not in exported_distributions
