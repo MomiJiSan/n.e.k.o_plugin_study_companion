@@ -115,6 +115,9 @@ def _load_question_entries(monkeypatch: pytest.MonkeyPatch):
     scope.practice_scope_matches_topic = lambda *_args: True
     monkeypatch.setitem(sys.modules, scope.__name__, scope)
     contract = ModuleType(f"{package}.targeted_question_contract")
+    contract.canonicalize_targeted_question = (
+        lambda payload, **_kwargs: (dict(payload or {}), ())
+    )
     contract.project_target_topic_evidence = lambda value: dict(value or {})
     contract.semantic_validation_passed = lambda *_args, **_kwargs: True
     contract.validate_targeted_question = lambda *_args, **_kwargs: None

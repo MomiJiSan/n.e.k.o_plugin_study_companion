@@ -1162,6 +1162,7 @@ async def _server_binding_overrides_model_claim(
         "question_params": {
             "target_topic_id": "target",
             "target_topic": {"id": "target", "name": "Target"},
+            "planned_difficulty": 2,
             "retry_wrong_question": {
                 "id": "wrong-1",
                 "topic_id": "target",
@@ -1194,34 +1195,35 @@ def test_server_binding_overrides_model_claim_and_stays_private(
     asyncio.run(_server_binding_overrides_model_claim(monkeypatch))
 
 
-async def _planned_difficulty_mismatch_retries_once(
+async def _repairable_incident_is_canonicalized_without_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    entries, _ = _load_entries(monkeypatch, "_targeted_planned_difficulty_retry_test")
+    entries, _ = _load_entries(monkeypatch, "_targeted_repairable_incident_test")
 
     class Agent:
         generated = 0
         validated = 0
+        validation_contexts: list[dict[str, Any]] = []
 
         async def question_generate(self, *_args, **_kwargs):
             self.generated += 1
-            difficulty = 2 if self.generated == 1 else 3
             payload = {
                 "question": f"Question {self.generated}",
                 "answer": "Answer",
-                "reference_answer": "Answer",
-                "accepted_answers": ["Answer"],
+                "reference_answer": "Equivalent answer wording",
+                "accepted_answers": [" Answer ", "Answer", "Alternative"],
                 "key_points": ["Uses the target definition."],
                 "rubric": {"definition": 1},
                 "solution_steps": ["Apply the target definition."],
                 "question_type": "short_answer",
-                "difficulty": difficulty,
+                "difficulty": 3,
                 "hint": "Recall the definition.",
             }
             return _Reply("question_generate", "", payload["question"], payload)
 
-        async def question_validate(self, **_kwargs):
+        async def question_validate(self, **kwargs):
             self.validated += 1
+            self.validation_contexts.append(dict(kwargs.get("context") or {}))
             return _Reply(
                 "question_validate",
                 "",
@@ -1238,6 +1240,12 @@ async def _planned_difficulty_mismatch_retries_once(
         _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
         _agent = Agent()
         _knowledge_tracker = Tracker()
+        repair_logs: list[tuple[str, str, str]] = []
+        logger = SimpleNamespace(
+            info=lambda template, context_id, codes: Subject.repair_logs.append(
+                (template, context_id, codes)
+            )
+        )
 
         async def _build_learning_context(self, _operation, *, input_text, extra):
             return {**extra, "input_text": input_text, "language": "zh-CN"}
@@ -1264,20 +1272,294 @@ async def _planned_difficulty_mismatch_retries_once(
             "scope_key": "",
             "question_params": {
                 "target_topic": {"id": "target", "name": "Target"},
-                "planned_difficulty": 3,
+                "planned_difficulty": 2,
             },
         },
     )
 
-    assert result["difficulty"] == 3
-    assert subject._agent.generated == 2
+    assert result["difficulty"] == 2
+    assert result["reference_answer"] == "Answer"
+    assert result["accepted_answers"] == ["Answer", "Alternative"]
+    assert result["hint"] == "Recall the definition."
+    assert "_answer_reference_answer_consistent" not in result
+    assert "_targeted_difficulty_valid" not in result
+    assert subject._agent.generated == 1
     assert subject._agent.validated == 1
+    assert subject._agent.validation_contexts == [
+        {
+            "question": "Question 1",
+            "reference_answer": "Answer",
+            "accepted_answers": ["Answer", "Alternative"],
+            "key_points": ["Uses the target definition."],
+            "rubric": {"definition": 1},
+            "solution_steps": ["Apply the target definition."],
+            "hint": "Recall the definition.",
+            "difficulty": 2,
+            "question_type": "short_answer",
+            "target_topic": {"id": "target", "name": "Target"},
+            "necessary_relations": {},
+        }
+    ]
+    assert subject.repair_logs == [
+        (
+            "targeted question repair selection_context_id={} codes={}",
+            "ctx",
+            "difficulty_overridden,reference_answer_canonicalized,accepted_answers_deduplicated",
+        )
+    ]
 
 
-def test_planned_difficulty_mismatch_uses_the_existing_one_retry(
+def test_repairable_incident_is_canonicalized_without_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    asyncio.run(_planned_difficulty_mismatch_retries_once(monkeypatch))
+    asyncio.run(_repairable_incident_is_canonicalized_without_retry(monkeypatch))
+
+
+async def _leaking_hint_is_removed_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_hint_repair_test")
+
+    class Agent:
+        generated = 0
+        validated = 0
+        validation_contexts: list[dict[str, Any]] = []
+
+        async def question_generate(self, *_args, **_kwargs):
+            self.generated += 1
+            return _Reply(
+                "question_generate",
+                "",
+                "Question",
+                {
+                    "question": "Question",
+                    "answer": "42",
+                    "reference_answer": "42",
+                    "accepted_answers": ["42"],
+                    "key_points": ["Uses the target definition."],
+                    "rubric": {"definition": 1},
+                    "solution_steps": ["Apply the target definition."],
+                    "question_type": "short_answer",
+                    "difficulty": 2,
+                    "hint": "The final answer is 42.",
+                },
+            )
+
+        async def question_validate(self, **kwargs):
+            self.validated += 1
+            self.validation_contexts.append(dict(kwargs.get("context") or {}))
+            return _Reply(
+                "question_validate",
+                "",
+                "ok",
+                {"relevant": True, "answer_supported": True, "retry": False},
+            )
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+        _knowledge_tracker = SimpleNamespace(
+            record_prompt_usage_for_question_params=lambda _params: None
+        )
+        repair_logs: list[tuple[str, str, str]] = []
+        logger = SimpleNamespace(
+            info=lambda template, context_id, codes: Subject.repair_logs.append(
+                (template, context_id, codes)
+            )
+        )
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "zh-CN"}
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        @asynccontextmanager
+        async def _practice_scope_write_lock(self):
+            yield
+
+        async def _finalize_tutor_call(self, _operation, reply, **_kwargs):
+            return dict(reply.payload)
+
+    subject = Subject()
+    result = await subject._generate_question_payload(
+        source_text="Generate",
+        source="targeted_question",
+        targeted_context={
+            "selected_topic_id": "target",
+            "selected_topic_name": "Target",
+            "selection_context_id": "ctx",
+            "scope_revision": 0,
+            "scope_key": "",
+            "question_params": {
+                "target_topic": {"id": "target", "name": "Target"},
+                "planned_difficulty": 2,
+            },
+        },
+    )
+
+    assert result["hint"] == ""
+    assert subject._agent.generated == 1
+    assert subject._agent.validated == 1
+    assert subject._agent.validation_contexts == [
+        {
+            "question": "Question",
+            "reference_answer": "42",
+            "accepted_answers": ["42"],
+            "key_points": ["Uses the target definition."],
+            "rubric": {"definition": 1},
+            "solution_steps": ["Apply the target definition."],
+            "hint": "",
+            "difficulty": 2,
+            "question_type": "short_answer",
+            "target_topic": {"id": "target", "name": "Target"},
+            "necessary_relations": {},
+        }
+    ]
+    assert subject.repair_logs == [
+        (
+            "targeted question repair selection_context_id={} codes={}",
+            "ctx",
+            "hint_removed",
+        )
+    ]
+
+
+def test_leaking_hint_is_removed_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_leaking_hint_is_removed_without_retry(monkeypatch))
+
+
+async def _hard_structural_failures_still_exhaust_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, SdkError = _load_entries(monkeypatch, "_targeted_hard_failure_test")
+
+    class Agent:
+        generated = 0
+        validated = 0
+
+        async def question_generate(self, *_args, **_kwargs):
+            self.generated += 1
+            return _Reply(
+                "question_generate",
+                "",
+                "Question",
+                {
+                    "question": "Question",
+                    "answer": "Answer",
+                    "reference_answer": "Answer",
+                    "accepted_answers": ["Answer"],
+                    "key_points": [],
+                    "rubric": {},
+                    "solution_steps": [],
+                    "question_type": "short_answer",
+                    "difficulty": 2,
+                    "hint": "Recall the definition.",
+                },
+            )
+
+        async def question_validate(self, **_kwargs):
+            self.validated += 1
+            raise AssertionError("hard structural failures must not reach semantic validation")
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+        _knowledge_tracker = SimpleNamespace(
+            record_prompt_usage_for_question_params=lambda _params: None
+        )
+        finalized = 0
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "zh-CN"}
+
+        def _resolve_active_practice_scope(self):
+            return None
+
+        async def _finalize_tutor_call(self, *_args, **_kwargs):
+            self.finalized += 1
+            return {}
+
+    subject = Subject()
+    with pytest.raises(SdkError) as error:
+        await subject._generate_question_payload(
+            source_text="Generate",
+            source="targeted_question",
+            targeted_context={
+                "selected_topic_id": "target",
+                "selected_topic_name": "Target",
+                "selection_context_id": "ctx",
+                "scope_revision": 0,
+                "scope_key": "",
+                "question_params": {
+                    "target_topic": {"id": "target", "name": "Target"},
+                    "planned_difficulty": 2,
+                },
+            },
+        )
+
+    assert error.value.code == "QUESTION_VALIDATION_FAILED"
+    assert subject._agent.generated == 2
+    assert subject._agent.validated == 0
+    assert subject.finalized == 0
+
+
+def test_hard_structural_failures_still_exhaust_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_hard_structural_failures_still_exhaust_retry(monkeypatch))
+
+
+async def _invalid_planned_difficulty_fails_before_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, SdkError = _load_entries(monkeypatch, "_targeted_invalid_plan_test")
+
+    class Agent:
+        generated = 0
+
+        async def question_generate(self, *_args, **_kwargs):
+            self.generated += 1
+            raise AssertionError("invalid server plan must fail before model generation")
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "zh-CN"}
+
+    subject = Subject()
+    with pytest.raises(SdkError) as error:
+        await subject._generate_question_payload(
+            source_text="Generate",
+            source="targeted_question",
+            targeted_context={
+                "selected_topic_id": "target",
+                "selected_topic_name": "Target",
+                "selection_context_id": "ctx",
+                "scope_revision": 0,
+                "scope_key": "",
+                "question_params": {
+                    "target_topic": {"id": "target", "name": "Target"},
+                    "planned_difficulty": 0,
+                },
+            },
+        )
+
+    assert error.value.code == "INVALID_TARGETED_QUESTION_PLAN"
+    assert subject._agent.generated == 0
+
+
+def test_invalid_planned_difficulty_fails_before_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_invalid_planned_difficulty_fails_before_generation(monkeypatch))
 
 
 async def _second_semantic_failure_never_finalizes_question(
@@ -1352,6 +1634,7 @@ async def _second_semantic_failure_never_finalizes_question(
         "question_params": {
             "target_topic_id": "target",
             "target_topic": {"id": "target", "name": "Target"},
+            "planned_difficulty": 2,
         },
     }
     subject = Subject()

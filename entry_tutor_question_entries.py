@@ -49,6 +49,7 @@ from .question_type_mapping import (
     select_question_style,
 )
 from .targeted_question_contract import (
+    canonicalize_targeted_question,
     project_target_topic_evidence,
     semantic_validation_passed,
     validate_targeted_question,
@@ -833,7 +834,16 @@ class _TutorQuestionEntriesMixin:
             if targeted_context
             else 0
         )
-        if isinstance(planned_difficulty, bool) or not isinstance(planned_difficulty, int):
+        if targeted_context and (
+            isinstance(planned_difficulty, bool)
+            or not isinstance(planned_difficulty, int)
+            or not 1 <= planned_difficulty <= 5
+        ):
+            raise SdkError(
+                "targeted question plan has an invalid planned difficulty",
+                code="INVALID_TARGETED_QUESTION_PLAN",
+            )
+        if not targeted_context:
             planned_difficulty = 0
         plan = QuestionPlan(
             plan_id=str((targeted_context or {}).get("selection_context_id") or ""),
@@ -871,11 +881,34 @@ class _TutorQuestionEntriesMixin:
                 context=generation_context,
             )
             candidate_payload = dict(candidate_reply.payload or {})
+            repair_codes: tuple[str, ...] = ()
             if targeted_context:
                 candidate_payload = enforce_mapped_question_type(
                     candidate_payload, question_type_mapping
                 )
                 candidate_payload["target_topic_id"] = selected_topic_id
+                candidate_payload, repair_codes = canonicalize_targeted_question(
+                    candidate_payload,
+                    target_topic_id=selected_topic_id,
+                    planned_difficulty=planned_difficulty,
+                )
+                safe_hint = _safe_hint(candidate_payload)
+                if str(candidate_payload.get("hint") or "").strip() and not safe_hint:
+                    repair_codes = (*repair_codes, "hint_removed")
+                candidate_payload["hint"] = safe_hint
+                # Provenance markers are strictly internal to model-output
+                # normalization and must never reach validation persistence.
+                candidate_payload.pop("_answer_reference_answer_consistent", None)
+                candidate_payload.pop("_targeted_difficulty_valid", None)
+                if repair_codes:
+                    logger = getattr(self, "logger", None)
+                    log_repair = getattr(logger, "info", None)
+                    if callable(log_repair):
+                        log_repair(
+                            "targeted question repair selection_context_id={} codes={}",
+                            plan.plan_id,
+                            ",".join(repair_codes),
+                        )
             normalized_reply = TutorReply(
                 operation=candidate_reply.operation,
                 input_text=candidate_reply.input_text,
@@ -893,7 +926,10 @@ class _TutorQuestionEntriesMixin:
                     question_type=str(candidate_payload.get("question_type") or plan.question_type),
                     difficulty=int(candidate_payload.get("difficulty") or 0),
                     public_payload=candidate_payload,
-                    generator_metadata={"reply": normalized_reply},
+                    generator_metadata={
+                        "reply": normalized_reply,
+                        "repair_codes": repair_codes,
+                    },
                     mode=active_mode,
                     source_question_id=source_question_id,
                     status="generated",
@@ -911,15 +947,12 @@ class _TutorQuestionEntriesMixin:
                 return QuestionValidationResult(valid=True)
             candidate_payload = dict(generation.question.public_payload)
             params = dict(targeted_context.get("question_params") or {})
-            expected_difficulty = params.get("planned_difficulty")
-            if isinstance(expected_difficulty, bool) or not isinstance(expected_difficulty, int):
-                expected_difficulty = None
             structural = validate_targeted_question(
                 candidate_payload,
                 target_topic_id=selected_topic_id,
                 target_topic_name=selected_topic_name,
                 origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
-                expected_difficulty=expected_difficulty,
+                expected_difficulty=planned_difficulty,
             )
             if not structural.valid:
                 validation_failure = "Structural validation failed: " + ", ".join(
@@ -946,7 +979,6 @@ class _TutorQuestionEntriesMixin:
                 return QuestionValidationResult(
                     valid=False, errors=(validation_failure,), raw_result=validation_reply
                 )
-            candidate_payload.pop("_targeted_difficulty_valid", None)
             generation.question.public_payload.update(candidate_payload)
             return QuestionValidationResult(valid=True, raw_result=validation_reply)
 

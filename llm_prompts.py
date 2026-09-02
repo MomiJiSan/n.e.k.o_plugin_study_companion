@@ -40,6 +40,7 @@ from .prompt_templates import (
     STUDY_SUMMARIZE_SESSION_EXAMPLE,
     STUDY_SUMMARIZE_SESSION_REQUIREMENTS,
     STUDY_SUMMARIZE_SESSION_SYSTEM_PROMPT,
+    STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS,
 )
 from .targeted_question_contract import (
     TARGET_TOPIC_IDENTITY_FIELDS,
@@ -500,10 +501,15 @@ def build_question_generate_messages(
     context.setdefault("text", text)
     context.setdefault("language", language)
     context.setdefault("mode", normalize_mode(mode))
+    requirements = STUDY_QUESTION_GENERATE_REQUIREMENTS
+    if context.get("targeted_question") is True:
+        requirements = (
+            f"{requirements}\n{STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS}"
+        )
     return _build_structured_messages(
         operation=LLM_OPERATION_QUESTION_GENERATE,
         system_prompt=STUDY_QUESTION_GENERATE_SYSTEM_PROMPT,
-        requirements=STUDY_QUESTION_GENERATE_REQUIREMENTS,
+        requirements=requirements,
         context=context,
         example=STUDY_QUESTION_GENERATE_EXAMPLE,
         mode=mode,
