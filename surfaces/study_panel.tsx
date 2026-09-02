@@ -60,7 +60,40 @@ type StudyModelRuntime = {
   credential_configured?: boolean;
   transport_supported?: boolean;
   vision_capability?: string;
+  api_source?: string;
+  provider_code?: string;
+  is_free?: boolean | null;
+  endpoint_hint?: string;
 };
+
+const MODEL_RUNTIME_SOURCE_FALLBACKS: Record<string, string> = Object.freeze({
+  neko_free: 'N.E.K.O built-in free API',
+  custom: 'Custom API',
+  neko_managed: 'N.E.K.O managed API',
+  unknown: 'Unknown API source',
+});
+
+const MODEL_RUNTIME_PROVIDER_FALLBACKS: Record<string, string> = Object.freeze({
+  neko: 'N.E.K.O',
+  qwen: 'Alibaba Cloud Model Studio',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
+  custom: 'Custom provider',
+  unknown: 'Unknown provider',
+});
+
+const SAFE_MODEL_RUNTIME_ENDPOINTS = new Set([
+  'lanlan.tech',
+  'www.lanlan.tech',
+  'dashscope.aliyuncs.com',
+  'dashscope-intl.aliyuncs.com',
+  'dashscope-us.aliyuncs.com',
+  'api.openai.com',
+  'api.anthropic.com',
+  'openrouter.ai',
+  'api.openrouter.ai',
+]);
 
 type StudyMode = 'companion' | 'interactive' | 'teaching';
 
@@ -1151,6 +1184,42 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     return role === 'vision'
       ? t('ui.settings.model_runtime.configured_vision_unknown', 'Configured; image capability will be confirmed on the first request')
       : t('ui.settings.model_runtime.ready', 'Ready');
+  }
+
+  function modelRuntimeMeta(role: string, item: StudyModelRuntime) {
+    const hasApiMetadata = ['api_source', 'provider_code', 'is_free', 'endpoint_hint']
+      .some((key) => Object.prototype.hasOwnProperty.call(item, key));
+    if (!hasApiMetadata) {
+      return tf('ui.settings.model_runtime.meta', 'Group: {group} · Protocol: {protocol}', {
+        group: item.group || (role === 'text' ? 'agent' : 'vision'),
+        protocol: item.provider_type || t('ui.settings.model_runtime.protocol_unknown', 'Unknown'),
+      });
+    }
+
+    const sourceCandidate = String(item.api_source || '').trim();
+    const sourceCode = Object.prototype.hasOwnProperty.call(MODEL_RUNTIME_SOURCE_FALLBACKS, sourceCandidate)
+      ? sourceCandidate
+      : (item.is_free === true ? 'neko_free' : 'unknown');
+    const providerCandidate = String(item.provider_code || '').trim();
+    const providerCode = Object.prototype.hasOwnProperty.call(MODEL_RUNTIME_PROVIDER_FALLBACKS, providerCandidate)
+      ? providerCandidate
+      : 'unknown';
+    const source = t(
+      `ui.settings.model_runtime.source_${sourceCode}`,
+      MODEL_RUNTIME_SOURCE_FALLBACKS[sourceCode],
+    );
+    const provider = t(
+      `ui.settings.model_runtime.provider_${providerCode}`,
+      MODEL_RUNTIME_PROVIDER_FALLBACKS[providerCode],
+    );
+    const parts = [tf('ui.settings.model_runtime.api_meta', '{source} · {provider}', { source, provider })];
+    const endpointHint = String(item.endpoint_hint || '').trim().toLowerCase();
+    if (endpointHint === 'local_or_private') {
+      parts.push(t('ui.settings.model_runtime.endpoint_local_or_private', 'Local or private service'));
+    } else if (SAFE_MODEL_RUNTIME_ENDPOINTS.has(endpointHint)) {
+      parts.push(endpointHint);
+    }
+    return parts.join(' · ');
   }
 
   function normalizeStudyStatus(value: unknown): StudyStatus {
@@ -2592,10 +2661,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
             <div key={role}>
               <span>{t(`ui.settings.model_runtime.${role}`, role === 'text' ? 'Text and document model' : 'Image explanation model')}</span>
               <strong>{item.model || t('ui.settings.model_runtime.not_configured', 'Not configured')}</strong>
-              <small>{tf('ui.settings.model_runtime.meta', 'Group: {group} · Protocol: {protocol}', {
-                group: item.group || (role === 'text' ? 'agent' : 'vision'),
-                protocol: item.provider_type || t('ui.settings.model_runtime.protocol_unknown', 'Unknown'),
-              })}</small>
+              <small>{modelRuntimeMeta(role, item)}</small>
               <small>{modelRuntimeStatus(role, item)}</small>
             </div>
           );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -44,6 +45,104 @@ _DASHSCOPE_HOSTS = frozenset(
     }
 )
 _SUPPORTED_PROVIDER_TYPES = frozenset({"openai_compatible", "anthropic"})
+_NEKO_FREE_HOSTS = frozenset({"lanlan.tech", "www.lanlan.tech"})
+_NEKO_FREE_MODELS = frozenset({"free-agent-model", "free-vision-model"})
+_PROVIDER_HOSTS = {
+    **{host: "qwen" for host in _DASHSCOPE_HOSTS},
+    "api.openai.com": "openai",
+    "api.anthropic.com": "anthropic",
+    "openrouter.ai": "openrouter",
+    "api.openrouter.ai": "openrouter",
+}
+_API_SOURCES = frozenset({"neko_free", "custom", "neko_managed", "unknown"})
+_PROVIDER_CODES = frozenset(
+    {"neko", "qwen", "openai", "anthropic", "openrouter", "custom", "unknown"}
+)
+_SAFE_ENDPOINT_HINTS = frozenset(
+    {*_NEKO_FREE_HOSTS, *_PROVIDER_HOSTS, "local_or_private"}
+)
+
+
+def _config_flag_enabled(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value == 1
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parsed_public_endpoint(base_url: str) -> tuple[str, bool, bool]:
+    try:
+        parsed = urlsplit(base_url)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return "", False, False
+    host = str(parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme.lower() not in {"http", "https"} or not host:
+        return "", False, False
+    canonical = (
+        parsed.username is None
+        and parsed.password is None
+        and port is None
+    )
+    if host == "localhost" or host.endswith(
+        (".localhost", ".local", ".lan", ".home", ".internal")
+    ):
+        return host, False, canonical
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host, True, canonical
+    return host, address.is_global, canonical
+
+
+def _runtime_display_metadata(
+    *, model: str, base_url: str, is_custom: bool
+) -> dict[str, object]:
+    host, is_public, canonical = _parsed_public_endpoint(base_url)
+    provider_code = (
+        _PROVIDER_HOSTS.get(host, "") if is_public and canonical else ""
+    )
+    trusted_free = (
+        model.strip().lower() in _NEKO_FREE_MODELS
+        and host in _NEKO_FREE_HOSTS
+        and is_public
+        and canonical
+        and urlsplit(base_url).scheme.lower() == "https"
+    )
+    if trusted_free:
+        return {
+            "api_source": "neko_free",
+            "provider_code": "neko",
+            "is_free": True,
+            "endpoint_hint": host,
+        }
+    if is_custom:
+        return {
+            "api_source": "custom",
+            "provider_code": provider_code or "custom",
+            "is_free": None,
+            "endpoint_hint": (
+                host
+                if provider_code
+                else "local_or_private"
+                if host and not is_public
+                else ""
+            ),
+        }
+    if provider_code:
+        return {
+            "api_source": "neko_managed",
+            "provider_code": provider_code,
+            "is_free": None,
+            "endpoint_hint": host,
+        }
+    return {
+        "api_source": "unknown",
+        "provider_code": "unknown",
+        "is_free": None,
+        "endpoint_hint": "local_or_private" if host and not is_public else "",
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,20 +153,37 @@ class StudyModelRuntimeSnapshot:
     transport: str
     api_key: str = field(repr=False)
     base_url: str = field(repr=False)
+    api_source: str = "unknown"
+    provider_code: str = "unknown"
+    is_free: bool | None = None
+    endpoint_hint: str = ""
 
     def safe_description(self) -> dict[str, object]:
         configured = bool(self.model and self.base_url)
+        api_source = (
+            self.api_source if self.api_source in _API_SOURCES else "unknown"
+        )
+        provider_code = (
+            self.provider_code if self.provider_code in _PROVIDER_CODES else "unknown"
+        )
+        endpoint_hint = (
+            self.endpoint_hint if self.endpoint_hint in _SAFE_ENDPOINT_HINTS else ""
+        )
         return {
             "group": self.model_group,
             "model": self.model,
             "provider_type": self.provider_type,
             "configured": configured,
-            "credential_configured": bool(self.api_key),
+            "credential_configured": bool(self.api_key) or api_source == "neko_free",
             "transport": self.transport,
             "transport_supported": self.transport != "unsupported",
             "vision_capability": (
                 "unknown" if self.model_group == "vision" else "not_applicable"
             ),
+            "api_source": api_source,
+            "provider_code": provider_code,
+            "is_free": self.is_free if isinstance(self.is_free, bool) else None,
+            "endpoint_hint": endpoint_hint,
         }
 
 
@@ -273,6 +389,11 @@ class StudyModelGateway:
         provider_type = str(
             config.get("provider_type") or "openai_compatible"
         ).strip().lower()
+        display_metadata = _runtime_display_metadata(
+            model=model,
+            base_url=base_url,
+            is_custom=_config_flag_enabled(config.get("is_custom")),
+        )
         return StudyModelRuntimeSnapshot(
             model_group=group,
             model=model,
@@ -280,6 +401,7 @@ class StudyModelGateway:
             transport=_runtime_transport(model, base_url, provider_type),
             api_key=api_key,
             base_url=base_url,
+            **display_metadata,
         )
 
     async def describe_runtime(self, model_group: str) -> dict[str, object]:
