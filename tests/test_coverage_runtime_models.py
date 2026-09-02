@@ -183,6 +183,10 @@ async def test_gateway_resolves_runtime_descriptions_and_transport_rules(gateway
         "transport": "dashscope_native",
         "transport_supported": True,
         "vision_capability": "not_applicable",
+        "api_source": "neko_managed",
+        "provider_code": "qwen",
+        "is_free": None,
+        "endpoint_hint": "dashscope.aliyuncs.com",
     }
     descriptions = await gateway.describe_runtimes()
     assert descriptions["vision"]["transport"] == "anthropic"
@@ -194,6 +198,164 @@ async def test_gateway_resolves_runtime_descriptions_and_transport_rules(gateway
     with pytest.raises(module.StudyModelError) as raised:
         await gateway.resolve_runtime("summary")
     assert raised.value.diagnostic == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_gateway_describes_free_custom_and_managed_api_sources(
+    gateway_env: Any,
+) -> None:
+    gateway = gateway_env.module.StudyModelGateway(logger=_Logger())
+
+    gateway_env.manager.configs["agent"] = {
+        "model": "free-agent-model",
+        "base_url": "https://www.lanlan.tech/text/v1",
+        "api_key": "",
+        "provider_type": "openai_compatible",
+    }
+    free_agent = await gateway.describe_runtime("agent")
+    assert free_agent["api_source"] == "neko_free"
+    assert free_agent["provider_code"] == "neko"
+    assert free_agent["is_free"] is True
+    assert free_agent["endpoint_hint"] == "www.lanlan.tech"
+    assert free_agent["credential_configured"] is True
+
+    gateway_env.manager.configs["vision"] = {
+        "model": "free-vision-model",
+        "base_url": "https://www.lanlan.tech/vision/v1",
+        "api_key": "",
+        "provider_type": "openai_compatible",
+    }
+    free_vision = await gateway.describe_runtime("vision")
+    assert free_vision["api_source"] == "neko_free"
+    assert free_vision["is_free"] is True
+    assert free_vision["credential_configured"] is True
+
+    gateway_env.manager.configs["agent"] = {
+        "model": "qwen3.7-plus-2026-05-26",
+        "base_url": "https://dashscope.aliyuncs.com/api/v1",
+        "api_key": "custom-qwen-secret",
+        "provider_type": "openai_compatible",
+        "is_custom": True,
+    }
+    custom_qwen = await gateway.describe_runtime("agent")
+    assert custom_qwen["api_source"] == "custom"
+    assert custom_qwen["provider_code"] == "qwen"
+    assert custom_qwen["is_free"] is None
+    assert custom_qwen["endpoint_hint"] == "dashscope.aliyuncs.com"
+
+    gateway_env.manager.configs["vision"] = {
+        "model": "qwen3.7-plus",
+        "base_url": "https://dashscope.aliyuncs.com/api/v1",
+        "api_key": "managed-qwen-secret",
+        "provider_type": "openai_compatible",
+        "is_custom": False,
+    }
+    managed_qwen = await gateway.describe_runtime("vision")
+    assert managed_qwen["api_source"] == "neko_managed"
+    assert managed_qwen["provider_code"] == "qwen"
+    assert managed_qwen["is_free"] is None
+
+
+@pytest.mark.asyncio
+async def test_gateway_runtime_metadata_is_conservative_and_does_not_leak(
+    gateway_env: Any,
+) -> None:
+    gateway = gateway_env.module.StudyModelGateway(logger=_Logger())
+    cases = [
+        (
+            {
+                "model": "free-agent-model",
+                "base_url": "https://public.example/v1?token=visible-in-config-only",
+                "api_key": "unknown-public-secret",
+                "provider_type": "openai_compatible",
+            },
+            ("unknown", "unknown", None, ""),
+        ),
+        (
+            {
+                "model": "custom-model",
+                "base_url": "http://127.0.0.1:8080/private/path?token=local-only",
+                "api_key": "private-secret",
+                "provider_type": "openai_compatible",
+                "is_custom": True,
+            },
+            ("custom", "custom", None, "local_or_private"),
+        ),
+        (
+            {
+                "model": "custom-model",
+                "base_url": "not a valid URL/private/path?token=bad",
+                "api_key": "malformed-secret",
+                "provider_type": "openai_compatible",
+                "is_custom": True,
+            },
+            ("custom", "custom", None, ""),
+        ),
+        (
+            {
+                "model": "custom-model",
+                "base_url": (
+                    "https://alice:password@dashscope.aliyuncs.com:8443/"
+                    "sensitive/path?token=query-secret"
+                ),
+                "api_key": "credential-secret",
+                "provider_type": "openai_compatible",
+                "is_custom": True,
+            },
+            ("custom", "custom", None, ""),
+        ),
+    ]
+    forbidden = {
+        "unknown-public-secret",
+        "private-secret",
+        "malformed-secret",
+        "credential-secret",
+        "visible-in-config-only",
+        "local-only",
+        "alice",
+        "password",
+        "8443",
+        "sensitive/path",
+        "query-secret",
+    }
+
+    for config, expected in cases:
+        gateway_env.manager.configs["agent"] = config
+        description = await gateway.describe_runtime("agent")
+        assert (
+            description["api_source"],
+            description["provider_code"],
+            description["is_free"],
+            description["endpoint_hint"],
+        ) == expected
+        rendered = repr(description)
+        assert all(secret not in rendered for secret in forbidden)
+
+
+@pytest.mark.parametrize(
+    ("endpoint_url", "provider_code"),
+    [
+        ("https://api.openai.com/v1", "openai"),
+        ("https://api.anthropic.com/v1", "anthropic"),
+        ("https://openrouter.ai/api/v1", "openrouter"),
+    ],
+)
+def test_gateway_runtime_metadata_recognizes_whitelisted_provider_hosts(
+    gateway_env: Any,
+    endpoint_url: str,
+    provider_code: str,
+) -> None:
+    metadata = gateway_env.module._runtime_display_metadata(
+        model="provider-model",
+        base_url=endpoint_url,
+        is_custom=False,
+    )
+    assert metadata == {
+        "api_source": "neko_managed",
+        "provider_code": provider_code,
+        "is_free": None,
+        "endpoint_hint": endpoint_url.split("/")[2],
+    }
 
 
 @pytest.mark.asyncio

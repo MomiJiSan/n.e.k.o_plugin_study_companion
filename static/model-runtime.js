@@ -23,6 +23,32 @@
     ready: 'Ready',
     configured_vision_unknown: 'Configured; image capability will be confirmed on the first request',
   });
+  const API_SOURCE_FALLBACKS = Object.freeze({
+    neko_free: 'N.E.K.O built-in free API',
+    custom: 'Custom API',
+    neko_managed: 'N.E.K.O managed API',
+    unknown: 'Unknown API source',
+  });
+  const PROVIDER_FALLBACKS = Object.freeze({
+    neko: 'N.E.K.O',
+    qwen: 'Alibaba Cloud Model Studio',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    openrouter: 'OpenRouter',
+    custom: 'Custom provider',
+    unknown: 'Unknown provider',
+  });
+  const SAFE_PUBLIC_ENDPOINTS = new Set([
+    'api.anthropic.com',
+    'api.openai.com',
+    'api.openrouter.ai',
+    'dashscope.aliyuncs.com',
+    'dashscope-intl.aliyuncs.com',
+    'dashscope-us.aliyuncs.com',
+    'lanlan.tech',
+    'openrouter.ai',
+    'www.lanlan.tech',
+  ]);
 
   function formatDiagnostic(diagnostic, t) {
     const [key, fallback] = DIAGNOSTIC_MESSAGES[String(diagnostic || '').trim()]
@@ -42,10 +68,41 @@
       const group = String(item.group || (role === 'vision' ? 'vision' : 'agent'));
       const protocol = String(item.provider_type || '').trim();
       if (model) model.textContent = String(item.model || t('ui.settings.model_runtime.not_configured', 'Not configured'));
-      if (meta) meta.textContent = tf('ui.settings.model_runtime.meta', 'Group: {group} · Protocol: {protocol}', {
-        group,
-        protocol: protocol || t('ui.settings.model_runtime.protocol_unknown', 'Unknown'),
-      });
+      if (meta) {
+        const hasApiMetadata = ['api_source', 'provider_code', 'is_free', 'endpoint_hint']
+          .some((key) => Object.prototype.hasOwnProperty.call(item, key));
+        if (hasApiMetadata) {
+          const sourceCandidate = String(item.api_source || '').trim();
+          const sourceCode = Object.prototype.hasOwnProperty.call(API_SOURCE_FALLBACKS, sourceCandidate)
+            ? sourceCandidate
+            : (item.is_free === true ? 'neko_free' : 'unknown');
+          const providerCandidate = String(item.provider_code || '').trim();
+          const providerCode = Object.prototype.hasOwnProperty.call(PROVIDER_FALLBACKS, providerCandidate)
+            ? providerCandidate
+            : 'unknown';
+          const source = t(
+            `ui.settings.model_runtime.source_${sourceCode}`,
+            API_SOURCE_FALLBACKS[sourceCode],
+          );
+          const provider = t(
+            `ui.settings.model_runtime.provider_${providerCode}`,
+            PROVIDER_FALLBACKS[providerCode],
+          );
+          const parts = [tf('ui.settings.model_runtime.api_meta', '{source} · {provider}', { source, provider })];
+          const endpointHint = String(item.endpoint_hint || '').trim().toLowerCase();
+          if (endpointHint === 'local_or_private') {
+            parts.push(t('ui.settings.model_runtime.endpoint_local_or_private', 'Local or private service'));
+          } else if (SAFE_PUBLIC_ENDPOINTS.has(endpointHint)) {
+            parts.push(endpointHint);
+          }
+          meta.textContent = parts.join(' · ');
+        } else {
+          meta.textContent = tf('ui.settings.model_runtime.meta', 'Group: {group} · Protocol: {protocol}', {
+            group,
+            protocol: protocol || t('ui.settings.model_runtime.protocol_unknown', 'Unknown'),
+          });
+        }
+      }
       if (!status) return;
       let key = 'not_configured';
       if (configured && !supported) key = 'unsupported';
