@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol, Sequence
 from .assessment import AssessmentDecision, AssessmentRequest
 from .contracts import (
     EvaluatedAttempt,
+    HypothesisRef,
     MapPage,
     MapQuery,
     QuestionGenerationResult,
@@ -40,6 +41,17 @@ class LearnerStatePort(Protocol):
     def get_due_review_topics(self, topic_ids: Sequence[str]) -> Sequence[TopicRef]: ...
 
     def get_retry_topics(self, topic_ids: Sequence[str]) -> Sequence[TopicRef]: ...
+
+
+class CognitiveStatePort(Protocol):
+    """Read-only access to versioned cognitive hypotheses for one topic.
+
+    The port intentionally exposes no mutation and no topic-selection method.
+    Projection remains the sole writer, while the coach remains the sole owner
+    of the final learning action.
+    """
+
+    def list_hypotheses(self, topic_id: str) -> Sequence[HypothesisRef]: ...
 
 
 class StudyStorePort(Protocol):

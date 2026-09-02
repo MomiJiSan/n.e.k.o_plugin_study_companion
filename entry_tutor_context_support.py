@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from typing import cast
 
 from ._semantic_routing import (
     StudyInputSemantics,
@@ -16,6 +17,8 @@ from .adaptive_learning import (
     StudyTrackerCommitAdapter,
     TopicRef,
 )
+from .adaptive_learning.cognitive_intervention import hypothesis_ref_from_payload
+from .adaptive_learning.contracts import LearningIntent, RepairStrategy
 from .adaptive_learning.learning_commit import LearningCommitService
 from .entry_common import (
     LLM_OPERATION_ANSWER_EVALUATE,
@@ -85,9 +88,7 @@ async def _append_interaction_cancel_safe(
     except asyncio.CancelledError:
         progress.cancel_requested.set()
         if progress.commit_started.is_set():
-            finished = await asyncio.shield(
-                asyncio.to_thread(progress.finished.wait, _CANCEL_DRAIN_TIMEOUT_SECONDS)
-            )
+            finished = await asyncio.shield(asyncio.to_thread(progress.finished.wait, _CANCEL_DRAIN_TIMEOUT_SECONDS))
             if not finished:
                 _warn(
                     getattr(store, "_logger", None),
@@ -116,9 +117,7 @@ async def _await_completion_on_cancel(
         return await asyncio.shield(task)
     except asyncio.CancelledError:
         try:
-            await asyncio.wait_for(
-                asyncio.shield(task), timeout=max(0.0, float(timeout_seconds))
-            )
+            await asyncio.wait_for(asyncio.shield(task), timeout=max(0.0, float(timeout_seconds)))
         except asyncio.TimeoutError:
             _warn(logger, "study state persistence cancellation drain timed out")
         except asyncio.CancelledError:
@@ -136,9 +135,7 @@ def _warn(logger: Any, message: str, *args: Any) -> None:
         warning(message, *args)
 
 
-def _consume_mastery_v2_projection_task(
-    task: asyncio.Task[Any], *, owner: Any, logger: Any
-) -> None:
+def _consume_mastery_v2_projection_task(task: asyncio.Task[Any], *, owner: Any, logger: Any) -> None:
     tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
     if isinstance(tasks, set):
         tasks.discard(task)
@@ -156,7 +153,56 @@ def _consume_mastery_v2_projection_task(
         _schedule_mastery_v2_projection(owner)
 
 
+def _consume_cognitive_projection_task(task: asyncio.Task[Any], *, owner: Any, logger: Any) -> None:
+    tasks = getattr(owner, "_cognitive_projection_tasks", None)
+    if isinstance(tasks, set):
+        tasks.discard(task)
+    try:
+        result = task.result()
+    except BaseException as exc:
+        _warn(logger, "study cognitive projection task failed: {}", exc)
+        return
+    failed = int((result or {}).get("failed") or 0) if isinstance(result, dict) else 0
+    if failed:
+        _warn(logger, "study cognitive projection reported {} failed item(s)", failed)
+    if isinstance(result, dict) and bool(result.get("has_more")):
+        owner._cognitive_projection_dirty = True
+    if bool(getattr(owner, "_cognitive_projection_dirty", False)):
+        _schedule_cognitive_projection(owner)
+
+
+def _schedule_cognitive_projection(owner: Any) -> None:
+    tracker = getattr(owner, "_knowledge_tracker", None)
+    if not bool(getattr(tracker, "cognitive_projection_enabled", False)):
+        return
+    project_pending = getattr(tracker, "project_cognitive_pending", None)
+    if not callable(project_pending):
+        return
+    tasks = getattr(owner, "_cognitive_projection_tasks", None)
+    if not isinstance(tasks, set):
+        tasks = set()
+        owner._cognitive_projection_tasks = tasks
+    tasks.intersection_update(task for task in tasks if not task.done())
+    if tasks:
+        owner._cognitive_projection_dirty = True
+        return
+    owner._cognitive_projection_dirty = False
+    task = asyncio.create_task(project_pending(limit=100))
+    tasks.add(task)
+    task.add_done_callback(
+        lambda completed: _consume_cognitive_projection_task(
+            completed,
+            owner=owner,
+            logger=getattr(owner, "logger", None),
+        )
+    )
+
+
 def _schedule_mastery_v2_projection(owner: Any) -> None:
+    # This existing post-answer wake-up point owns all shadow projections.
+    # Cognitive work remains separately gated and never runs in the answer
+    # transaction or changes the selected topic.
+    _schedule_cognitive_projection(owner)
     tracker = getattr(owner, "_knowledge_tracker", None)
     if not bool(getattr(tracker, "mastery_v2_shadow_enabled", False)):
         return
@@ -185,19 +231,21 @@ def _schedule_mastery_v2_projection(owner: Any) -> None:
 
 async def _await_mastery_v2_projection_tasks(owner: Any) -> None:
     while True:
-        tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
-        active = (
-            tuple(task for task in tasks if not task.done())
-            if isinstance(tasks, set)
-            else ()
-        )
+        mastery_tasks = getattr(owner, "_mastery_v2_projection_tasks", None)
+        cognitive_tasks = getattr(owner, "_cognitive_projection_tasks", None)
+        task_sets = tuple(tasks for tasks in (mastery_tasks, cognitive_tasks) if isinstance(tasks, set))
+        active = tuple(task for tasks in task_sets for task in tasks if not task.done())
         if active:
             await asyncio.gather(*active, return_exceptions=True)
             await asyncio.sleep(0)
             continue
-        if isinstance(tasks, set) and tasks:
+        if any(tasks for tasks in task_sets):
             # A task may be done while its callback is still queued.  Give the
             # callback a turn so it can publish has_more/dirty and reschedule.
+            await asyncio.sleep(0)
+            continue
+        if bool(getattr(owner, "_cognitive_projection_dirty", False)):
+            _schedule_cognitive_projection(owner)
             await asyncio.sleep(0)
             continue
         if bool(getattr(owner, "_mastery_v2_projection_dirty", False)):
@@ -265,14 +313,10 @@ def _knowledge_guidance_outcome(
         "study_semantic_status": semantic_status,
         "study_semantic_reason": semantic_reason,
         "study_response_mode": (
-            response_mode
-            if response_mode is not None
-            else semantics.response_mode if semantics else "unknown"
+            response_mode if response_mode is not None else semantics.response_mode if semantics else "unknown"
         ),
         "study_semantic_subject": semantics.subject if semantics else "unknown",
-        "study_semantic_content_type": (
-            semantics.content_type if semantics else "unknown"
-        ),
+        "study_semantic_content_type": (semantics.content_type if semantics else "unknown"),
         "study_semantic_intent": semantics.intent if semantics else "unknown",
         "study_semantic_entity": semantics.entity if semantics else "",
     }
@@ -315,14 +359,39 @@ def _load_explicit_guidance_topics(
         if depth >= max_depth:
             continue
         queue.extend(
-            (reference_id, depth + 1)
-            for reference_id in _topic_reference_ids(topic)
-            if reference_id not in seen
+            (reference_id, depth + 1) for reference_id in _topic_reference_ids(topic) if reference_id not in seen
         )
     return topics
 
 
 class _TutorContextSupportMixin:
+    def _request_cognitive_projection(self) -> bool:
+        """Best-effort wake-up for already committed cognitive facts.
+
+        Callers never await the projector here: the existing scheduler owns
+        de-duplication, dirty replay, and shutdown draining.  A scheduler
+        failure is deliberately isolated from question delivery and user
+        controls because the durable topic generation remains stale and will
+        be retried by a later wake-up or startup.
+        """
+
+        try:
+            _schedule_cognitive_projection(self)
+        except Exception as exc:
+            _warn(
+                getattr(self, "logger", None),
+                "study cognitive projection wake-up failed: {}",
+                exc,
+            )
+            return False
+        return bool(
+            getattr(
+                getattr(self, "_knowledge_tracker", None),
+                "cognitive_projection_enabled",
+                False,
+            )
+        )
+
     def _invalidate_knowledge_guidance_cache(self) -> None:
         cache = getattr(self, "_knowledge_guidance_topics_cache", None)
         if isinstance(cache, dict):
@@ -350,10 +419,7 @@ class _TutorContextSupportMixin:
             or ""
         ).strip()
         topic_id = str(
-            seed.get("selected_topic_id")
-            or seed.get("topic_id")
-            or seed.get("target_topic_id")
-            or ""
+            seed.get("selected_topic_id") or seed.get("topic_id") or seed.get("target_topic_id") or ""
         ).strip()
         if not query and not topic_id:
             return {}, _knowledge_guidance_outcome(status="not_applicable")
@@ -365,9 +431,7 @@ class _TutorContextSupportMixin:
                 setattr(self, "_knowledge_guidance_topics_cache", cache)
             topics = cache.get(cache_key)
             if topics is None:
-                topics = await asyncio.to_thread(
-                    self._store.list_topics, 5000, None, None
-                )
+                topics = await asyncio.to_thread(self._store.list_topics, 5000, None, None)
                 cache[cache_key] = list(topics or [])
             topic_items = list(topics or [])
             if topic_id:
@@ -393,14 +457,10 @@ class _TutorContextSupportMixin:
                     topic_items = list(topics_by_id.values())
                     explicit = match_topics(topic_items, topic_id=topic_id, limit=1)
                 if not explicit:
-                    return {}, _knowledge_guidance_outcome(
-                        status="not_matched", source="selected_topic"
-                    )
+                    return {}, _knowledge_guidance_outcome(status="not_matched", source="selected_topic")
                 explicit_topic = explicit[0]
                 explicit_response_mode = (
-                    "general_explanation"
-                    if operation == LLM_OPERATION_CONCEPT_EXPLAIN
-                    else "problem_solving"
+                    "general_explanation" if operation == LLM_OPERATION_CONCEPT_EXPLAIN else "problem_solving"
                 )
                 semantics = StudyInputSemantics(
                     subject=str(explicit_topic.get("subject") or "unknown"),
@@ -436,18 +496,10 @@ class _TutorContextSupportMixin:
                     max_depth=3,
                     match_limit=5,
                 )
-                status = (
-                    "applied"
-                    if guidance.get("summary", {}).get("matched")
-                    else "not_matched"
-                )
-                return guidance, _knowledge_guidance_outcome(
-                    status=status, guidance=guidance, source="query_match"
-                )
+                status = "applied" if guidance.get("summary", {}).get("matched") else "not_matched"
+                return guidance, _knowledge_guidance_outcome(status=status, guidance=guidance, source="query_match")
 
-            semantics, route_status, route_reason = (
-                await self._route_study_input_semantics(query, context=seed)
-            )
+            semantics, route_status, route_reason = await self._route_study_input_semantics(query, context=seed)
             if "_agent_quota_reservation" in seed and context is not None:
                 context["_agent_quota_reservation"] = seed["_agent_quota_reservation"]
             if semantics is None:
@@ -484,19 +536,13 @@ class _TutorContextSupportMixin:
                 # route unavailable.  The resolver has no user-visible effect
                 # until the opt-in flag below is enabled.
                 relationship_evidence = None
-            relationship_active = (
-                bool(
-                    getattr(
-                        getattr(self, "_cfg", None),
-                        "knowledge_relation_retrieval_v2_enabled",
-                        False,
-                    )
+            relationship_active = bool(
+                getattr(
+                    getattr(self, "_cfg", None),
+                    "knowledge_relation_retrieval_v2_enabled",
+                    False,
                 )
-                and bool(
-                    isinstance(relationship_evidence, dict)
-                    and relationship_evidence.get("is_relationship_query")
-                )
-            )
+            ) and bool(isinstance(relationship_evidence, dict) and relationship_evidence.get("is_relationship_query"))
             semantic_query = " ".join(
                 part
                 for part in (
@@ -521,9 +567,7 @@ class _TutorContextSupportMixin:
                         semantic_status="available",
                     )
             relationship_endpoints = (
-                relationship_evidence.get("endpoints")
-                if isinstance(relationship_evidence, dict)
-                else []
+                relationship_evidence.get("endpoints") if isinstance(relationship_evidence, dict) else []
             )
             v2_topic_id = ""
             if isinstance(relationship_endpoints, list) and relationship_endpoints:
@@ -531,9 +575,7 @@ class _TutorContextSupportMixin:
                 if isinstance(first_endpoint, dict):
                     v2_topic_id = str(first_endpoint.get("id") or "").strip()
             selected_topic_id = (
-                str(matches[0].get("id") or "")
-                if matches and int(matches[0].get("score") or 0) >= 10
-                else v2_topic_id
+                str(matches[0].get("id") or "") if matches and int(matches[0].get("score") or 0) >= 10 else v2_topic_id
             )
             guidance = await asyncio.to_thread(
                 build_knowledge_guidance_payload,
@@ -559,9 +601,7 @@ class _TutorContextSupportMixin:
                 summary["matched"] = True
                 guidance["summary"] = summary
             if relationship_active:
-                relationship_context = _build_relationship_model_context(
-                    relationship_evidence
-                )
+                relationship_context = _build_relationship_model_context(relationship_evidence)
                 # Keep the public retrieval payload intact, but mark a compact
                 # generation-only context.  _build_learning_context consumes
                 # this marker only for concept explanation, so selected-topic
@@ -619,9 +659,7 @@ class _TutorContextSupportMixin:
             reserve_optional = getattr(agent, "reserve_optional_agent_call", None)
             if callable(reserve_optional):
                 try:
-                    optional_allowed, quota_reservation = await reserve_optional(
-                        _SEMANTIC_ROUTE_OPERATION
-                    )
+                    optional_allowed, quota_reservation = await reserve_optional(_SEMANTIC_ROUTE_OPERATION)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -676,9 +714,7 @@ class _TutorContextSupportMixin:
         current["event_count"] = int(current.get("event_count") or 0) + 1
         current["last_operation"] = operation
         current["last_updated_at"] = utc_now_iso()
-        screen_type = str(
-            payload.get("screen_type") or current.get("last_screen_type") or ""
-        ).strip()
+        screen_type = str(payload.get("screen_type") or current.get("last_screen_type") or "").strip()
         if screen_type:
             current["last_screen_type"] = screen_type
         if operation == LLM_OPERATION_QUESTION_GENERATE:
@@ -690,9 +726,7 @@ class _TutorContextSupportMixin:
                 verdict_counts = dict(current.get("verdict_counts") or {})
                 verdict_counts[verdict] = int(verdict_counts.get(verdict) or 0) + 1
                 current["verdict_counts"] = verdict_counts
-            weak_points = [
-                item for item in payload.get("weak_points") or [] if str(item).strip()
-            ]
+            weak_points = [item for item in payload.get("weak_points") or [] if str(item).strip()]
             if weak_points:
                 current["weak_points"] = weak_points[:6]
         elif operation == LLM_OPERATION_CONCEPT_EXPLAIN:
@@ -704,9 +738,7 @@ class _TutorContextSupportMixin:
         topic = str(payload.get("topic") or "").strip()
         if topic:
             current["last_topic"] = topic
-        weak_points = [
-            item for item in payload.get("weak_points") or [] if str(item).strip()
-        ]
+        weak_points = [item for item in payload.get("weak_points") or [] if str(item).strip()]
         if weak_points:
             current["weak_points"] = weak_points[:6]
         return current
@@ -729,19 +761,13 @@ class _TutorContextSupportMixin:
                 "input_text": input_text,
                 "language": self._cfg.language,
                 "mode": snapshot.get("active_mode") or self._cfg.mode,
-                "screen_classification": snapshot.get("last_screen_classification")
-                or {},
-                "recent_screen_classifications": snapshot.get(
-                    "recent_screen_classifications"
-                )
-                or [],
+                "screen_classification": snapshot.get("last_screen_classification") or {},
+                "recent_screen_classifications": snapshot.get("recent_screen_classifications") or [],
                 "current_question": public_current_question,
                 "public_current_question": public_current_question,
                 "last_answer_evaluation": snapshot.get("last_answer_evaluation") or {},
                 "session_summary_seed": snapshot.get("session_summary_seed") or {},
-                "recent_learning_events": (
-                    snapshot.get("recent_learning_events") or []
-                )[-8:],
+                "recent_learning_events": (snapshot.get("recent_learning_events") or [])[-8:],
                 "last_ocr_text": snapshot.get("last_ocr_text") or "",
                 "last_ocr_at": snapshot.get("last_ocr_at") or "",
                 "history": history,
@@ -751,11 +777,7 @@ class _TutorContextSupportMixin:
             hint = ""
             if extra:
                 hint = str(extra.get("topic_hint") or extra.get("topic") or "").strip()
-            supplied_params = (
-                extra.get("knowledge_question_params")
-                if isinstance(extra, dict)
-                else None
-            )
+            supplied_params = extra.get("knowledge_question_params") if isinstance(extra, dict) else None
             if isinstance(supplied_params, dict):
                 context["knowledge_question_params"] = dict(supplied_params)
             else:
@@ -764,9 +786,7 @@ class _TutorContextSupportMixin:
                     hint,
                 )
         elif operation == LLM_OPERATION_SUMMARIZE_SESSION:
-            context["knowledge_session_summary"] = await asyncio.to_thread(
-                self._knowledge_tracker.get_session_summary
-            )
+            context["knowledge_session_summary"] = await asyncio.to_thread(self._knowledge_tracker.get_session_summary)
         else:
             context["knowledge_summary"] = await asyncio.to_thread(
                 self._knowledge_tracker.get_status_summary,
@@ -783,13 +803,9 @@ class _TutorContextSupportMixin:
                 vision_snapshot = self._ocr_pipeline.latest_vision_snapshot()
                 if vision_snapshot:
                     context["vision_enabled"] = True
-                    context["vision_image_base64"] = str(
-                        vision_snapshot.get("vision_image_base64") or ""
-                    )
+                    context["vision_image_base64"] = str(vision_snapshot.get("vision_image_base64") or "")
                     context["vision_snapshot"] = {
-                        key: value
-                        for key, value in vision_snapshot.items()
-                        if key != "vision_image_base64"
+                        key: value for key, value in vision_snapshot.items() if key != "vision_image_base64"
                     }
         if extra:
             context.update(extra)
@@ -817,15 +833,11 @@ class _TutorContextSupportMixin:
             if operation == LLM_OPERATION_CONCEPT_EXPLAIN:
                 relationship_context = guidance.get("_relationship_model_context")
                 context["knowledge_guidance"] = (
-                    dict(relationship_context)
-                    if isinstance(relationship_context, dict)
-                    else guidance
+                    dict(relationship_context) if isinstance(relationship_context, dict) else guidance
                 )
             else:
                 model_context = guidance.get("model_context")
-                context["knowledge_guidance"] = (
-                    dict(model_context) if isinstance(model_context, dict) else guidance
-                )
+                context["knowledge_guidance"] = dict(model_context) if isinstance(model_context, dict) else guidance
         return context
 
     async def _record_tutor_result(
@@ -850,13 +862,9 @@ class _TutorContextSupportMixin:
                     or ""
                 ),
             }
-            seed = self._merge_session_summary_seed(
-                operation, payload=payload, seed=self._state.session_summary_seed
-            )
+            seed = self._merge_session_summary_seed(operation, payload=payload, seed=self._state.session_summary_seed)
             self._state.session_summary_seed = seed
-            self._state.recent_learning_events = (
-                self._state.recent_learning_events + [event]
-            )[-16:]
+            self._state.recent_learning_events = (self._state.recent_learning_events + [event])[-16:]
             if operation != LLM_OPERATION_KNOWLEDGE_TRACK:
                 if operation == LLM_OPERATION_QUESTION_GENERATE:
                     if str(payload.get("question") or "").strip():
@@ -864,16 +872,10 @@ class _TutorContextSupportMixin:
                         self._state.last_question_at = reply.created_at or utc_now_iso()
                 elif operation == LLM_OPERATION_ANSWER_EVALUATE:
                     self._state.last_answer_evaluation = dict(payload)
-                    self._state.last_answer_evaluated_at = (
-                        reply.created_at or utc_now_iso()
-                    )
+                    self._state.last_answer_evaluated_at = reply.created_at or utc_now_iso()
                 elif operation == LLM_OPERATION_SUMMARIZE_SESSION:
-                    self._state.last_session_summary = str(
-                        payload.get("summary") or ""
-                    ).strip()
-                    self._state.last_session_summary_at = (
-                        reply.created_at or utc_now_iso()
-                    )
+                    self._state.last_session_summary = str(payload.get("summary") or "").strip()
+                    self._state.last_session_summary_at = reply.created_at or utc_now_iso()
 
     async def _finalize_tutor_call(
         self,
@@ -924,12 +926,8 @@ class _TutorContextSupportMixin:
                 extra_context=extra_context,
                 public_payload=public_payload,
             )
-        duplicate_existing = tracking_enrichment.pop(
-            "_duplicate_existing_evaluation", None
-        )
-        if operation == LLM_OPERATION_ANSWER_EVALUATE and isinstance(
-            duplicate_existing, dict
-        ):
+        duplicate_existing = tracking_enrichment.pop("_duplicate_existing_evaluation", None)
+        if operation == LLM_OPERATION_ANSWER_EVALUATE and isinstance(duplicate_existing, dict):
             reply.payload = dict(duplicate_existing)
             async with _plugin_lock(self._lock):
                 self._state.last_answer_evaluation = dict(duplicate_existing)
@@ -937,9 +935,7 @@ class _TutorContextSupportMixin:
             previous_last_error = self._state.last_error
             self._state.last_error = ""
             try:
-                await _await_completion_on_cancel(
-                    self._persist_state(), logger=getattr(self, "logger", None)
-                )
+                await _await_completion_on_cancel(self._persist_state(), logger=getattr(self, "logger", None))
             except Exception:
                 if not self._state.last_error:
                     self._state.last_error = previous_last_error
@@ -966,9 +962,7 @@ class _TutorContextSupportMixin:
                 payload["knowledge_guidance"] = guidance
                 diagnosis_questions = guidance.get("diagnosis_questions")
                 payload["diagnosis_questions"] = (
-                    list(diagnosis_questions)
-                    if isinstance(diagnosis_questions, list)
-                    else []
+                    list(diagnosis_questions) if isinstance(diagnosis_questions, list) else []
                 )
         for key in (
             "knowledge_guidance_applied",
@@ -1004,14 +998,10 @@ class _TutorContextSupportMixin:
             return {}
         eval_payload = dict(public_payload or reply.payload or {})
         context = dict(extra_context or {})
-        question_payload = dict(
-            context.get("question_payload") or context.get("current_question") or {}
-        )
+        question_payload = dict(context.get("question_payload") or context.get("current_question") or {})
         related_topics = eval_payload.get("related_topics")
         first_related_topic = (
-            str(related_topics[0] or "").strip()
-            if isinstance(related_topics, list) and related_topics
-            else ""
+            str(related_topics[0] or "").strip() if isinstance(related_topics, list) and related_topics else ""
         )
         topic = str(
             context.get("selected_topic_id")
@@ -1025,11 +1015,7 @@ class _TutorContextSupportMixin:
         ).strip()[:160]
         verdict = str(eval_payload.get("verdict") or "").strip().lower()
         score = float(eval_payload.get("score") or 0.0)
-        mastery_delta = (
-            0.08
-            if verdict == "correct"
-            else (-0.08 if verdict in {"wrong", "dont_know"} else 0.02)
-        )
+        mastery_delta = 0.08 if verdict == "correct" else (-0.08 if verdict in {"wrong", "dont_know"} else 0.02)
         weak_points = [
             str(item).strip()
             for key in ("missing_points", "misconceptions")
@@ -1054,16 +1040,12 @@ class _TutorContextSupportMixin:
                     else []
                 ),
                 "screen_type": str(
-                    eval_payload.get("screen_type")
-                    or self._screen_classification_context().get("screen_type")
-                    or ""
+                    eval_payload.get("screen_type") or self._screen_classification_context().get("screen_type") or ""
                 ),
             },
             created_at=reply.created_at or utc_now_iso(),
         )
-        return await self._record_answer_knowledge(
-            reply, track_reply, extra_context=extra_context
-        )
+        return await self._record_answer_knowledge(reply, track_reply, extra_context=extra_context)
 
     async def _record_answer_knowledge(
         self,
@@ -1078,17 +1060,11 @@ class _TutorContextSupportMixin:
         current_question = dict(context.get("current_question") or {})
         question_payload = dict(context.get("question_payload") or current_question)
         question_text = str(
-            context.get("question")
-            or question_payload.get("question")
-            or current_question.get("question")
-            or ""
+            context.get("question") or question_payload.get("question") or current_question.get("question") or ""
         ).strip()
         question_payload["question"] = question_text
         question_payload["answer"] = str(
-            context.get("expected_answer")
-            or question_payload.get("answer")
-            or current_question.get("answer")
-            or ""
+            context.get("expected_answer") or question_payload.get("answer") or current_question.get("answer") or ""
         )
         binding = dict(question_payload.get("target_binding") or {})
         topic = await resolve_existing_target_topic_id(
@@ -1119,30 +1095,42 @@ class _TutorContextSupportMixin:
         mastery_before: float | None = None
         if allow_knowledge_update:
             try:
-                mastery_before = await asyncio.to_thread(
-                    self._knowledge_tracker.get_mastery, topic
-                )
+                mastery_before = await asyncio.to_thread(self._knowledge_tracker.get_mastery, topic)
             except Exception as exc:
-                self.logger.warning(
-                    "study knowledge tracker mastery-before read failed: {}", exc
-                )
+                self.logger.warning("study knowledge tracker mastery-before read failed: {}", exc)
                 mastery_before = None
         attempt_id = str(
-            context.get("attempt_id")
-            or question_payload.get("attempt_id")
-            or current_question.get("attempt_id")
-            or ""
+            context.get("attempt_id") or question_payload.get("attempt_id") or current_question.get("attempt_id") or ""
         ).strip()
+        cognitive_learning_intent = str(binding.get("cognitive_learning_intent") or "practice").strip()
+        cognitive_hypothesis_target = hypothesis_ref_from_payload(
+            binding.get("cognitive_hypothesis_target"),
+            topic_id=topic,
+        )
+        cognitive_repair_strategy = str(binding.get("cognitive_repair_strategy") or "").strip()
+        cognitive_decision_id = str(binding.get("cognitive_decision_id") or "").strip()
+        if (
+            cognitive_learning_intent
+            not in {
+                "misconception_probe",
+                "misconception_repair",
+                "transfer_check",
+            }
+            or cognitive_hypothesis_target is None
+            or not cognitive_repair_strategy
+            or not cognitive_decision_id
+        ):
+            cognitive_learning_intent = "practice"
+            cognitive_hypothesis_target = None
+            cognitive_repair_strategy = ""
+            cognitive_decision_id = ""
         evaluated_attempt = EvaluatedAttempt(
             attempt_id=attempt_id,
             question=QuestionInstance(
                 question_id=str(
-                    question_payload.get("question_id")
-                    or current_question.get("question_id")
-                    or attempt_id
-                    or ""
+                    question_payload.get("question_id") or current_question.get("question_id") or attempt_id or ""
                 ).strip(),
-                plan_id="",
+                plan_id=str(binding.get("plan_id") or "").strip(),
                 target_topic=TopicRef(id=topic, name=topic),
                 question_type=str(question_payload.get("question_type") or ""),
                 difficulty=question_payload.get("difficulty") or 0,
@@ -1153,14 +1141,18 @@ class _TutorContextSupportMixin:
                 private_payload={},
                 mode=str(context.get("mode") or self._state.active_mode),
                 source_question_id=str(
-                    context.get("source_question_id")
-                    or question_payload.get("source_question_id")
-                    or ""
+                    context.get("source_question_id") or question_payload.get("source_question_id") or ""
                 ),
                 target_binding=binding,
                 scope_key=str(question_payload.get("scope_key") or ""),
                 scope_revision=int(question_payload.get("scope_revision") or 0),
                 status="answered",
+                learning_intent=cast(LearningIntent, cognitive_learning_intent),
+                hypothesis_target=cognitive_hypothesis_target,
+                repair_strategy=cast(RepairStrategy, cognitive_repair_strategy),
+                cognitive_decision_id=cognitive_decision_id,
+                cognitive_validator_version=str(binding.get("cognitive_validator_version") or "").strip(),
+                diagnostic_validation_id=str(binding.get("diagnostic_validation_id") or "").strip(),
             ),
             learner_answer=str(context.get("answer") or eval_reply.input_text or ""),
             evaluation=EvaluationResult(
@@ -1177,29 +1169,21 @@ class _TutorContextSupportMixin:
             commit_context=LearningCommitContext(
                 mode=str(context.get("mode") or self._state.active_mode),
                 source_question_id=str(
-                    context.get("source_question_id")
-                    or question_payload.get("source_question_id")
-                    or ""
+                    context.get("source_question_id") or question_payload.get("source_question_id") or ""
                 ),
                 target_binding=binding,
                 scope_key=str(question_payload.get("scope_key") or ""),
                 scope_revision=int(question_payload.get("scope_revision") or 0),
                 origin_wrong_question_id=(
-                    str(binding.get("origin_wrong_question_id") or "").strip()
-                    if allow_knowledge_update
-                    else ""
+                    str(binding.get("origin_wrong_question_id") or "").strip() if allow_knowledge_update else ""
                 ),
                 allow_knowledge_update=allow_knowledge_update,
                 require_existing_topic=True,
             ),
         )
-        commit_service = LearningCommitService(
-            StudyTrackerCommitAdapter(self._knowledge_tracker)
-        )
+        commit_service = LearningCommitService(StudyTrackerCommitAdapter(self._knowledge_tracker))
         try:
-            tracking_task = asyncio.create_task(
-                commit_service.commit(evaluated_attempt)
-            )
+            tracking_task = asyncio.create_task(commit_service.commit(evaluated_attempt))
             try:
                 tracking_result = (await asyncio.shield(tracking_task)).as_payload()
             except asyncio.CancelledError:
@@ -1213,13 +1197,9 @@ class _TutorContextSupportMixin:
             raise
         except Exception as exc:
             self.logger.warning("study knowledge tracker persistence failed: {}", exc)
-            raise SdkError(
-                "answer persistence failed", code="ANSWER_PERSISTENCE_FAILED"
-            ) from exc
+            raise SdkError("answer persistence failed", code="ANSWER_PERSISTENCE_FAILED") from exc
         _schedule_mastery_v2_projection(self)
-        knowledge_tracking_status = str(
-            tracking_result.get("knowledge_tracking_status") or ""
-        )
+        knowledge_tracking_status = str(tracking_result.get("knowledge_tracking_status") or "")
         if knowledge_tracking_status == "qa_only":
             return {"knowledge_tracking_status": "qa_only"}
         if knowledge_tracking_status == "duplicate_attempt":
@@ -1251,13 +1231,9 @@ class _TutorContextSupportMixin:
         mastery_after: float | None = None
         if tracked_topic:
             try:
-                mastery_after = await asyncio.to_thread(
-                    self._knowledge_tracker.get_mastery, tracked_topic
-                )
+                mastery_after = await asyncio.to_thread(self._knowledge_tracker.get_mastery, tracked_topic)
             except Exception as exc:
-                self.logger.warning(
-                    "study knowledge tracker mastery-after read failed: {}", exc
-                )
+                self.logger.warning("study knowledge tracker mastery-after read failed: {}", exc)
         crossed = (
             _detect_mastery_threshold_crossed(mastery_before, mastery_after)
             if mastery_before is not None and mastery_after is not None
@@ -1298,7 +1274,5 @@ class _TutorContextSupportMixin:
         if topic:
             return topic
         text = str(reply.input_text or "").strip()
-        first_line = next(
-            (line.strip() for line in text.splitlines() if line.strip()), ""
-        )
+        first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
         return first_line[:48] or "general"

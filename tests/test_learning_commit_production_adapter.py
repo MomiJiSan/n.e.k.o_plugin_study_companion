@@ -160,6 +160,184 @@ def test_record_answer_knowledge_delegates_to_existing_tracker_unchanged(
     }
 
 
+def test_record_answer_rebuilds_private_cognitive_question_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    support = _load_context_support(monkeypatch)
+    attempts: list[Any] = []
+
+    class CommitService:
+        def __init__(self, _port: Any) -> None:
+            return None
+
+        async def commit(self, attempt: Any) -> Any:
+            attempts.append(attempt)
+            return SimpleNamespace(
+                as_payload=lambda: {
+                    "topic_id": "topic-a",
+                    "knowledge_tracking_status": "updated",
+                }
+            )
+
+    monkeypatch.setattr(support, "LearningCommitService", CommitService)
+
+    class Tracker:
+        store = SimpleNamespace(get_topic=lambda _topic_id: {"id": "topic-a"})
+
+        def get_mastery(self, _topic_id: str) -> float:
+            return 0.5
+
+    class Harness(support._TutorContextSupportMixin):
+        _knowledge_tracker = Tracker()
+        _state = SimpleNamespace(active_mode="companion", run_id="state-run")
+        ctx = SimpleNamespace(run_id="ctx-run")
+        _event_bus = None
+        logger = _Logger()
+
+        def _invalidate_knowledge_guidance_cache(self) -> None:
+            return None
+
+    hypothesis = {
+        "hypothesis_id": "hypothesis-1",
+        "topic_id": "topic-a",
+        "code": "omit_inner_derivative",
+        "status": "supported",
+        "probability": 0.91,
+        "model_version": "cognitive-v2",
+        "source_snapshot_id": "snapshot-7",
+        "source_attempt_id": "attempt-source",
+        "projection_generation": 7,
+    }
+    question = {
+        "question": "Differentiate sin(x^2).",
+        "answer": "2*x*cos(x^2)",
+        "question_id": "question-1",
+        "difficulty": 2,
+        "scope_key": "scope-a",
+        "scope_revision": 9,
+        "target_binding": {
+            "target_topic_id": "topic-a",
+            "validation_status": "passed",
+            "plan_id": "selection-1",
+            "origin_wrong_question_id": "wrong-1",
+            "cognitive_learning_intent": "misconception_repair",
+            "cognitive_hypothesis_target": hypothesis,
+            "cognitive_repair_strategy": "complete_inner_derivative",
+            "cognitive_decision_id": "decision-1",
+            "cognitive_validator_version": "validator-v2",
+            "diagnostic_validation_id": "validation-1",
+        },
+    }
+
+    asyncio.run(
+        Harness()._record_answer_knowledge(
+            _Reply(
+                input_text="cos(x^2)",
+                payload={"verdict": "wrong", "score": 0},
+                created_at="now",
+            ),
+            _Reply(payload={"topic": "topic-a"}),
+            extra_context={
+                "current_question": question,
+                "question_payload": question,
+                "answer": "cos(x^2)",
+                "attempt_id": "attempt-1",
+            },
+        )
+    )
+
+    assert len(attempts) == 1
+    rebuilt = attempts[0].question
+    assert rebuilt.plan_id == "selection-1"
+    assert rebuilt.target_topic.id == "topic-a"
+    assert rebuilt.scope_key == "scope-a"
+    assert rebuilt.scope_revision == 9
+    assert rebuilt.learning_intent == "misconception_repair"
+    assert rebuilt.hypothesis_target.code == "omit_inner_derivative"
+    assert rebuilt.hypothesis_target.source_snapshot_id == "snapshot-7"
+    assert rebuilt.hypothesis_target.projection_generation == 7
+    assert rebuilt.repair_strategy == "complete_inner_derivative"
+    assert rebuilt.cognitive_decision_id == "decision-1"
+    assert rebuilt.cognitive_validator_version == "validator-v2"
+    assert rebuilt.diagnostic_validation_id == "validation-1"
+
+
+def test_record_answer_drops_forged_cross_topic_cognitive_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    support = _load_context_support(monkeypatch)
+    attempts: list[Any] = []
+
+    class CommitService:
+        def __init__(self, _port: Any) -> None:
+            return None
+
+        async def commit(self, attempt: Any) -> Any:
+            attempts.append(attempt)
+            return SimpleNamespace(
+                as_payload=lambda: {
+                    "topic_id": "topic-a",
+                    "knowledge_tracking_status": "updated",
+                }
+            )
+
+    monkeypatch.setattr(support, "LearningCommitService", CommitService)
+
+    class Tracker:
+        store = SimpleNamespace(get_topic=lambda _topic_id: {"id": "topic-a"})
+
+        def get_mastery(self, _topic_id: str) -> float:
+            return 0.5
+
+    class Harness(support._TutorContextSupportMixin):
+        _knowledge_tracker = Tracker()
+        _state = SimpleNamespace(active_mode="companion", run_id="state-run")
+        ctx = SimpleNamespace(run_id="ctx-run")
+        _event_bus = None
+        logger = _Logger()
+
+        def _invalidate_knowledge_guidance_cache(self) -> None:
+            return None
+
+    question = {
+        "question": "Question",
+        "answer": "Answer",
+        "target_binding": {
+            "target_topic_id": "topic-a",
+            "validation_status": "passed",
+            "cognitive_learning_intent": "misconception_repair",
+            "cognitive_hypothesis_target": {
+                "hypothesis_id": "hypothesis-forged",
+                "topic_id": "other-topic",
+                "code": "omit_inner_derivative",
+                "status": "supported",
+                "probability": 0.99,
+                "model_version": "cognitive-v2",
+            },
+            "cognitive_repair_strategy": "complete_inner_derivative",
+            "cognitive_decision_id": "decision-forged",
+        },
+    }
+
+    asyncio.run(
+        Harness()._record_answer_knowledge(
+            _Reply(input_text="Wrong", payload={"verdict": "wrong"}, created_at="now"),
+            _Reply(payload={"topic": "topic-a"}),
+            extra_context={
+                "question_payload": question,
+                "answer": "Wrong",
+                "attempt_id": "attempt-forged",
+            },
+        )
+    )
+
+    rebuilt = attempts[0].question
+    assert rebuilt.learning_intent == "practice"
+    assert rebuilt.hypothesis_target is None
+    assert rebuilt.repair_strategy == ""
+    assert rebuilt.cognitive_decision_id == ""
+
+
 def test_shadow_projection_is_scheduled_only_after_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

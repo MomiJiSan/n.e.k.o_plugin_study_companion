@@ -51,6 +51,24 @@ class StudyTrackerCommitAdapter:
         elif attempt.question.scope_key:
             question["scope_key"] = attempt.question.scope_key
             question["scope_revision"] = attempt.question.scope_revision
+        # These values originate from the server-created ``QuestionInstance``.
+        # Projection must not infer cognitive provenance from public payloads.
+        if attempt.question.learning_intent != "practice":
+            question["learning_intent"] = attempt.question.learning_intent
+        if attempt.question.repair_strategy:
+            question["repair_strategy"] = attempt.question.repair_strategy
+        if attempt.question.diagnostic_validation_id:
+            question["diagnostic_validation_id"] = (
+                attempt.question.diagnostic_validation_id
+            )
+        if attempt.question.cognitive_decision_id:
+            question["cognitive_decision_id"] = (
+                attempt.question.cognitive_decision_id
+            )
+        if attempt.question.cognitive_validator_version:
+            question["cognitive_validator_version"] = (
+                attempt.question.cognitive_validator_version
+            )
         evaluation = dict(attempt.evaluation.details)
         # Entry adapters place the exact canonical evaluator payload in
         # ``details``.  Do not synthesize absent fields here: persistence must

@@ -41,6 +41,7 @@ from .constants import (
 )
 from .doc_exporter import DocExporter, normalize_format
 from .entry_checkin_entries import _CheckinEntriesMixin
+from .entry_cognitive_entries import _CognitiveEntriesMixin
 from .entry_communication_pomodoro_events import _CommunicationPomodoroEventsMixin
 from .entry_communication_review_events import _CommunicationReviewEventsMixin
 from .entry_communication_tutor_events import _CommunicationTutorEventsMixin
@@ -240,6 +241,7 @@ class StudyCompanionPlugin(
     _CheckinEntriesMixin,
     _SupervisionEntriesMixin,
     _KnowledgeEntriesMixin,
+    _CognitiveEntriesMixin,
     _LearningPlanEntriesMixin,
     _PracticeScopeEntriesMixin,
     _ModeEntriesMixin,
@@ -281,6 +283,7 @@ class StudyCompanionPlugin(
             retention_target=self._cfg.fsrs_retention_target,
             logger=self.logger,
             mastery_config=self._cfg.mastery,
+            cognitive_config=self._cfg.cognitive,
         )
         self._memory_deck_store = MemoryDeckStore(
             self._store,
@@ -336,6 +339,7 @@ class StudyCompanionPlugin(
                 retention_target=self._cfg.fsrs_retention_target,
                 logger=self.logger,
                 mastery_config=self._cfg.mastery,
+                cognitive_config=self._cfg.cognitive,
             )
             self._memory_deck_store = MemoryDeckStore(
                 self._store,
@@ -345,6 +349,7 @@ class StudyCompanionPlugin(
                 self._memory_deck_store.status_summary
             )
             _schedule_mastery_v2_projection(self)
+            self._request_cognitive_projection()
             self._habit_store = StudyHabitStore(self._store)
             self._checkin_manager = CheckinManager(
                 self._habit_store,

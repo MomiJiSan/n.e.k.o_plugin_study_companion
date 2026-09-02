@@ -708,6 +708,17 @@ def _load_entries(monkeypatch: pytest.MonkeyPatch, package: str):
             "solution_steps",
             "internal_private_payload",
             "target_binding",
+            "learning_intent",
+            "hypothesis_target",
+            "cognitive_hypothesis_target",
+            "repair_strategy",
+            "cognitive_decision_id",
+            "cognitive_validator_version",
+            "diagnostic_validation_id",
+            "cognitive_blueprint_id",
+            "cognitive_question_family_id",
+            "competing_hypothesis_codes",
+            "diagnostic_signature",
         ):
             payload.pop(key, None)
         return payload
@@ -1314,6 +1325,14 @@ async def _server_binding_overrides_model_claim(
         "validation_status": "passed",
         "generated_at": "now",
         "origin_wrong_question_id": "wrong-1",
+        "plan_id": "ctx",
+        "selection_reason": "wrong_retry",
+        "eligible_topic_ids": (),
+        "learning_plan_id": "",
+        "learning_plan_revision": 0,
+        "scope_key": "",
+        "scope_revision": 0,
+        "source_question_id": "",
     }
     assert "target_binding" not in subject.public_payload
     assert "answer" not in subject.public_payload
@@ -1326,6 +1345,188 @@ def test_server_binding_overrides_model_claim_and_stays_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     asyncio.run(_server_binding_overrides_model_claim(monkeypatch))
+
+
+def test_cognitive_question_context_restores_one_exact_hypothesis_or_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_cognitive_question_fields_test")
+    hypothesis = {
+        "hypothesis_id": "hypothesis-1",
+        "topic_id": "college_chain_rule",
+        "code": "omit_inner_derivative",
+        "status": "supported",
+        "probability": 0.91,
+        "model_version": "cognitive-v2",
+        "source_snapshot_id": "snapshot-7",
+        "source_attempt_id": "attempt-source",
+        "projection_generation": 7,
+    }
+
+    fields = entries._cognitive_question_fields(
+        {
+            "learning_intent": "misconception_repair",
+            "hypothesis_target": hypothesis,
+            "repair_strategy": "complete_inner_derivative",
+            "cognitive_decision_id": "decision-1",
+            "cognitive_validator_version": "validator-v2",
+        },
+        topic_id="college_chain_rule",
+    )
+    forged = entries._cognitive_question_fields(
+        {
+            "learning_intent": "misconception_repair",
+            "hypothesis_target": {**hypothesis, "topic_id": "other-topic"},
+            "repair_strategy": "complete_inner_derivative",
+            "cognitive_decision_id": "decision-1",
+        },
+        topic_id="college_chain_rule",
+    )
+
+    assert fields["learning_intent"] == "misconception_repair"
+    assert fields["hypothesis_target"].source_snapshot_id == "snapshot-7"
+    assert fields["hypothesis_target"].projection_generation == 7
+    assert fields["cognitive_decision_id"] == "decision-1"
+    assert forged == {
+        "learning_intent": "practice",
+        "hypothesis_target": None,
+        "repair_strategy": "",
+        "cognitive_decision_id": "",
+        "cognitive_validator_version": "",
+        "diagnostic_validation_id": "",
+        "cognitive_blueprint_id": "",
+        "cognitive_question_family_id": "",
+    }
+
+
+async def _untrusted_cognitive_context_cannot_activate_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_cognitive_private_commit_test")
+
+    class Agent:
+        async def question_generate(self, *_args, **_kwargs):
+            payload = {
+                "question": "Differentiate sin(x^2).",
+                "answer": "2*x*cos(x^2)",
+                "reference_answer": "2*x*cos(x^2)",
+                "accepted_answers": [],
+                "key_points": ["Multiply by the inner derivative."],
+                "rubric": {"inner_factor": 1},
+                "solution_steps": ["Differentiate outer, then inner."],
+                "question_type": "short_answer",
+                "difficulty": 2,
+                "hint": "Apply the chain rule.",
+            }
+            return _Reply("question_generate", "", payload["question"], payload)
+
+        async def question_validate(self, **_kwargs):
+            return _Reply(
+                "question_validate",
+                "",
+                "ok",
+                {"relevant": True, "answer_supported": True, "retry": False},
+            )
+
+    class Tracker:
+        def record_prompt_usage_for_question_params(self, _params):
+            return None
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
+        _agent = Agent()
+        _knowledge_tracker = Tracker()
+        private_payload = None
+        public_payload = None
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text, "language": "en"}
+
+        def _resolve_active_practice_scope(self):
+            return SimpleNamespace(scope_key="scope-a")
+
+        def _validate_learning_plan_selection_context(self, _context):
+            return None
+
+        @asynccontextmanager
+        async def _practice_scope_write_lock(self):
+            yield
+
+        async def _finalize_tutor_call(self, _operation, reply, **kwargs):
+            self.private_payload = dict(reply.payload)
+            self.public_payload = dict(kwargs.get("public_payload") or {})
+            return dict(self.public_payload)
+
+    hypothesis = {
+        "hypothesis_id": "hypothesis-1",
+        "topic_id": "college_chain_rule",
+        "code": "omit_inner_derivative",
+        "status": "supported",
+        "probability": 0.91,
+        "model_version": "cognitive-v2",
+        "source_snapshot_id": "snapshot-7",
+        "source_attempt_id": "attempt-source",
+        "projection_generation": 7,
+    }
+    targeted = {
+        "selected_topic_id": "college_chain_rule",
+        "selected_topic_name": "Chain rule",
+        "selection_context_id": "ctx-cognitive",
+        "selection_reason": "wrong_retry",
+        "eligible_topic_ids": ["college_chain_rule"],
+        "scope_key": "scope-a",
+        "scope_revision": 0,
+        "learning_plan_id": "plan-1",
+        "learning_plan_revision": 3,
+        "learning_intent": "misconception_repair",
+        "hypothesis_target": hypothesis,
+        "repair_strategy": "complete_inner_derivative",
+        "cognitive_decision_id": "decision-1",
+        "cognitive_validator_version": "validator-v2",
+        "diagnostic_validation_id": "validation-1",
+        "cognitive_blueprint_id": "chain.omit-inner.fill-factor.v1",
+        "cognitive_question_family_id": "chain.cos-cube.fill-factor",
+        "question_params": {
+            "target_topic_id": "college_chain_rule",
+            "target_topic": {"id": "college_chain_rule", "name": "Chain rule"},
+            "planned_difficulty": 2,
+            "retry_wrong_question": {
+                "id": "wrong-1",
+                "topic_id": "college_chain_rule",
+                "question": {"question": "Old chain-rule question"},
+            },
+        },
+    }
+    subject = Subject()
+
+    await subject._generate_question_payload(
+        source_text="Generate",
+        source="targeted_question",
+        targeted_context=targeted,
+    )
+
+    binding = subject.private_payload["target_binding"]
+    assert binding["origin_wrong_question_id"] == "wrong-1"
+    assert binding["plan_id"] == "ctx-cognitive"
+    assert binding["learning_plan_id"] == "plan-1"
+    assert binding["learning_plan_revision"] == 3
+    assert binding["eligible_topic_ids"] == ("college_chain_rule",)
+    assert binding["scope_key"] == "scope-a"
+    # Cognitive fields cannot be activated by a pre-populated context.  Only
+    # the server-owned tracker policy plus reviewed validator may add them.
+    assert "cognitive_learning_intent" not in binding
+    assert "cognitive_hypothesis_target" not in binding
+    assert "cognitive_decision_id" not in binding
+    assert "diagnostic_validation_id" not in binding
+    assert "target_binding" not in subject.public_payload
+    assert "cognitive_hypothesis_target" not in subject.public_payload
+
+
+def test_untrusted_cognitive_context_cannot_activate_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_untrusted_cognitive_context_cannot_activate_question(monkeypatch))
 
 
 async def _repairable_incident_is_canonicalized_without_retry(
@@ -1375,9 +1576,7 @@ async def _repairable_incident_is_canonicalized_without_retry(
         _knowledge_tracker = Tracker()
         repair_logs: list[tuple[str, str, str]] = []
         logger = SimpleNamespace(
-            info=lambda template, context_id, codes: Subject.repair_logs.append(
-                (template, context_id, codes)
-            )
+            info=lambda template, context_id, codes: Subject.repair_logs.append((template, context_id, codes))
         )
 
         async def _build_learning_context(self, _operation, *, input_text, extra):
@@ -1492,14 +1691,10 @@ async def _leaking_hint_is_removed_without_retry(
         _lock = asyncio.Lock()
         _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
         _agent = Agent()
-        _knowledge_tracker = SimpleNamespace(
-            record_prompt_usage_for_question_params=lambda _params: None
-        )
+        _knowledge_tracker = SimpleNamespace(record_prompt_usage_for_question_params=lambda _params: None)
         repair_logs: list[tuple[str, str, str]] = []
         logger = SimpleNamespace(
-            info=lambda template, context_id, codes: Subject.repair_logs.append(
-                (template, context_id, codes)
-            )
+            info=lambda template, context_id, codes: Subject.repair_logs.append((template, context_id, codes))
         )
 
         async def _build_learning_context(self, _operation, *, input_text, extra):
@@ -1602,9 +1797,7 @@ async def _hard_structural_failures_still_exhaust_retry(
         _lock = asyncio.Lock()
         _state = SimpleNamespace(active_mode="companion", practice_scope_revision=0)
         _agent = Agent()
-        _knowledge_tracker = SimpleNamespace(
-            record_prompt_usage_for_question_params=lambda _params: None
-        )
+        _knowledge_tracker = SimpleNamespace(record_prompt_usage_for_question_params=lambda _params: None)
         finalized = 0
 
         async def _build_learning_context(self, _operation, *, input_text, extra):

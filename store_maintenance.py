@@ -5,6 +5,14 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 _PURGE_TABLES = (
+    "cognitive_intervention_events",
+    "cognitive_hypothesis_current",
+    "cognitive_hypothesis_snapshots",
+    "cognitive_evidence",
+    "cognitive_topic_projection_queue",
+    "cognitive_extraction_queue",
+    "cognitive_projection_queue",
+    "cognitive_user_controls",
     "learning_plan_items",
     "learning_plans",
     "memory_habit_progress",

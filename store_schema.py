@@ -424,6 +424,217 @@ def _init_db(self) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS cognitive_projection_queue (
+            attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'processing', 'done', 'failed')),
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            lease_token TEXT NOT NULL DEFAULT '',
+            extractor_version TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    # ``cognitive_projection_queue`` is retained as the V1 compatibility
+    # surface.  V2 extraction work is keyed by both attempt and extractor
+    # version so historical attempts can be safely reprocessed.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_extraction_queue (
+            attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+            extractor_version TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'processing', 'done', 'failed')),
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            lease_token TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY(attempt_id, extractor_version)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_evidence (
+            evidence_id TEXT PRIMARY KEY,
+            attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            direction TEXT NOT NULL CHECK(direction IN ('support', 'counter')),
+            strength REAL NOT NULL CHECK(strength >= 0.0 AND strength <= 1.0),
+            extractor_confidence REAL NOT NULL
+                CHECK(extractor_confidence >= 0.0 AND extractor_confidence <= 1.0),
+            diagnosticity REAL NOT NULL
+                CHECK(diagnosticity >= 0.0 AND diagnosticity <= 1.0),
+            source_kind TEXT NOT NULL,
+            evidence_span TEXT NOT NULL,
+            extractor_version TEXT NOT NULL,
+            evidence_family_id TEXT NOT NULL DEFAULT '',
+            question_id TEXT NOT NULL DEFAULT '',
+            session_id TEXT NOT NULL DEFAULT '',
+            diagnostic_validation_id TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(attempt_id, hypothesis_code, extractor_version)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_hypothesis_snapshots (
+            snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hypothesis_id TEXT NOT NULL,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN (
+                'hypothesized', 'supported', 'contradicted', 'dismissed',
+                'remediating', 'provisionally_resolved', 'monitored', 'resolved'
+            )),
+            probability REAL NOT NULL
+                CHECK(probability >= 0.0 AND probability <= 1.0),
+            support_count INTEGER NOT NULL DEFAULT 0 CHECK(support_count >= 0),
+            counter_count INTEGER NOT NULL DEFAULT 0 CHECK(counter_count >= 0),
+            diagnostic_support_count INTEGER NOT NULL DEFAULT 0
+                CHECK(diagnostic_support_count >= 0),
+            relapse_count INTEGER NOT NULL DEFAULT 0 CHECK(relapse_count >= 0),
+            source_attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+            model_version TEXT NOT NULL,
+            computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(hypothesis_id, model_version, source_attempt_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_topic_projection_queue (
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            model_version TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'processing', 'done', 'failed')),
+            requested_generation INTEGER NOT NULL DEFAULT 0
+                CHECK(requested_generation >= 0),
+            claimed_generation INTEGER NOT NULL DEFAULT 0
+                CHECK(claimed_generation >= 0),
+            projected_generation INTEGER NOT NULL DEFAULT 0
+                CHECK(projected_generation >= 0),
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            lease_token TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY(topic_id, model_version)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_hypothesis_current (
+            hypothesis_id TEXT NOT NULL,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            evidence_status TEXT NOT NULL
+                CHECK(evidence_status IN ('hypothesized', 'supported', 'contradicted')),
+            intervention_stage TEXT NOT NULL DEFAULT 'idle'
+                CHECK(intervention_stage IN (
+                    'idle', 'probing', 'remediating',
+                    'provisionally_resolved', 'monitored', 'resolved'
+                )),
+            user_override TEXT NOT NULL DEFAULT ''
+                CHECK(user_override IN ('', 'dismissed', 'suppressed', 'deleted')),
+            status TEXT NOT NULL CHECK(status IN (
+                'hypothesized', 'supported', 'contradicted', 'dismissed',
+                'remediating', 'provisionally_resolved', 'monitored', 'resolved'
+            )),
+            probability REAL NOT NULL
+                CHECK(probability >= 0.0 AND probability <= 1.0),
+            support_count INTEGER NOT NULL DEFAULT 0 CHECK(support_count >= 0),
+            counter_count INTEGER NOT NULL DEFAULT 0 CHECK(counter_count >= 0),
+            diagnostic_support_count INTEGER NOT NULL DEFAULT 0
+                CHECK(diagnostic_support_count >= 0),
+            relapse_count INTEGER NOT NULL DEFAULT 0 CHECK(relapse_count >= 0),
+            source_attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+            source_snapshot_id TEXT NOT NULL DEFAULT '',
+            model_version TEXT NOT NULL,
+            projected_generation INTEGER NOT NULL CHECK(projected_generation >= 0),
+            last_intent TEXT NOT NULL DEFAULT '',
+            last_outcome TEXT NOT NULL DEFAULT '',
+            consecutive_repair_failures INTEGER NOT NULL DEFAULT 0
+                CHECK(consecutive_repair_failures >= 0),
+            computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY(hypothesis_id, model_version),
+            UNIQUE(topic_id, hypothesis_code, model_version)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_user_controls (
+            control_id TEXT PRIMARY KEY,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('dismiss', 'suppress', 'restore', 'delete')),
+            reason TEXT NOT NULL DEFAULT '',
+            expires_at TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_intervention_events (
+            event_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL UNIQUE,
+            event_type TEXT NOT NULL CHECK(event_type IN (
+                'intent_proposed', 'question_committed',
+                'attempt_committed', 'intervention_abandoned'
+            )),
+            decision_id TEXT NOT NULL,
+            hypothesis_id TEXT NOT NULL,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            hypothesis_status TEXT NOT NULL,
+            hypothesis_probability REAL NOT NULL,
+            hypothesis_model_version TEXT NOT NULL,
+            hypothesis_source_snapshot_id TEXT NOT NULL,
+            hypothesis_source_attempt_id TEXT NOT NULL DEFAULT '',
+            hypothesis_projection_generation INTEGER NOT NULL
+                CHECK(hypothesis_projection_generation >= 0),
+            learning_intent TEXT NOT NULL CHECK(learning_intent IN (
+                'misconception_probe', 'misconception_repair', 'transfer_check'
+            )),
+            repair_strategy TEXT NOT NULL,
+            plan_id TEXT NOT NULL,
+            selection_reason TEXT NOT NULL,
+            eligible_topic_ids_json TEXT NOT NULL DEFAULT '[]',
+            learning_plan_id TEXT NOT NULL DEFAULT '',
+            learning_plan_revision INTEGER NOT NULL DEFAULT 0,
+            scope_key TEXT NOT NULL DEFAULT '',
+            scope_revision INTEGER NOT NULL DEFAULT 0,
+            origin_wrong_question_id TEXT NOT NULL DEFAULT '',
+            source_question_id TEXT NOT NULL DEFAULT '',
+            target_binding_json TEXT NOT NULL DEFAULT '{}',
+            question_id TEXT NOT NULL DEFAULT '',
+            attempt_id TEXT NOT NULL DEFAULT '',
+            blueprint_id TEXT NOT NULL DEFAULT '',
+            question_family_id TEXT NOT NULL DEFAULT '',
+            diagnostic_validation_id TEXT NOT NULL DEFAULT '',
+            evaluation_verdict TEXT NOT NULL DEFAULT '' CHECK(
+                evaluation_verdict IN ('', 'correct', 'partial', 'wrong', 'dont_know')
+            ),
+            abandonment_reason TEXT NOT NULL DEFAULT '',
+            policy_version TEXT NOT NULL,
+            validator_version TEXT NOT NULL DEFAULT '',
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            occurred_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS review_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             topic_id TEXT NOT NULL REFERENCES topics(id),
@@ -589,6 +800,108 @@ def _init_db(self) -> None:
         "lease_token",
         "TEXT NOT NULL DEFAULT ''",
     )
+    for column in (
+        "evidence_family_id",
+        "question_id",
+        "session_id",
+        "diagnostic_validation_id",
+    ):
+        self._ensure_column(
+            conn,
+            "cognitive_evidence",
+            column,
+            "TEXT NOT NULL DEFAULT ''",
+        )
+    self._ensure_column(
+        conn,
+        "cognitive_user_controls",
+        "expires_at",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    self._ensure_column(
+        conn,
+        "cognitive_hypothesis_current",
+        "source_snapshot_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    self._ensure_column(
+        conn,
+        "cognitive_hypothesis_current",
+        "last_intent",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    self._ensure_column(
+        conn,
+        "cognitive_hypothesis_current",
+        "last_outcome",
+        "TEXT NOT NULL DEFAULT ''",
+    )
+    self._ensure_column(
+        conn,
+        "cognitive_hypothesis_current",
+        "consecutive_repair_failures",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    # Preserve pending V1 work when an existing database first opens under V2.
+    # The legacy table remains a one-version compatibility mirror.
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_extraction_queue (
+            attempt_id, extractor_version, status, retry_count, last_error,
+            lease_token, created_at, updated_at
+        )
+        SELECT attempt_id, extractor_version, status, retry_count, last_error,
+               lease_token, created_at, updated_at
+        FROM cognitive_projection_queue
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_projection_queue (
+            attempt_id, status, retry_count, last_error, lease_token,
+            extractor_version, created_at, updated_at
+        )
+        SELECT attempt_id, status, retry_count, last_error, lease_token,
+               extractor_version, created_at, updated_at
+        FROM cognitive_extraction_queue
+        ORDER BY created_at, attempt_id, extractor_version
+        """
+    )
+    # A V1 database may already contain completed immutable evidence and
+    # snapshots, while having no topic-level queue or current-state table.
+    # Seed one pending generation per historical topic/model so the V2
+    # projector rebuilds ``cognitive_hypothesis_current`` on its next wake.
+    # ``INSERT OR IGNORE`` keeps repeated opens idempotent and never dirties an
+    # already-managed V2 topic.
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_topic_projection_queue (
+            topic_id, model_version, status, requested_generation,
+            claimed_generation, projected_generation, retry_count,
+            last_error, lease_token, created_at, updated_at
+        )
+        SELECT DISTINCT topic_id, model_version, 'pending', 1, 0, 0, 0,
+                        NULL, '', datetime('now'), datetime('now')
+        FROM cognitive_hypothesis_snapshots
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_topic_projection_queue (
+            topic_id, model_version, status, requested_generation,
+            claimed_generation, projected_generation, retry_count,
+            last_error, lease_token, created_at, updated_at
+        )
+        SELECT DISTINCT evidence.topic_id, 'cognitive-v1', 'pending', 1, 0, 0, 0,
+                        NULL, '', datetime('now'), datetime('now')
+        FROM cognitive_evidence evidence
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM cognitive_hypothesis_snapshots snapshots
+            WHERE snapshots.topic_id = evidence.topic_id
+        )
+        """
+    )
     # PR-8 adds evaluator provenance without replacing the evaluation JSON.
     # Defaults make records created before this migration read as the legacy
     # LLM rubric path while keeping the original JSON untouched.
@@ -653,6 +966,33 @@ def _init_db(self) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_mastery_projection_status_updated ON mastery_projection_queue(status, updated_at, attempt_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_projection_status_updated ON cognitive_projection_queue(status, updated_at, attempt_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_extraction_status_updated ON cognitive_extraction_queue(status, updated_at, attempt_id, extractor_version)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_topic_projection_status_updated ON cognitive_topic_projection_queue(status, updated_at, topic_id, model_version)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_evidence_topic_hypothesis ON cognitive_evidence(topic_id, hypothesis_code, extractor_version, created_at, evidence_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_snapshots_topic_model ON cognitive_hypothesis_snapshots(topic_id, model_version, computed_at DESC, snapshot_id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_current_topic_model ON cognitive_hypothesis_current(topic_id, model_version, computed_at DESC, hypothesis_code)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_controls_hypothesis ON cognitive_user_controls(topic_id, hypothesis_code, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_interventions_hypothesis ON cognitive_intervention_events(topic_id, hypothesis_code, hypothesis_model_version, occurred_at, event_seq)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_interventions_decision ON cognitive_intervention_events(decision_id, occurred_at, event_seq)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_captured_questions_topic_used ON captured_questions(topic_id, last_used_at DESC, id DESC)"

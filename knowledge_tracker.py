@@ -9,6 +9,22 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .adaptive_learning.cognitive_catalog import COGNITIVE_CATALOG_V1
+from .adaptive_learning.cognitive_contracts import (
+    DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+    DEFAULT_COGNITIVE_MODEL_VERSION,
+)
+from .adaptive_learning.cognitive_extractor import CognitiveExtractor
+from .adaptive_learning.cognitive_policy import (
+    CognitiveIntentPolicy,
+    CognitivePolicyDecision,
+)
+from .adaptive_learning.cognitive_projection import CognitiveProjector
+from .adaptive_learning.cognitive_state import (
+    CognitiveStateReader,
+    LearnerCognitiveStateView,
+)
+from .adaptive_learning.contracts import QuestionPlan
 from .adaptive_learning.learner_state import LearnerStateReader
 from .adaptive_learning.mastery_projection import MasteryV2Projector
 from .fsrs_bridge import (
@@ -44,6 +60,12 @@ def _mastery_config_value(config: Any, name: str, default: Any) -> Any:
     return getattr(config, name, default) if config is not None else default
 
 
+def _cognitive_config_value(config: Any, name: str, default: Any) -> Any:
+    if isinstance(config, dict):
+        return config.get(name, default)
+    return getattr(config, name, default) if config is not None else default
+
+
 class _BatchAnswerWriteFailed(RuntimeError):
     def __init__(self, original: Exception) -> None:
         super().__init__(str(original))
@@ -52,6 +74,32 @@ class _BatchAnswerWriteFailed(RuntimeError):
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _without_cognitive_question_provenance(
+    question: dict[str, Any],
+) -> dict[str, Any]:
+    """Downgrade an unauthenticated/abandoned cognitive question to practice."""
+
+    sanitized = dict(question)
+    for key in tuple(sanitized):
+        if key.startswith("cognitive_") or key in {
+            "learning_intent",
+            "hypothesis_target",
+            "repair_strategy",
+            "diagnostic_validation_id",
+            "diagnostic_signature",
+            "competing_hypothesis_codes",
+        }:
+            sanitized.pop(key, None)
+    binding = sanitized.get("target_binding")
+    if isinstance(binding, dict):
+        clean_binding = dict(binding)
+        for key in tuple(clean_binding):
+            if key.startswith("cognitive_") or key == "diagnostic_validation_id":
+                clean_binding.pop(key, None)
+        sanitized["target_binding"] = clean_binding
+    return sanitized
 
 
 def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
@@ -541,6 +589,8 @@ class KnowledgeTracker:
         retention_target: float = 0.90,
         logger: Any | None = None,
         mastery_config: Any | None = None,
+        cognitive_config: Any | None = None,
+        cognitive_extractor: CognitiveExtractor | None = None,
     ) -> None:
         self.store = store
         self.mastery = MasteryTracker()
@@ -562,6 +612,87 @@ class KnowledgeTracker:
             model_version=model_version,
         )
         self._mastery_v2_projector = MasteryV2Projector(store)
+        cognitive_enabled = (
+            _cognitive_config_value(cognitive_config, "projection_enabled", False)
+            is True
+        )
+        configured_cognitive_topics = _cognitive_config_value(
+            cognitive_config,
+            "supported_topics",
+            (),
+        )
+        if not isinstance(configured_cognitive_topics, (list, tuple, set)):
+            configured_cognitive_topics = ()
+        self._cognitive_topic_ids = frozenset(
+            canonical
+            for raw_topic in configured_cognitive_topics
+            if (
+                canonical := COGNITIVE_CATALOG_V1.canonical_topic_id(
+                    str(raw_topic or "").strip()
+                )
+            )
+        )
+        self._cognitive_projection_enabled = bool(
+            cognitive_enabled and self._cognitive_topic_ids
+        )
+        cognitive_model_version = str(
+            _cognitive_config_value(
+                cognitive_config,
+                "model_version",
+                DEFAULT_COGNITIVE_MODEL_VERSION,
+            )
+            or DEFAULT_COGNITIVE_MODEL_VERSION
+        ).strip()
+        requested_read_mode = str(
+            _cognitive_config_value(cognitive_config, "read_mode", "off") or "off"
+        ).strip().lower()
+        self._cognitive_read_mode = (
+            requested_read_mode
+            if requested_read_mode in {"off", "shadow", "active"}
+            else "off"
+        )
+        requested_intent_mode = str(
+            _cognitive_config_value(cognitive_config, "intent_policy", "off")
+            or "off"
+        ).strip().lower()
+        if requested_intent_mode not in {"off", "shadow", "on"}:
+            requested_intent_mode = "off"
+        # Active question changes require an active read.  A shadow read can
+        # audit a proposal, but must never accidentally activate it.
+        if not self._cognitive_projection_enabled or self._cognitive_read_mode == "off":
+            effective_intent_mode = "off"
+        elif requested_intent_mode == "on" and self._cognitive_read_mode != "active":
+            effective_intent_mode = "shadow"
+        else:
+            effective_intent_mode = requested_intent_mode
+        self._cognitive_model_version = cognitive_model_version
+        self._cognitive_intent_mode = effective_intent_mode
+        self._cognitive_state_reader = (
+            CognitiveStateReader(store, model_version=cognitive_model_version)
+            if self._cognitive_projection_enabled
+            and self._cognitive_read_mode != "off"
+            else None
+        )
+        self._cognitive_intent_policy = CognitiveIntentPolicy(
+            mode=effective_intent_mode
+        )
+        if self._cognitive_projection_enabled and cognitive_extractor is None:
+            from .cognitive_model_gateway import build_cognitive_extractor
+
+            cognitive_extractor = build_cognitive_extractor(
+                logger=logger,
+                config=cognitive_config,
+            )
+        self._cognitive_projector = (
+            CognitiveProjector(
+                store,
+                cognitive_extractor,
+                model_version=cognitive_model_version,
+            )
+            if self._cognitive_projection_enabled
+            and cognitive_extractor is not None
+            else None
+        )
         self.graph = KnowledgeGraph(store, learner_state=self.learner_state)
         self.quality = KnowledgeQualityStore(store)
         self.wrong_store = WrongQuestionStore(store)
@@ -626,6 +757,210 @@ class KnowledgeTracker:
         else:
             totals["has_more"] = True
         return totals
+
+    @property
+    def cognitive_projection_enabled(self) -> bool:
+        return self._cognitive_projection_enabled and self._cognitive_projector is not None
+
+    async def project_cognitive_pending(self, *, limit: int = 100) -> dict[str, Any]:
+        projector = self._cognitive_projector
+        if not self.cognitive_projection_enabled or projector is None:
+            return {
+                "enabled": False,
+                "claimed": 0,
+                "completed": 0,
+                "failed": 0,
+                "failures": [],
+            }
+        batch_size = max(1, int(limit))
+        totals: dict[str, Any] = {
+            "enabled": True,
+            "claimed": 0,
+            "completed": 0,
+            "failed": 0,
+            "failures": [],
+            "batches": 0,
+            "has_more": False,
+        }
+        for _ in range(100):
+            result = (await projector.process_pending(limit=batch_size)).to_dict()
+            totals["batches"] += 1
+            for key in ("claimed", "completed", "failed"):
+                totals[key] += int(result.get(key) or 0)
+            totals["failures"].extend(result.get("failures") or [])
+            if int(result.get("claimed") or 0) < batch_size:
+                break
+        else:
+            totals["has_more"] = True
+        return totals
+
+    def _cognitive_topic_enabled(self, topic_id: str) -> bool:
+        canonical = COGNITIVE_CATALOG_V1.canonical_topic_id(topic_id)
+        return bool(
+            self.cognitive_projection_enabled
+            and canonical
+            and canonical in self._cognitive_topic_ids
+        )
+
+    @property
+    def cognitive_read_mode(self) -> str:
+        return self._cognitive_read_mode
+
+    @property
+    def cognitive_intent_policy_mode(self) -> str:
+        return self._cognitive_intent_mode
+
+    def read_cognitive_state(self, topic_id: str) -> LearnerCognitiveStateView:
+        """Return only a generation-consistent current projection.
+
+        Missing configuration, unsupported topics, stale generations, and
+        persistence errors all produce an unusable empty view.  Callers must
+        never recover a current state from snapshot history.
+        """
+
+        topic_key = str(topic_id or "").strip()
+        reader = self._cognitive_state_reader
+        if (
+            reader is None
+            or not topic_key
+            or not self._cognitive_topic_enabled(topic_key)
+        ):
+            return LearnerCognitiveStateView.empty(
+                topic_key,
+                self._cognitive_model_version,
+                reason="missing_projection",
+            )
+        return reader.read_topic(topic_key)
+
+    def propose_cognitive_intent(
+        self, original_plan: QuestionPlan
+    ) -> CognitivePolicyDecision:
+        """Decorate an already-selected plan without acquiring topic ownership."""
+
+        try:
+            state = self.read_cognitive_state(original_plan.target_topic.id)
+            return self._cognitive_intent_policy.decorate(original_plan, state)
+        except Exception:
+            # Cognitive state is optional and must never block question
+            # generation.  Re-running the disabled policy yields the exact
+            # original plan and a stable audit reason.
+            return CognitiveIntentPolicy(mode="off").decorate(
+                original_plan,
+                LearnerCognitiveStateView.empty(
+                    original_plan.target_topic.id,
+                    self._cognitive_model_version,
+                    reason="read_failed",
+                ),
+            )
+
+    def _build_cognitive_attempt_event(
+        self,
+        *,
+        question: dict[str, Any],
+        attempt_id: str,
+        verdict: str,
+    ) -> dict[str, Any] | None:
+        """Derive an attempt event only from a persisted committed question.
+
+        Client-supplied cognitive fields are never sufficient.  The immutable
+        question event is the source of every ownership and validation field;
+        this method adds only the server attempt id, evaluator verdict, and
+        event timestamp.
+        """
+
+        attempt_key = str(attempt_id or "").strip()
+        question_id = str(question.get("question_id") or "").strip()
+        binding = question.get("target_binding")
+        binding_payload = binding if isinstance(binding, dict) else {}
+        decision_id = str(
+            binding_payload.get("cognitive_decision_id")
+            or question.get("cognitive_decision_id")
+            or ""
+        ).strip()
+        intent = str(
+            binding_payload.get("cognitive_learning_intent")
+            or question.get("learning_intent")
+            or ""
+        ).strip()
+        validation_id = str(
+            binding_payload.get("diagnostic_validation_id")
+            or question.get("diagnostic_validation_id")
+            or ""
+        ).strip()
+        if (
+            not attempt_key
+            or not question_id
+            or not decision_id
+            or not validation_id
+            or intent
+            not in {
+                "misconception_probe",
+                "misconception_repair",
+                "transfer_check",
+            }
+            or verdict not in {"correct", "partial", "wrong", "dont_know"}
+        ):
+            return None
+        list_events = getattr(self.store, "list_cognitive_intervention_events", None)
+        is_suppressed = getattr(
+            self.store, "is_cognitive_hypothesis_suppressed", None
+        )
+        if not callable(list_events):
+            return None
+        try:
+            raw_rows = list_events(
+                decision_id=decision_id,
+                event_types=("question_committed", "intervention_abandoned"),
+                limit=10,
+            )
+            rows = raw_rows if isinstance(raw_rows, list) else []
+            committed = next(
+                (
+                    row
+                    for row in rows
+                    if str(row.get("question_id") or "").strip() == question_id
+                    and str(row.get("learning_intent") or "").strip() == intent
+                    and str(row.get("diagnostic_validation_id") or "").strip()
+                    == validation_id
+                ),
+                None,
+            )
+            if not isinstance(committed, dict):
+                return None
+            if any(
+                str(row.get("event_type") or "").strip()
+                == "intervention_abandoned"
+                and str(row.get("learning_intent") or "").strip() == intent
+                and (
+                    not str(row.get("question_id") or "").strip()
+                    or str(row.get("question_id") or "").strip() == question_id
+                )
+                for row in rows
+            ):
+                return None
+            hypothesis = committed.get("hypothesis_target")
+            if not isinstance(hypothesis, dict):
+                return None
+            if callable(is_suppressed) and is_suppressed(
+                topic_id=str(hypothesis.get("topic_id") or "").strip(),
+                hypothesis_code=str(hypothesis.get("code") or "").strip(),
+            ):
+                return None
+        except Exception:
+            return None
+        event = dict(committed)
+        event.update(
+            {
+                "event_id": f"cognitive-event:{uuid.uuid4().hex}",
+                "event_type": "attempt_committed",
+                "attempt_id": attempt_key,
+                "evaluation_verdict": verdict,
+                "created_at": _utc_iso(),
+                "abandonment_reason": "",
+            }
+        )
+        event.pop("event_seq", None)
+        return event
 
     def rebuild_mastery_v2(self, topic_ids: list[str] | set[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
         result = (
@@ -707,6 +1042,7 @@ class KnowledgeTracker:
                     used_hint=used_hint,
                     origin_wrong_question_id=origin_wrong_question_id,
                     attempt_id=attempt_id,
+                    cognitive_eligible=require_existing_topic,
                 )
         except _BatchAnswerWriteFailed as exc:
             if origin_wrong_question_id or require_existing_topic:
@@ -774,6 +1110,7 @@ class KnowledgeTracker:
         used_hint: bool | None = None,
         origin_wrong_question_id: str = "",
         attempt_id: str = "",
+        cognitive_eligible: bool = False,
     ) -> dict[str, Any]:
         (
             topic_id,
@@ -788,6 +1125,19 @@ class KnowledgeTracker:
         question_payload.setdefault("topic", topic_id)
         difficulty = _difficulty_to_float(question_payload.get("difficulty"), 0.5)
         verdict = str(eval_result.get("verdict") or "").strip().lower()
+        cognitive_attempt_event = (
+            self._build_cognitive_attempt_event(
+                question=question_payload,
+                attempt_id=attempt_id,
+                verdict=verdict,
+            )
+            if cognitive_eligible and self._cognitive_topic_enabled(topic_id)
+            else None
+        )
+        if cognitive_attempt_event is None:
+            question_payload = _without_cognitive_question_provenance(
+                question_payload
+            )
         error_type = str(eval_result.get("error_type") or "").strip() or "unknown"
         answer_state = self.store.load_answer_write_state(topic_id, recent_limit=10)
         recent = answer_state.get("recent") if topic_existed else []
@@ -865,11 +1215,27 @@ class KnowledgeTracker:
                 source_question_id=source_question_id or None,
                 used_hint=used_hint,
                 enqueue_mastery_v2=self._mastery_v2_shadow_enabled,
+                enqueue_cognitive_projection=(
+                    cognitive_eligible and self._cognitive_topic_enabled(topic_id)
+                ),
+                cognitive_extractor_version=DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+                cognitive_model_version=self._cognitive_model_version,
+                cognitive_intervention_event=cognitive_attempt_event,
             )
         except Exception as exc:
             raise _BatchAnswerWriteFailed(exc) from exc
         if topic_upsert_data:
             self.graph.mark_dirty()
+        cognitive_event_result = batch_result.get("cognitive_intervention_event")
+        if (
+            cognitive_attempt_event is not None
+            and isinstance(cognitive_event_result, dict)
+            and not bool(cognitive_event_result.get("recorded"))
+        ):
+            self._log_exception(
+                "study cognitive attempt event was not recorded; ordinary answer facts were preserved: {}",
+                str(cognitive_event_result.get("error") or "unknown"),
+            )
         if batch_result.get("duplicate_attempt"):
             return {
                 "topic_id": str(batch_result.get("topic_id") or topic_id),
