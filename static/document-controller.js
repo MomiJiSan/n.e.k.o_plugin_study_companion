@@ -733,9 +733,9 @@
       }
     }
 
-    async function refreshAfterAnalysisComplete() {
+    async function refreshAfterAnalysisComplete(payload) {
       try {
-        await onAnalysisComplete({ updateReply: false });
+        await onAnalysisComplete(payload, { updateReply: false });
       } catch (_error) {
         // A completed analysis must remain visible when the status refresh fails.
       }
@@ -814,7 +814,7 @@
         setStatus(failed ? t('ui.status.error', 'Error') : t('ui.status.document_complete'));
         setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : completedReply);
         studyDocumentState.textContent = failed ? formatDocumentDiagnostic(data.diagnostic) : t('ui.status.document_complete');
-        await refreshAfterAnalysisComplete();
+        await refreshAfterAnalysisComplete(data);
         await documentJobs.acknowledge(data, controller.signal);
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -849,7 +849,7 @@
         setStatus(failed ? t('ui.status.error', 'Error') : t('ui.status.document_complete'));
         setReply(failed ? formatDocumentDiagnostic(data.diagnostic) : completedReply);
         studyDocumentState.textContent = failed ? formatDocumentDiagnostic(data.diagnostic) : t('ui.status.document_complete');
-        if (!failed) await refreshAfterAnalysisComplete();
+        if (!failed) await refreshAfterAnalysisComplete(data);
         await documentJobs.acknowledge(data, controller.signal);
       } catch (error) {
         if (!controller.signal.aborted) setReply(formatPluginError(error));

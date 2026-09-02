@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from functools import wraps
+from types import SimpleNamespace
 
 from .adaptive_learning import (
     PracticeSelection,
@@ -312,6 +313,92 @@ async def _canonical_validation_relations_for_target(owner: Any, *, selected_top
 
 
 class _TutorQuestionEntriesMixin:
+    def _resolved_learning_plan_service(self):
+        """Return the optional plan service without requiring constructor changes."""
+
+        provider = getattr(self, "_learning_plan_service", None)
+        return provider() if callable(provider) else provider
+
+    def _active_learning_plan_selection_scope(self) -> dict[str, Any] | None:
+        service = self._resolved_learning_plan_service()
+        if service is None:
+            return None
+        try:
+            payload = service.active_selection_scope()
+        except Exception as exc:
+            logger = getattr(self, "logger", None)
+            if logger is not None:
+                logger.warning("study learning plan selection read failed: {}", exc)
+            code = str(getattr(exc, "code", "") or "").strip()
+            raise SdkError(
+                "learning plan selection is temporarily unavailable",
+                code=code or "LEARNING_PLAN_TEMPORARILY_UNAVAILABLE",
+            ) from exc
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def _validate_learning_plan_selection_context(
+        self, context: dict[str, Any]
+    ) -> None:
+        if str(context.get("selection_domain") or "") != "learning_plan":
+            return
+        plan_id = str(context.get("learning_plan_id") or "").strip()
+        topic_id = str(context.get("selected_topic_id") or "").strip()
+        try:
+            revision = int(context.get("learning_plan_revision") or 0)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise SdkError(
+                "learning plan changed after question selection",
+                code="LEARNING_PLAN_CHANGED",
+            ) from exc
+        service = self._resolved_learning_plan_service()
+        if service is None or not plan_id:
+            raise SdkError(
+                "learning plan is no longer active",
+                code="LEARNING_PLAN_NOT_ACTIVE",
+            )
+        try:
+            active = service.active_selection_scope()
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "").strip()
+            raise SdkError(str(exc), code=code or "LEARNING_PLAN_NOT_ACTIVE") from exc
+        active = dict(active) if isinstance(active, dict) else {}
+        if str(active.get("learning_plan_id") or "").strip() != plan_id:
+            raise SdkError(
+                "learning plan is no longer active",
+                code="LEARNING_PLAN_NOT_ACTIVE",
+            )
+        try:
+            active_revision = int(active.get("learning_plan_revision") or 0)
+        except (TypeError, ValueError, OverflowError):
+            active_revision = -1
+        if active_revision != revision:
+            raise SdkError(
+                "learning plan changed after question selection",
+                code="LEARNING_PLAN_CHANGED",
+            )
+        eligible = {
+            str(value or "").strip()
+            for value in (active.get("eligible_topic_ids") or [])
+            if str(value or "").strip()
+        }
+        if not topic_id or topic_id not in eligible:
+            raise SdkError(
+                "selected topic was removed from the learning plan",
+                code="LEARNING_PLAN_TOPIC_REMOVED",
+            )
+        contains_topic = getattr(service, "contains_topic", None)
+        if callable(contains_topic):
+            try:
+                contained = contains_topic(plan_id, revision, topic_id)
+            except Exception as exc:
+                code = str(getattr(exc, "code", "") or "").strip()
+                raise SdkError(str(exc), code=code or "LEARNING_PLAN_CHANGED") from exc
+            if contained is False:
+                raise SdkError(
+                    "selected topic was removed from the learning plan",
+                    code="LEARNING_PLAN_TOPIC_REMOVED",
+                )
+
     def _targeted_context_cache(self) -> dict[str, dict[str, Any]]:
         cache = getattr(self, "_targeted_question_contexts", None)
         if not isinstance(cache, dict):
@@ -390,6 +477,11 @@ class _TutorQuestionEntriesMixin:
                 "selected topic is outside the active practice scope",
                 code="SELECTION_SCOPE_CHANGED",
             )
+        try:
+            self._validate_learning_plan_selection_context(cached)
+        except SdkError:
+            cache.pop(context_id, None)
+            raise
         cached["consumed"] = True
         return dict(cached)
 
@@ -705,12 +797,42 @@ class _TutorQuestionEntriesMixin:
 
     def _build_targeted_question_context(self) -> dict[str, Any]:
         scope = self._resolve_active_practice_scope()
-        params = self._scoped_question_params(scope) if scope is not None else self._unscoped_question_params()
+        plan_scope = None
+        selection_domain = "practice_scope" if scope is not None else "global"
+        if scope is None:
+            active_plan = self._active_learning_plan_selection_scope()
+            if active_plan is not None:
+                eligible_topic_ids = tuple(
+                    dict.fromkeys(
+                        str(topic_id or "").strip()
+                        for topic_id in (active_plan.get("eligible_topic_ids") or [])
+                        if str(topic_id or "").strip()
+                    )
+                )
+                if eligible_topic_ids:
+                    plan_scope = SimpleNamespace(
+                        eligible_topic_ids=eligible_topic_ids,
+                        mode="learning_plan",
+                        topic_id="",
+                        subject="",
+                        stage="",
+                        chapter="",
+                        unit="",
+                        course_family="",
+                    )
+                    selection_domain = "learning_plan"
+        effective_scope = scope if scope is not None else plan_scope
+        params = (
+            self._scoped_question_params(effective_scope)
+            if effective_scope is not None
+            else self._unscoped_question_params()
+        )
         selection = self._selection_from_question_params(params)
-        self._focus_selected_question_params(selection, params, scope)
+        self._focus_selected_question_params(selection, params, effective_scope)
         if scope is not None:
             selection.update(
                 {
+                    "selection_domain": selection_domain,
                     "scope_key": scope.scope_key,
                     "scope_revision": scope.scope_revision,
                     "practice_scope": scope.to_public_dict(),
@@ -721,12 +843,21 @@ class _TutorQuestionEntriesMixin:
         else:
             selection.update(
                 {
+                    "selection_domain": selection_domain,
                     "scope_key": "",
                     "scope_revision": int(getattr(self._state, "practice_scope_revision", 0) or 0),
                     "practice_scope": {},
                     "scope_topic_count": 0,
                 }
             )
+            if plan_scope is not None and active_plan is not None:
+                selection.update(
+                    {
+                        "learning_plan_id": active_plan.get("learning_plan_id") or "",
+                        "learning_plan_revision": active_plan.get("learning_plan_revision") or 0,
+                        "plan_progress": active_plan.get("progress") or {},
+                    }
+                )
         if selection["selection_reason"] == "no_data":
             return {
                 **selection,
@@ -788,6 +919,10 @@ class _TutorQuestionEntriesMixin:
                     "scope_revision": targeted_context.get("scope_revision") or 0,
                     "practice_scope": targeted_context.get("practice_scope") or {},
                     "scope_topic_count": targeted_context.get("scope_topic_count") or 0,
+                    "selection_domain": targeted_context.get("selection_domain") or "global",
+                    "learning_plan_id": targeted_context.get("learning_plan_id") or "",
+                    "learning_plan_revision": targeted_context.get("learning_plan_revision") or 0,
+                    "plan_progress": targeted_context.get("plan_progress") or {},
                 }
             )
         if vision_image_payload:
@@ -1006,6 +1141,10 @@ class _TutorQuestionEntriesMixin:
         if not isinstance(reply, TutorReply):
             raise SdkError("generated question is missing its internal reply")
         if targeted_context:
+            await asyncio.to_thread(
+                self._validate_learning_plan_selection_context,
+                targeted_context,
+            )
             async with self._lock:
                 active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
                 active_scope = self._resolve_active_practice_scope()
@@ -1038,6 +1177,10 @@ class _TutorQuestionEntriesMixin:
                     "scope_revision": targeted_context.get("scope_revision") or 0,
                     "practice_scope": targeted_context.get("practice_scope") or {},
                     "scope_topic_count": targeted_context.get("scope_topic_count") or 0,
+                    "selection_domain": targeted_context.get("selection_domain") or "global",
+                    "learning_plan_id": targeted_context.get("learning_plan_id") or "",
+                    "learning_plan_revision": targeted_context.get("learning_plan_revision") or 0,
+                    "plan_progress": targeted_context.get("plan_progress") or {},
                 },
             )
             reply = TutorReply(
@@ -1061,6 +1204,10 @@ class _TutorQuestionEntriesMixin:
         }
         if targeted_context:
             async with self._practice_scope_write_lock():
+                await asyncio.to_thread(
+                    self._validate_learning_plan_selection_context,
+                    targeted_context,
+                )
                 async with self._lock:
                     active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
                     active_scope = self._resolve_active_practice_scope()
@@ -1188,6 +1335,11 @@ class _TutorQuestionEntriesMixin:
                     "scope_revision": context.get("scope_revision") or 0,
                     "practice_scope": context.get("practice_scope") or {},
                     "scope_topic_count": context.get("scope_topic_count") or 0,
+                    "selection_domain": context.get("selection_domain") or "global",
+                    "learning_plan_id": context.get("learning_plan_id") or "",
+                    "learning_plan_revision": context.get("learning_plan_revision") or 0,
+                    "plan_progress": context.get("plan_progress") or {},
+                    "expires_at": context.get("expires_at") or 0,
                 }
             )
         except SdkError as exc:

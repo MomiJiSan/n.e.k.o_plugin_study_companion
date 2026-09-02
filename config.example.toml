@@ -2,6 +2,14 @@
 enabled = true
 auto_start = false
 
+[study.adaptive_loop]
+next_step_preview_enabled = true
+material_learning_plans_enabled = false
+auto_prepare_plan = true
+max_core_topics = 12
+max_prerequisite_topics = 5
+auto_generate_next_question = false
+
 # Opt-in deterministic assessment routes.  Keep every route disabled until
 # compatibility monitoring has approved a scoped rollout.
 [assessment]

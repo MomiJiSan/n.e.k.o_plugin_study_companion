@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 _PURGE_TABLES = (
+    "learning_plan_items",
+    "learning_plans",
     "memory_habit_progress",
     "recitation_attempts",
     "review_records",

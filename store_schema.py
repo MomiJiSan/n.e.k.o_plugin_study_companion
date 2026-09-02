@@ -437,6 +437,41 @@ def _init_db(self) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS learning_plans (
+            id TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL CHECK(status IN ('draft', 'active', 'paused', 'completed', 'canceled')),
+            source_kind TEXT NOT NULL,
+            source_digest TEXT NOT NULL,
+            display_title TEXT NOT NULL DEFAULT '',
+            revision INTEGER NOT NULL DEFAULT 1,
+            unmatched_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            activated_at TEXT,
+            completed_at TEXT,
+            canceled_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS learning_plan_items (
+            plan_id TEXT NOT NULL REFERENCES learning_plans(id) ON DELETE CASCADE,
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            ordinal INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('core', 'prerequisite', 'optional')),
+            mapping_score REAL NOT NULL,
+            mapping_confidence TEXT NOT NULL CHECK(mapping_confidence IN ('high', 'medium')),
+            reason_code TEXT NOT NULL,
+            required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0, 1)),
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (plan_id, topic_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS candidate_knowledge_items (
             id TEXT PRIMARY KEY,
             item_type TEXT NOT NULL,
@@ -627,6 +662,15 @@ def _init_db(self) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_review_topic_created ON review_log(topic_id, created_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_learning_plans_one_active ON learning_plans(status) WHERE status = 'active'"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_plans_status_updated ON learning_plans(status, updated_at DESC, id DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learning_plan_items_topic ON learning_plan_items(topic_id, plan_id)"
     )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_candidate_knowledge_dedupe ON candidate_knowledge_items(item_type, dedupe_key) WHERE dedupe_key IS NOT NULL"

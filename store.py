@@ -69,6 +69,14 @@ from .store_knowledge_edges import (
     query_knowledge_map_page,
     rebuild_knowledge_edge_projection,
 )
+from .store_learning_plans import (
+    activate_learning_plan,
+    create_learning_plan,
+    get_active_learning_plan,
+    get_learning_plan,
+    list_learning_plans,
+    update_learning_plan_status,
+)
 from .store_maintenance import json_loads, purge_all, transaction
 from .store_mastery_v2 import (
     claim_mastery_projections,
@@ -1643,6 +1651,7 @@ class StudyStore:
             "sessions": self.list_sessions(limit=5000),
             "qa_records": self.list_qa_records(limit=5000),
             "review_log": self.list_review_log(limit=5000),
+            "learning_plans": self.list_learning_plans(limit=5000),
             "candidate_knowledge_items": self.list_candidate_items(limit=5000),
             "knowledge_evidence": self.list_knowledge_evidence(limit=5000),
             "anonymous_knowledge_stats": self.list_anonymous_knowledge_stats(
@@ -1732,6 +1741,12 @@ StudyStore.upsert_fsrs_card = upsert_fsrs_card  # type: ignore[method-assign]
 StudyStore.list_fsrs_cards = list_fsrs_cards  # type: ignore[method-assign]
 StudyStore.append_review_log = append_review_log  # type: ignore[method-assign]
 StudyStore.list_review_log = list_review_log  # type: ignore[method-assign]
+StudyStore.create_learning_plan = create_learning_plan  # type: ignore[method-assign]
+StudyStore.get_learning_plan = get_learning_plan  # type: ignore[method-assign]
+StudyStore.get_active_learning_plan = get_active_learning_plan  # type: ignore[method-assign]
+StudyStore.list_learning_plans = list_learning_plans  # type: ignore[method-assign]
+StudyStore.activate_learning_plan = activate_learning_plan  # type: ignore[method-assign]
+StudyStore.update_learning_plan_status = update_learning_plan_status  # type: ignore[method-assign]
 StudyStore.transaction = transaction  # type: ignore[method-assign]
 StudyStore.json_loads = json_loads  # type: ignore[method-assign]
 StudyStore.purge_all = purge_all  # type: ignore[method-assign]

@@ -48,6 +48,7 @@ from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
 from .entry_export_support import _ExportSupportMixin
 from .entry_goal_entries import _GoalEntriesMixin
 from .entry_knowledge_entries import _KnowledgeEntriesMixin
+from .entry_learning_plan_entries import _LearningPlanEntriesMixin
 from .entry_local_model_entries import _LocalModelEntriesMixin
 from .entry_memory_card_entries import _MemoryCardEntriesMixin
 from .entry_memory_deck_entries import _MemoryDeckEntriesMixin
@@ -91,6 +92,7 @@ from .models import (
     STATUS_STOPPED,
     ActivitySnapshot,
     ActivitySummary,
+    AdaptiveLoopConfig,
     StudyConfig,
     StudyState,
     TutorReply,
@@ -133,6 +135,7 @@ from .voice_filter import VoiceFilter, _derive_subject, build_context_for_catgir
 __all__ = (
     "ActivitySnapshot",
     "ActivitySummary",
+    "AdaptiveLoopConfig",
     "DocExporter",
     "LLM_OPERATION_ANSWER_EVALUATE",
     "LLM_OPERATION_CONCEPT_EXPLAIN",
@@ -237,6 +240,7 @@ class StudyCompanionPlugin(
     _CheckinEntriesMixin,
     _SupervisionEntriesMixin,
     _KnowledgeEntriesMixin,
+    _LearningPlanEntriesMixin,
     _PracticeScopeEntriesMixin,
     _ModeEntriesMixin,
     _TutorExplainEntriesMixin,
