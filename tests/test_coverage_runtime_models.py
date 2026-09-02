@@ -333,7 +333,7 @@ async def test_gateway_runtime_metadata_is_conservative_and_does_not_leak(
 
 
 @pytest.mark.parametrize(
-    ("base_url", "provider_code"),
+    ("endpoint_url", "provider_code"),
     [
         ("https://api.openai.com/v1", "openai"),
         ("https://api.anthropic.com/v1", "anthropic"),
@@ -342,19 +342,19 @@ async def test_gateway_runtime_metadata_is_conservative_and_does_not_leak(
 )
 def test_gateway_runtime_metadata_recognizes_whitelisted_provider_hosts(
     gateway_env: Any,
-    base_url: str,
+    endpoint_url: str,
     provider_code: str,
 ) -> None:
     metadata = gateway_env.module._runtime_display_metadata(
         model="provider-model",
-        base_url=base_url,
+        base_url=endpoint_url,
         is_custom=False,
     )
     assert metadata == {
         "api_source": "neko_managed",
         "provider_code": provider_code,
         "is_free": None,
-        "endpoint_hint": base_url.split("/")[2],
+        "endpoint_hint": endpoint_url.split("/")[2],
     }
 
 
