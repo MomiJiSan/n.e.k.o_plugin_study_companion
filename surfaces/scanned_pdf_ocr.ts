@@ -1,5 +1,7 @@
 export const SCANNED_PDF_OCR_LIMITS = Object.freeze({
-  maxPages: 20,
+  maxInspectedPages: 40,
+  maxOcrPages: 20,
+  minReliableTextChars: 24,
   targetDpi: 200,
   maxLongEdgePx: 2600,
   maxPagePixels: 8_000_000,
@@ -16,6 +18,7 @@ const OCR_DIAGNOSTICS = new Set([
   'document_pdf_page_too_large',
   'document_pdf_ocr_timeout',
   'document_pdf_ocr_failed',
+  'document_pdf_ocr_busy',
 ]);
 
 export type ScannedPdfOcrProgress = {
@@ -27,9 +30,14 @@ export type ScannedPdfOcrProgress = {
 
 export type ScannedPdfOcrResult = {
   text: string;
-  encoding: 'PDF OCR';
+  encoding: 'PDF OCR' | 'PDF Hybrid';
   truncated: boolean;
   pageCount: number;
+  inspectedPageCount: number;
+  textPageCount: number;
+  ocrPageCount: number;
+  emptyPageCount: number;
+  ocrPages: number[];
 };
 
 type PageOcrPayload = {
@@ -39,8 +47,19 @@ type PageOcrPayload = {
   error?: { code?: unknown } | unknown;
 };
 
+type OcrCapabilitiesPayload = {
+  protocol?: unknown;
+  ready?: unknown;
+  enabled?: unknown;
+  diagnostic?: unknown;
+  error?: { code?: unknown } | unknown;
+};
+
+type PdfTextItem = { str?: unknown; hasEOL?: unknown };
+
 type PdfViewport = { width: number; height: number };
 type PdfPage = {
+  getTextContent: () => Promise<{ items?: unknown }>;
   getViewport: (options: { scale: number }) => PdfViewport;
   render: (options: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }) => {
     promise: Promise<unknown>;
@@ -72,6 +91,7 @@ type PdfJsGlobal = typeof globalThis & {
 };
 
 type ScannedPdfOcrDependencies = {
+  callCapabilities: (signal: AbortSignal) => Promise<OcrCapabilitiesPayload>;
   callPageOcr: (args: { image_data_url: string }, signal: AbortSignal) => Promise<PageOcrPayload>;
   assetBaseUrl: string;
   loadPdfJs?: () => Promise<PdfJs>;
@@ -99,7 +119,54 @@ export class ScannedPdfOcrError extends Error {
 export function shouldFallbackToScannedPdfOcr(sourceType: unknown, error: unknown) {
   const candidate = error as { code?: unknown; message?: unknown } | null;
   const parseCode = String(candidate?.code || candidate?.message || '').trim();
-  return sourceType === 'pdf' && parseCode === 'no_readable_text';
+  return sourceType === 'pdf' && ['no_readable_text', 'garbled_text'].includes(parseCode);
+}
+
+export function extractPdfPageText(textContent: { items?: unknown } | null | undefined) {
+  if (!Array.isArray(textContent?.items)) return '';
+  let text = '';
+  for (const candidate of textContent.items) {
+    const item = candidate as PdfTextItem | null;
+    const value = typeof item?.str === 'string' ? item.str : '';
+    if (
+      text
+      && !text.endsWith('\n')
+      && /[A-Za-z0-9]$/.test(text)
+      && /^[A-Za-z0-9]/.test(value)
+    ) {
+      text += ' ';
+    }
+    text += value;
+    if (item?.hasEOL === true && !text.endsWith('\n')) text += '\n';
+  }
+  return text.trim();
+}
+
+export function classifyPdfPageText(text: unknown): 'reliable-text' | 'ocr-candidate' {
+  const normalized = typeof text === 'string' ? text : '';
+  const characters = Array.from(normalized);
+  const total = Math.max(1, characters.length);
+  let meaningful = 0;
+  let replacements = 0;
+  let controls = 0;
+  for (const character of characters) {
+    if (/^[\p{L}\p{N}]$/u.test(character)) meaningful += 1;
+    if (character === '\ufffd') replacements += 1;
+    if (character !== '\n' && character !== '\r' && character !== '\t' && /^\p{Cc}$/u.test(character)) {
+      controls += 1;
+    }
+  }
+  return meaningful >= SCANNED_PDF_OCR_LIMITS.minReliableTextChars
+    && replacements / total <= 0.005
+    && controls / total <= 0.01
+    ? 'reliable-text'
+    : 'ocr-candidate';
+}
+
+export function selectPdfPageText(textLayer: unknown, ocrText: unknown) {
+  const normalizedOcr = typeof ocrText === 'string' ? ocrText.trim() : '';
+  if (normalizedOcr) return normalizedOcr;
+  return typeof textLayer === 'string' ? textLayer.trim() : '';
 }
 
 function abortError() {
@@ -182,6 +249,21 @@ function normalizePageResult(payload: PageOcrPayload) {
   return payload.text.trim();
 }
 
+function assertDocumentOcrCapabilities(payload: OcrCapabilitiesPayload) {
+  const nestedError = payload?.error && typeof payload.error === 'object'
+    ? (payload.error as { code?: unknown }).code
+    : '';
+  const diagnostic = String(payload?.diagnostic || nestedError || '').trim();
+  if (payload?.enabled === false || diagnostic === 'document_pdf_ocr_disabled') {
+    throw new ScannedPdfOcrError('document_pdf_ocr_disabled');
+  }
+  if (payload?.protocol !== 1 || payload?.ready !== true) {
+    throw new ScannedPdfOcrError(
+      OCR_DIAGNOSTICS.has(diagnostic) ? diagnostic : 'document_pdf_ocr_unavailable',
+    );
+  }
+}
+
 function appendPageText(current: string, pageNumber: number, pageText: string) {
   if (!pageText) return { text: current, truncated: false };
   const chunk = `${current ? '\n\n' : ''}# Page ${pageNumber}\n\n${pageText}`;
@@ -194,6 +276,9 @@ function appendPageText(current: string, pageNumber: number, pageText: string) {
 }
 
 export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDependencies) {
+  if (typeof dependencies?.callCapabilities !== 'function') {
+    throw new TypeError('callCapabilities is required');
+  }
   if (typeof dependencies?.callPageOcr !== 'function') {
     throw new TypeError('callPageOcr is required');
   }
@@ -323,14 +408,57 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
       if (!Number.isInteger(pageCount) || pageCount <= 0) {
         throw new ScannedPdfOcrError('document_pdf_render_failed');
       }
-      if (pageCount > SCANNED_PDF_OCR_LIMITS.maxPages) {
+      if (pageCount > SCANNED_PDF_OCR_LIMITS.maxInspectedPages) {
         throw new ScannedPdfOcrError('document_pdf_ocr_too_many_pages');
       }
       throwIfAborted(signal);
-      onProgress?.({ page: 0, completed: 0, total: pageCount, progress: 0 });
+      const pageTextLayers: string[] = [];
+      const ocrCandidates: number[] = [];
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+        throwIfAborted(signal);
+        throwIfExpired(deadline);
+        let page: PdfPage | null = null;
+        try {
+          page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline);
+          const pageText = extractPdfPageText(await withinDeadline(page.getTextContent(), deadline));
+          pageTextLayers.push(pageText);
+          if (classifyPdfPageText(pageText) === 'ocr-candidate') ocrCandidates.push(pageNumber);
+        } catch (error) {
+          if (error instanceof ScannedPdfOcrError) throw error;
+          throw new ScannedPdfOcrError('document_pdf_render_failed');
+        } finally {
+          page?.cleanup?.();
+        }
+      }
+      if (ocrCandidates.length > SCANNED_PDF_OCR_LIMITS.maxOcrPages) {
+        throw new ScannedPdfOcrError('document_pdf_ocr_too_many_pages');
+      }
 
+      if (ocrCandidates.length > 0) {
+        const capabilitySignal = signal || new AbortController().signal;
+        let capabilities: OcrCapabilitiesPayload;
+        try {
+          capabilities = await withinDeadline(dependencies.callCapabilities(capabilitySignal), deadline);
+        } catch (error) {
+          if (signal?.aborted || (error as { name?: unknown } | null)?.name === 'AbortError') {
+            throw abortError();
+          }
+          const candidate = error as { code?: unknown; message?: unknown } | null;
+          const diagnostic = String(candidate?.code || candidate?.message || '').trim();
+          if (OCR_DIAGNOSTICS.has(diagnostic)) throw new ScannedPdfOcrError(diagnostic);
+          throw new ScannedPdfOcrError('document_pdf_ocr_unavailable');
+        }
+        assertDocumentOcrCapabilities(capabilities);
+      }
+
+      onProgress?.({ page: 0, completed: 0, total: pageCount, progress: 0 });
       let text = '';
       let truncated = false;
+      let textPageCount = 0;
+      let ocrPageCount = 0;
+      let emptyPageCount = 0;
+      const ocrPages: number[] = [];
+      const candidateSet = new Set(ocrCandidates);
       for (let pageNumber = 1; pageNumber <= pageCount && !truncated; pageNumber += 1) {
         throwIfAborted(signal);
         throwIfExpired(deadline);
@@ -340,77 +468,95 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
           total: pageCount,
           progress: (pageNumber - 1) / pageCount,
         });
-        let page: PdfPage | null = null;
-        let canvas: HTMLCanvasElement | null = null;
-        let renderTask: ReturnType<PdfPage['render']> | null = null;
-        let imageBase64 = '';
-        try {
-          page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline);
-          const viewport = page.getViewport({ scale: pageScale(page) });
-          const width = Math.max(1, Math.round(viewport.width));
-          const height = Math.max(1, Math.round(viewport.height));
-          if (
-            Math.max(width, height) > SCANNED_PDF_OCR_LIMITS.maxLongEdgePx
-            || width * height > SCANNED_PDF_OCR_LIMITS.maxPagePixels
-          ) {
-            throw new ScannedPdfOcrError('document_pdf_page_too_large');
+        const textLayer = pageTextLayers[pageNumber - 1] || '';
+        let selectedText = textLayer;
+        let selectedFromTextLayer = true;
+        if (candidateSet.has(pageNumber)) {
+          let page: PdfPage | null = null;
+          let canvas: HTMLCanvasElement | null = null;
+          let renderTask: ReturnType<PdfPage['render']> | null = null;
+          let imageBase64 = '';
+          try {
+            page = await withinDeadline(pdfDocument.getPage(pageNumber), deadline);
+            const viewport = page.getViewport({ scale: pageScale(page) });
+            const width = Math.max(1, Math.round(viewport.width));
+            const height = Math.max(1, Math.round(viewport.height));
+            if (
+              Math.max(width, height) > SCANNED_PDF_OCR_LIMITS.maxLongEdgePx
+              || width * height > SCANNED_PDF_OCR_LIMITS.maxPagePixels
+            ) {
+              throw new ScannedPdfOcrError('document_pdf_page_too_large');
+            }
+            canvas = createCanvas();
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d', { alpha: false });
+            if (!context) throw new ScannedPdfOcrError('document_pdf_render_failed');
+            context.save();
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, width, height);
+            context.restore();
+            renderTask = page.render({ canvasContext: context, viewport });
+            await withinDeadline(renderTask.promise, deadline, () => renderTask?.cancel?.());
+            const jpeg = await encodeJpeg(canvas, deadline);
+            imageBase64 = await blobToBase64(jpeg, deadline);
+          } catch (error) {
+            if (error instanceof ScannedPdfOcrError) throw error;
+            throw new ScannedPdfOcrError('document_pdf_render_failed');
+          } finally {
+            page?.cleanup?.();
+            if (canvas) {
+              canvas.width = 0;
+              canvas.height = 0;
+              canvas.remove();
+            }
           }
-          canvas = createCanvas();
-          canvas.width = width;
-          canvas.height = height;
-          const context = canvas.getContext('2d', { alpha: false });
-          if (!context) throw new ScannedPdfOcrError('document_pdf_render_failed');
-          context.save();
-          context.fillStyle = '#fff';
-          context.fillRect(0, 0, width, height);
-          context.restore();
-          renderTask = page.render({ canvasContext: context, viewport });
-          await withinDeadline(renderTask.promise, deadline, () => renderTask?.cancel?.());
-          const jpeg = await encodeJpeg(canvas, deadline);
-          imageBase64 = await blobToBase64(jpeg, deadline);
-        } catch (error) {
-          if (error instanceof ScannedPdfOcrError) throw error;
-          throw new ScannedPdfOcrError('document_pdf_render_failed');
-        } finally {
-          page?.cleanup?.();
-          if (canvas) {
-            canvas.width = 0;
-            canvas.height = 0;
-            canvas.remove();
-          }
-        }
 
-        const pageDeadline = Math.min(deadline, now() + SCANNED_PDF_OCR_LIMITS.pageTimeoutMs);
-        const pageController = new AbortController();
-        let pageTimedOut = false;
-        let result: PageOcrPayload;
-        try {
-          result = await withinDeadline(
-            dependencies.callPageOcr(
-              { image_data_url: `data:image/jpeg;base64,${imageBase64}` },
-              pageController.signal,
-            ),
-            pageDeadline,
-            () => {
-              pageTimedOut = true;
-              pageController.abort();
-            },
-          );
-        } catch (error) {
-          if (signal?.aborted) throw abortError();
-          const candidate = error as { code?: unknown; message?: unknown } | null;
-          const diagnostic = String(candidate?.code || candidate?.message || '').trim();
-          if (pageTimedOut || remaining(deadline) <= 0 || /timed?\s*out|timeout/i.test(diagnostic)) {
-            throw new ScannedPdfOcrError('document_pdf_ocr_timeout');
+          const pageDeadline = Math.min(deadline, now() + SCANNED_PDF_OCR_LIMITS.pageTimeoutMs);
+          const pageController = new AbortController();
+          const abortPage = () => pageController.abort();
+          signal?.addEventListener('abort', abortPage, { once: true });
+          let pageTimedOut = false;
+          let result: PageOcrPayload;
+          try {
+            result = await withinDeadline(
+              dependencies.callPageOcr(
+                { image_data_url: `data:image/jpeg;base64,${imageBase64}` },
+                pageController.signal,
+              ),
+              pageDeadline,
+              () => {
+                pageTimedOut = true;
+                pageController.abort();
+              },
+            );
+          } catch (error) {
+            if (signal?.aborted) throw abortError();
+            const candidate = error as { code?: unknown; message?: unknown } | null;
+            const diagnostic = String(candidate?.code || candidate?.message || '').trim();
+            if (pageTimedOut || remaining(deadline) <= 0 || /timed?\s*out|timeout/i.test(diagnostic)) {
+              throw new ScannedPdfOcrError('document_pdf_ocr_timeout');
+            }
+            if (OCR_DIAGNOSTICS.has(diagnostic)) throw new ScannedPdfOcrError(diagnostic);
+            throw new ScannedPdfOcrError('document_pdf_ocr_failed');
+          } finally {
+            signal?.removeEventListener('abort', abortPage);
+            imageBase64 = '';
           }
-          if (OCR_DIAGNOSTICS.has(diagnostic)) throw new ScannedPdfOcrError(diagnostic);
-          throw new ScannedPdfOcrError('document_pdf_ocr_failed');
-        } finally {
-          imageBase64 = '';
+          const ocrText = normalizePageResult(result);
+          selectedText = selectPdfPageText(textLayer, ocrText);
+          selectedFromTextLayer = !ocrText;
+          ocrPageCount += 1;
+          ocrPages.push(pageNumber);
         }
         throwIfAborted(signal);
         throwIfExpired(deadline);
-        const appended = appendPageText(text, pageNumber, normalizePageResult(result));
+        if (selectedText) {
+          if (selectedFromTextLayer) textPageCount += 1;
+        } else {
+          emptyPageCount += 1;
+        }
+        const appended = appendPageText(text, pageNumber, selectedText);
         text = appended.text;
         truncated = appended.truncated;
         onProgress?.({
@@ -422,7 +568,17 @@ export function createScannedPdfOcrController(dependencies: ScannedPdfOcrDepende
       }
       throwIfExpired(deadline);
       if (!text.trim()) throw new ScannedPdfOcrError('no_readable_text');
-      return { text, encoding: 'PDF OCR', truncated, pageCount };
+      return {
+        text,
+        encoding: textPageCount === 0 ? 'PDF OCR' : 'PDF Hybrid',
+        truncated,
+        pageCount,
+        inspectedPageCount: pageCount,
+        textPageCount,
+        ocrPageCount,
+        emptyPageCount,
+        ocrPages,
+      };
     } catch (error) {
       if (signal?.aborted || (error as { name?: unknown } | null)?.name === 'AbortError') {
         throw abortError();
