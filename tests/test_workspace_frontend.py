@@ -112,6 +112,85 @@ def test_workspace_assets_routes_and_locales_are_complete() -> None:
     assert "activateWorkspace(" not in escape_source
 
 
+def test_neko_coach_scene_ignores_call_diagnostics_but_diagnosis_retains_them() -> None:
+    main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+
+    def function_source(name: str, next_name: str) -> str:
+        start = main.index(f"function {name}")
+        end = main.index(f"function {next_name}", start)
+        return main[start:end]
+
+    dependency_ready = function_source("dependencyReady", "countFromSummary")
+    count_from_summary = function_source("countFromSummary", "formatMinuteCount")
+    build_diagnosis = function_source("buildDiagnosis", "renderDiagnosis")
+    due_review_count = function_source("dueReviewCount", "pomodoroStatus")
+    pomodoro_status = function_source("pomodoroStatus", "checkinStatusLabel")
+    derive_scene = function_source("deriveNekoCoachScene", "nekoCoachActionLabel")
+
+    harness_source = "\n".join(
+        (
+            "const DEPENDENCY_KEYS = [];",
+            "let currentMode = 'companion';",
+            "function t(_key, fallback) { return fallback; }",
+            "function tf(_key, fallback, values = {}) {",
+            r"  return fallback.replace(/\{([^}]+)\}/g, (_match, name) => values[name] ?? '');",
+            "}",
+            dependency_ready,
+            count_from_summary,
+            build_diagnosis,
+            due_review_count,
+            pomodoro_status,
+            derive_scene,
+            "return { buildDiagnosis, deriveNekoCoachScene };",
+        )
+    )
+    script = "const createHarness = new Function(" + json.dumps(harness_source) + r""");
+const { buildDiagnosis, deriveNekoCoachScene } = createHarness();
+
+const cases = [
+  {
+    name: 'ready teaching with stale timeout diagnostic',
+    data: { status: 'ready', last_error: 'timeout', active_mode: 'teaching' },
+    expected: 'teaching',
+  },
+  {
+    name: 'ready due review with stale model diagnostic',
+    data: {
+      status: 'ready',
+      last_error: 'model_unavailable',
+      active_mode: 'teaching',
+      memory_deck: { due_count: 2 },
+    },
+    expected: 'review',
+  },
+  {
+    name: 'plugin startup failure',
+    data: { status: 'error', last_error: 'startup_failed', active_mode: 'teaching' },
+    expected: 'error',
+  },
+  {
+    name: 'ready interactive scene without diagnostics',
+    data: { status: 'ready', active_mode: 'interactive' },
+    expected: 'idle',
+  },
+];
+
+for (const testCase of cases) {
+  const actual = deriveNekoCoachScene(testCase.data);
+  if (actual !== testCase.expected) {
+    throw new Error(`${testCase.name}: expected ${testCase.expected}, received ${actual}`);
+  }
+}
+
+const diagnosis = buildDiagnosis({ status: 'ready', last_error: 'timeout' });
+if (diagnosis.severity !== 'error' || diagnosis.body !== 'timeout') {
+  throw new Error(`last_error was not retained by buildDiagnosis: ${JSON.stringify(diagnosis)}`);
+}
+"""
+
+    _run_frontend_script(script)
+
+
 def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
     main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")

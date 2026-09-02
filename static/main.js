@@ -976,7 +976,7 @@ function checkinStatusLabel(habit = {}) {
 }
 
 function deriveNekoCoachScene(data = {}) {
-  if (data.last_error || data.status === 'error') {
+  if (data.status === 'error') {
     return 'error';
   }
   const pomodoroState = pomodoroStatus(data);
