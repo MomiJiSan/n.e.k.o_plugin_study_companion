@@ -1,3 +1,4 @@
 static/pdfjs/** -text
+tests/fixtures/pdf/*.pdf binary
 static/pdfjs/wasm/LICENSE_OPENJPEG whitespace=-blank-at-eol
 static/pdfjs/wasm/LICENSE_QCMS whitespace=-blank-at-eol
