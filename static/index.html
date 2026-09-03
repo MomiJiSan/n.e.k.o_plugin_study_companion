@@ -669,7 +669,7 @@
 
           <div id="panel-runtime" class="settings-tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-runtime" data-settings-tab-panel="runtime" hidden>
             <div class="settings-grid settings-runtime-grid">
-              <details class="settings-card settings-card--collapsible" open>
+              <details class="settings-card settings-card--collapsible">
                 <summary class="settings-card__summary">
                   <h3 data-i18n="ui.settings.ocr.title">OCR</h3>
                   <span class="settings-card__summary-state" aria-hidden="true"></span>
@@ -701,7 +701,7 @@
                 </div>
               </details>
 
-              <details class="settings-card settings-card--collapsible" open>
+              <details class="settings-card settings-card--collapsible">
                 <summary class="settings-card__summary">
                   <h3 data-i18n="ui.settings.llm.title">LLM</h3>
                   <span class="settings-card__summary-state" aria-hidden="true"></span>
@@ -764,7 +764,23 @@
                 </div>
               </details>
 
-              <details class="settings-card settings-card--collapsible" open>
+              <details class="settings-card settings-card--collapsible">
+                <summary class="settings-card__summary">
+                  <h3 data-i18n="ui.settings.cognitive.title">Cognitive engine</h3>
+                  <span class="settings-card__summary-state" aria-hidden="true"></span>
+                </summary>
+                <div class="settings-card__content">
+                  <p id="settingsCognitiveRuntimeSummary" data-i18n="ui.settings.cognitive.runtime.summary">Evaluates whether an answer is correct, updates mastery evidence, and can help select the next question.</p>
+                  <label class="setting-toggle">
+                    <input id="settingsCognitiveEnabled" type="checkbox" aria-describedby="settingsCognitiveRuntimeHelp settingsCognitiveRuntimeStatus" />
+                    <span data-i18n="ui.settings.cognitive.enabled.label">Enable cognitive engine</span>
+                  </label>
+                  <p id="settingsCognitiveRuntimeHelp" class="model-runtime__help" data-i18n="ui.settings.cognitive.enabled.help">When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the mode in Data settings.</p>
+                  <p id="settingsCognitiveRuntimeStatus" class="settings-status" aria-live="polite"></p>
+                </div>
+              </details>
+
+              <details class="settings-card settings-card--collapsible">
                 <summary class="settings-card__summary">
                   <h3 data-i18n="ui.settings.dependencies.title">Dependencies</h3>
                   <span class="settings-card__summary-state" aria-hidden="true"></span>
@@ -839,6 +855,6 @@
     <script src="./model-runtime.js?v=study-api-runtime-20260902"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-feedback-i18n-20260903"></script>
+    <script src="./main.js?v=practice-i18n-cancel-20260903"></script>
   </body>
 </html>

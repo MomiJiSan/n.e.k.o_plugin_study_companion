@@ -179,6 +179,8 @@ const settingsRuntimeSaveBtn = $id('settingsRuntimeSaveBtn');
 const settingsRuntimeConfigStatus = $id('settingsRuntimeConfigStatus');
 const settingsDocExportEnabled = $id('settingsDocExportEnabled');
 const settingsCognitiveMode = $id('settingsCognitiveMode');
+const settingsCognitiveEnabled = $id('settingsCognitiveEnabled');
+const settingsCognitiveRuntimeStatus = $id('settingsCognitiveRuntimeStatus');
 const settingsDefaultMode = $id('settingsDefaultMode');
 const settingsLearningProfileSummary = $id('settingsLearningProfileSummary');
 const settingsLearningStage = $id('settingsLearningStage');
@@ -404,6 +406,31 @@ function localizedEvaluationNextAction(value, status) {
   };
   const message = messages[normalizedStatus];
   return message ? t(message[0], message[1]) : text;
+}
+
+function localizedPracticePoint(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const normalized = text.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  const messages = {
+    'conversion formula': ['ui.practice.point.conversion_formula', 'Conversion formula'],
+    simplification: ['ui.practice.point.simplification', 'Simplification'],
+  };
+  const message = messages[normalized];
+  return message ? t(message[0], message[1]) : text;
+}
+
+function localizedQuestionHint(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const normalized = text.toLowerCase().replace(/\s+/g, ' ');
+  if (/^remember that 180 degrees is equal to (?:π|pi) radians[.!。]?$/.test(normalized)) {
+    return t(
+      'ui.practice.hint.degrees_to_radians',
+      'Remember that 180 degrees is equal to π radians.',
+    );
+  }
+  return text;
 }
 
 function hasUsableSelectionContext(nextStep) {
@@ -691,7 +718,7 @@ function setGeneratedQuestion(data = {}) {
       ? t('ui.practice.new_attempt', 'New attempt')
       : '-';
   }
-  const hint = String(currentQuestion?.hint || '').trim();
+  const hint = localizedQuestionHint(currentQuestion?.hint);
   if (hintToggleBtn) {
     hintToggleBtn.hidden = !hint;
     hintToggleBtn.setAttribute('aria-expanded', 'false');
@@ -753,10 +780,10 @@ function renderFeedback(data = {}) {
   );
   const lines = [data.feedback || data.reply || '',
     Array.isArray(data.covered_points) && data.covered_points.length
-      ? `${t('ui.practice.covered_points', 'Covered')}: ${data.covered_points.join(', ')}`
+      ? `${t('ui.practice.covered_points', 'Covered')}: ${data.covered_points.map(localizedPracticePoint).join(', ')}`
       : '',
     Array.isArray(data.missing_points) && data.missing_points.length
-      ? `${t('ui.practice.missing_points', 'Missing')}: ${data.missing_points.join(', ')}`
+      ? `${t('ui.practice.missing_points', 'Missing')}: ${data.missing_points.map(localizedPracticePoint).join(', ')}`
       : '',
     data.reference_answer ? `${t('ui.practice.reference_answer', 'Reference')}: ${data.reference_answer}` : '',
     localizedNextAction ? `${t('ui.practice.next_action', 'Next')}: ${localizedNextAction}` : '',
@@ -821,6 +848,12 @@ function renderFeedback(data = {}) {
 
 function formatPluginError(error) {
   const code = String(error?.code || error?.message || '').trim();
+  if (
+    code === 'PLUGIN_CALL_CANCELED'
+    || /(?:execution|run|request)\s+cancel(?:led|ed)/i.test(code)
+  ) {
+    return t('ui.error.plugin_call_canceled', 'This operation was canceled. Please try again.');
+  }
   if (code === 'QUESTION_VALIDATION_FAILED') {
     return t('ui.error.question_validation_failed', 'The generated question did not pass validation. Please generate another one.');
   }
@@ -2527,12 +2560,38 @@ function syncCommunicationControls(saving = false) {
   if (settingsCommunicationRequiresEnabled) settingsCommunicationRequiresEnabled.hidden = enabled;
 }
 
+function syncCognitiveControls(source = 'mode', saving = false) {
+  let mode = ['off', 'shadow', 'active'].includes(settingsCognitiveMode?.value)
+    ? settingsCognitiveMode.value
+    : 'off';
+  if (source === 'toggle') {
+    mode = settingsCognitiveEnabled?.checked === true
+      ? (mode === 'off' ? 'shadow' : mode)
+      : 'off';
+    if (settingsCognitiveMode) settingsCognitiveMode.value = mode;
+  } else if (settingsCognitiveEnabled) {
+    settingsCognitiveEnabled.checked = mode !== 'off';
+  }
+  if (settingsCognitiveMode) settingsCognitiveMode.disabled = saving;
+  if (settingsCognitiveEnabled) settingsCognitiveEnabled.disabled = saving;
+  if (settingsCognitiveRuntimeStatus) {
+    const key = ['shadow', 'active'].includes(mode) ? mode : 'off';
+    const fallback = {
+      off: 'Off: answer evidence is not analyzed.',
+      shadow: 'Shadow: analyzes answers without changing the question flow.',
+      active: 'Active: analyzes answers and can influence the next question.',
+    }[key];
+    settingsCognitiveRuntimeStatus.textContent = t(`ui.settings.cognitive.status.${key}`, fallback);
+    settingsCognitiveRuntimeStatus.dataset.cognitiveMode = key;
+  }
+}
+
 function syncSettingsSavingControls(saving = false) {
   if (settingsSaveBtn) settingsSaveBtn.disabled = saving;
   if (settingsDataSaveBtn) settingsDataSaveBtn.disabled = saving;
   if (settingsRuntimeSaveBtn) settingsRuntimeSaveBtn.disabled = saving;
   if (settingsDocExportEnabled) settingsDocExportEnabled.disabled = saving;
-  if (settingsCognitiveMode) settingsCognitiveMode.disabled = saving;
+  syncCognitiveControls('mode', saving);
   if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = true;
   syncCommunicationControls(saving);
 }
@@ -2623,6 +2682,7 @@ function applySettingsConfig(config) {
         ? 'active'
         : 'shadow';
   }
+  syncCognitiveControls();
   syncCommunicationControls();
   renderCommunicationRuntime();
   renderLocalModelsRuntime();
@@ -2803,7 +2863,11 @@ async function callPlugin(entryId, args = {}, signal) {
       return await exportRunResult(runId, deadline, signal);
     }
     if (['failed', 'canceled', 'timeout'].includes(record.status)) {
-      throw new Error(record.error?.message || record.message || record.status);
+      const error = new Error(record.error?.message || record.message || record.status);
+      error.code = record.status === 'canceled'
+        ? 'PLUGIN_CALL_CANCELED'
+        : String(record.error?.code || record.code || '');
+      throw error;
     }
   }
   throw new Error(t('ui.error.plugin_call_timeout', 'Plugin call timed out'));
@@ -3044,7 +3108,7 @@ async function generateQuestion(preferredNextStep = null) {
   setQuestionContext({ ...context, ...data, no_data: false, selection_context_id: '' });
   if (answerInput) answerInput.value = '';
   setImagePreview('answer', '');
-  setReply(data.hint || data.question || data.summary || data.reply || '');
+  setReply(localizedQuestionHint(data.hint) || data.question || data.summary || data.reply || '');
   await refreshStatus({ updateReply: false });
 }
 
@@ -3470,6 +3534,16 @@ async function bootstrap() {
   if (settingsRuntimeSaveBtn) {
     settingsRuntimeSaveBtn.addEventListener('click', () => {
       saveSettingsConfig(settingsRuntimeConfigStatus);
+    });
+  }
+  if (settingsCognitiveMode) {
+    settingsCognitiveMode.addEventListener('change', () => {
+      syncCognitiveControls('mode');
+    });
+  }
+  if (settingsCognitiveEnabled) {
+    settingsCognitiveEnabled.addEventListener('change', () => {
+      syncCognitiveControls('toggle');
     });
   }
   if (settingsCommunicationEnabled) {

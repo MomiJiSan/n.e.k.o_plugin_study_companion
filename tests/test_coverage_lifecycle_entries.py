@@ -318,6 +318,40 @@ async def test_question_entry_real_lifecycle_releases_after_success_failure_and_
     await _assert_next_real_reservation_succeeds(entries.lifecycle, cancel_owner)
 
 
+@pytest.mark.asyncio
+async def test_image_only_question_accepts_config_without_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = _load_entries(monkeypatch, "_coverage_image_only_locale", "question")
+    captured: dict[str, Any] = {}
+
+    class _SuccessAgent:
+        async def question_generate(self, text: str, **_kwargs: Any):
+            captured["text"] = text
+            return entries.models.TutorReply(
+                operation="question_generate",
+                input_text=text,
+                reply="What is shown?",
+                payload={"question": "What is shown?", "answer": "diagram", "hint": "look"},
+            )
+
+    owner = _question_owner(entries, _SuccessAgent())
+    owner._cfg = SimpleNamespace()
+    monkeypatch.setattr(
+        entries.question,
+        "_validate_optional_vision_image_payload",
+        lambda _owner, payload, **_kwargs: payload,
+    )
+
+    result = await owner.study_generate_question(
+        vision_image_base64="image-payload",
+        locale="en-US",
+    )
+
+    assert isinstance(result, _Ok)
+    assert captured["text"] == entries.question.IMAGE_ONLY_QUESTION_PROMPT_EN
+
+
 def _answer_owner(entries: SimpleNamespace, agent: Any) -> Any:
     owner = entries.answer._TutorAnswerEntriesMixin()
     owner._agent = agent

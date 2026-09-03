@@ -168,17 +168,23 @@ def test_cognitive_setting_is_in_the_right_data_column_and_localized() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     data_panel = index[index.index('id="panel-data"') : index.index('id="panel-runtime"')]
+    runtime_panel = index[index.index('id="panel-runtime"') : index.index('id="memoryDeckDialog"')]
 
     assert data_panel.index('id="settingsDocExportEnabled"') < data_panel.index('id="settingsCognitiveMode"')
     assert data_panel.count('class="settings-card"') == 2
     assert '<option value="off"' in data_panel
     assert '<option value="shadow"' in data_panel
     assert '<option value="active"' in data_panel
+    assert 'id="settingsCognitiveEnabled"' in runtime_panel
+    assert 'id="settingsCognitiveRuntimeHelp"' in runtime_panel
+    assert 'id="settingsCognitiveRuntimeStatus"' in runtime_panel
     for token in (
         "cognitive.projection_enabled",
         "cognitive.read_mode",
         "cognitive.intent_policy",
         "cognitive.ui_enabled",
+        "syncCognitiveControls('mode')",
+        "syncCognitiveControls('toggle')",
     ):
         assert token in main
 
@@ -189,6 +195,12 @@ def test_cognitive_setting_is_in_the_right_data_column_and_localized() -> None:
         "ui.settings.cognitive.mode.shadow",
         "ui.settings.cognitive.mode.active",
         "ui.settings.cognitive.help",
+        "ui.settings.cognitive.runtime.summary",
+        "ui.settings.cognitive.enabled.label",
+        "ui.settings.cognitive.enabled.help",
+        "ui.settings.cognitive.status.off",
+        "ui.settings.cognitive.status.shadow",
+        "ui.settings.cognitive.status.active",
     }
     for locale in LOCALES:
         messages = json.loads((ROOT / "i18n" / f"{locale}.json").read_text(encoding="utf-8"))

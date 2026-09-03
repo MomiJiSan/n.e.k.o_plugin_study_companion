@@ -26,6 +26,7 @@ from .entry_common import (
 from .evaluation_contract import canonicalize_evaluation, validate_evaluation
 from .models import public_current_question_payload
 from .practice_outcome import build_practice_outcome
+from .request_locale import normalize_request_locale
 from .target_binding import validated_target_topic_id
 from .tutor_lifecycle import (
     release_question_lifecycle,
@@ -478,6 +479,7 @@ class _TutorAnswerEntriesMixin:
                 "response_time_ms": {"type": "integer"},
                 "used_hint": {"type": "boolean"},
                 "vision_image_base64": {"type": "string", "default": ""},
+                "locale": {"type": "string", "maxLength": 16, "default": ""},
             },
         },
         timeout=70.0,
@@ -535,6 +537,10 @@ class _TutorAnswerEntriesMixin:
             return Err(SdkError("study tutor agent is not initialized"))
         target_lanlan = self._resolve_study_target_lanlan(kwargs)
         response_time_ms, used_hint = _attempt_signal_values(kwargs)
+        request_language = normalize_request_locale(
+            kwargs.get("locale"),
+            fallback=getattr(getattr(self, "_cfg", None), "language", "zh-CN"),
+        )
         async with self._lock:
             current_question = dict(self._state.current_question)
             active_mode = self._state.active_mode
@@ -756,6 +762,7 @@ class _TutorAnswerEntriesMixin:
                     "response_time_ms": response_time_ms,
                     "used_hint": used_hint,
                     "mode": active_mode,
+                    "language": request_language,
                     **(
                         {
                             "vision_enabled": True,

@@ -11,6 +11,42 @@ from test_coverage_lifecycle_runtime import _load_runtime
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_static_practice_i18n_fallbacks_and_cancellation_are_executable() -> None:
+    main_path = json.dumps(str(ROOT / "static" / "main.js"))
+    script = f"""
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const messages = {{
+  'ui.practice.point.conversion_formula': '换算公式',
+  'ui.practice.point.simplification': '化简',
+  'ui.practice.hint.degrees_to_radians': '记住：180° 等于 π 弧度。',
+  'ui.error.plugin_call_canceled': '本次操作已取消，请重新尝试。',
+}};
+globalThis.t = (key, fallback) => messages[key] || fallback;
+
+const source = fs.readFileSync({main_path}, 'utf8');
+const start = source.indexOf('function pluginErrorCode');
+const end = source.indexOf('function formatTutorDiagnostic', start);
+if (start < 0 || end < 0) throw new Error('practice formatter source not found');
+vm.runInThisContext(source.slice(start, end));
+
+if (localizedPracticePoint('conversion formula') !== '换算公式') throw new Error('conversion formula was not localized');
+if (localizedPracticePoint('simplification') !== '化简') throw new Error('simplification was not localized');
+if (localizedQuestionHint('Remember that 180 degrees is equal to π radians.') !== '记住：180° 等于 π 弧度。') throw new Error('hint was not localized');
+const canceled = new Error("Plugin 'study_companion' entry 'entry study_evaluate_answer' execution failed: Execution cancelled");
+if (formatPluginError(canceled) !== '本次操作已取消，请重新尝试。') throw new Error('cancellation was not localized');
+"""
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        encoding="utf-8",
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def _render_hosted_practice_scope_path(
     translations: dict[str, str],
 ) -> str:
@@ -440,8 +476,10 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
     for source in (hosted_panel, static):
         assert "QUESTION_VALIDATION_FAILED" in source
         assert "EVALUATION_INCONSISTENT" in source
+        assert "PLUGIN_CALL_CANCELED" in source
         assert "ui.error.question_validation_failed" in source
         assert "ui.error.evaluation_inconsistent" in source
+        assert "ui.error.plugin_call_canceled" in source
     assert "structuredPluginError" in hosted_bridge
     assert "structured.code = code" in hosted_bridge
     assert "error.code = String(pluginError.code" in static
@@ -452,7 +490,7 @@ def test_static_assets_cache_bust_mastery_status_changes() -> None:
     assert "./knowledge-map.js?v=study-related-topics-20260903" in index
     assert "./style.css?v=study-practice-answer-flow-20260903" in index
     assert "./local-models-controller.js" not in index
-    assert "./main.js?v=study-feedback-i18n-20260903" in index
+    assert "./main.js?v=practice-i18n-cancel-20260903" in index
 
 
 def test_generated_questions_use_math_rendering_in_static_and_hosted_ui() -> None:
@@ -553,13 +591,19 @@ def test_evaluation_feedback_localizes_model_next_actions_in_both_uis() -> None:
         "ui.practice.next_action.partial",
         "ui.practice.next_action.dont_know",
         "ui.practice.next_action.wrong",
+        "ui.practice.point.conversion_formula",
+        "ui.practice.point.simplification",
+        "ui.practice.hint.degrees_to_radians",
     }
 
     for source in (static, hosted):
         assert "localizedEvaluationNextAction" in source
+        assert "localizedPracticePoint" in source
+        assert "localizedQuestionHint" in source
         for key in required:
             assert key in source
     assert "must use context.language" in prompts
+    assert "question, hint, topic, key_points" in prompts
     for locale_path in sorted((ROOT / "i18n").glob("*.json")):
         locale = json.loads(locale_path.read_text(encoding="utf-8"))
         assert not required - locale.keys(), locale_path.name

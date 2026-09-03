@@ -63,6 +63,7 @@ from .question_type_mapping import (
     enforce_mapped_question_type,
     select_question_style,
 )
+from .request_locale import normalize_request_locale
 from .targeted_question_contract import (
     canonicalize_targeted_question,
     project_target_topic_evidence,
@@ -1138,6 +1139,7 @@ class _TutorQuestionEntriesMixin:
         source_question_id: str = "",
         vision_image_payload: str = "",
         targeted_context: dict[str, Any] | None = None,
+        language: str = "",
     ) -> dict[str, Any]:
         async with self._lock:
             previous_question = dict(getattr(self._state, "current_question", {}) or {})
@@ -1177,6 +1179,10 @@ class _TutorQuestionEntriesMixin:
             "source_text": source_text,
             "topic_hint": str(topic or "").strip(),
             "mode": active_mode,
+            "language": normalize_request_locale(
+                language,
+                fallback=getattr(getattr(self, "_cfg", None), "language", "zh-CN"),
+            ),
         }
         if source_question_id:
             extra_context["source_question_id"] = source_question_id
@@ -1582,6 +1588,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
             raise SdkError(
                 validation_failure or str(exc) or "generated question failed validation",
@@ -1600,6 +1607,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
             question_instance = replace(
                 question_instance,
@@ -1667,6 +1675,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
         public_payload = None
         if targeted_context:
@@ -1797,6 +1806,7 @@ class _TutorQuestionEntriesMixin:
         source_question_id: str = "",
         vision_image_payload: str = "",
         targeted_context: dict[str, Any] | None = None,
+        language: str = "",
         lifecycle_reserved: bool = False,
     ) -> dict[str, Any]:
         """Generate a question without allowing another request to replace it.
@@ -1815,6 +1825,7 @@ class _TutorQuestionEntriesMixin:
                 source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
                 targeted_context=targeted_context,
+                language=language,
             )
 
         active_operation = await reserve_question_lifecycle(self, "question_generation")
@@ -1836,6 +1847,7 @@ class _TutorQuestionEntriesMixin:
                 source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
                 targeted_context=targeted_context,
+                language=language,
             )
         finally:
             await release_question_lifecycle(self, "question_generation")
@@ -1903,6 +1915,7 @@ class _TutorQuestionEntriesMixin:
             "type": "object",
             "properties": {
                 "selection_context_id": {"type": "string", "default": ""},
+                "locale": {"type": "string", "maxLength": 16, "default": ""},
             },
         },
         # Two bounded generation calls (45s each) and two fail-closed semantic
@@ -1922,7 +1935,12 @@ class _TutorQuestionEntriesMixin:
         ],
     )
     @_with_question_generation_reservation
-    async def study_generate_targeted_question(self, selection_context_id: str = "", **_):
+    async def study_generate_targeted_question(
+        self,
+        selection_context_id: str = "",
+        locale: str = "",
+        **_,
+    ):
         if self._agent is None:
             return Err(SdkError("study tutor agent is not initialized"))
         try:
@@ -1955,6 +1973,7 @@ class _TutorQuestionEntriesMixin:
                 topic=str(targeted_context.get("selected_topic_id") or ""),
                 source="targeted_question",
                 targeted_context=targeted_context,
+                language=locale,
                 lifecycle_reserved=True,
             )
             return Ok(payload)
@@ -1977,6 +1996,7 @@ class _TutorQuestionEntriesMixin:
                 "text": {"type": "string", "default": ""},
                 "topic": {"type": "string", "default": ""},
                 "vision_image_base64": {"type": "string", "default": ""},
+                "locale": {"type": "string", "maxLength": 16, "default": ""},
             },
         },
         timeout=70.0,
@@ -1995,6 +2015,7 @@ class _TutorQuestionEntriesMixin:
         text: str = "",
         topic: str = "",
         vision_image_base64: str = "",
+        locale: str = "",
         **_,
     ):
         if self._agent is None:
@@ -2027,7 +2048,12 @@ class _TutorQuestionEntriesMixin:
         try:
             image_only_source = False
             if not source_text and vision_image_payload:
-                source_text = _image_only_question_prompt(self._cfg.language)
+                source_text = _image_only_question_prompt(
+                    normalize_request_locale(
+                        locale,
+                        fallback=getattr(getattr(self, "_cfg", None), "language", "zh-CN"),
+                    )
+                )
                 image_only_source = True
             source_question_id = ""
             if ocr_derived_text:
@@ -2043,6 +2069,7 @@ class _TutorQuestionEntriesMixin:
                 source=("ocr_snapshot" if used_ocr_fallback else ("vision_image" if image_only_source else "manual")),
                 source_question_id=source_question_id,
                 vision_image_payload=vision_image_payload,
+                language=locale,
                 lifecycle_reserved=True,
             )
             return Ok(payload)

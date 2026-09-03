@@ -1449,6 +1449,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   function formatPluginError(error: unknown) {
     const candidate = error as { code?: unknown; message?: unknown } | null;
     const code = String(candidate?.code || candidate?.message || '').trim();
+    if (
+      code === 'PLUGIN_CALL_CANCELED'
+      || /(?:execution|run|request)\s+cancel(?:led|ed)/i.test(code)
+    ) {
+      return t('ui.error.plugin_call_canceled', 'This operation was canceled. Please try again.');
+    }
     if (code === 'QUESTION_VALIDATION_FAILED') {
       return t(
         'ui.error.question_validation_failed',
@@ -1517,6 +1523,31 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     };
     const message = messages[String(status || '').trim().toLowerCase()];
     return message ? t(message[0], message[1]) : text;
+  }
+
+  function localizedPracticePoint(value: unknown) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const normalized = text.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+    const messages: Record<string, [string, string]> = {
+      'conversion formula': ['ui.practice.point.conversion_formula', 'Conversion formula'],
+      simplification: ['ui.practice.point.simplification', 'Simplification'],
+    };
+    const message = messages[normalized];
+    return message ? t(message[0], message[1]) : text;
+  }
+
+  function localizedQuestionHint(value: unknown) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const normalized = text.toLowerCase().replace(/\s+/g, ' ');
+    if (/^remember that 180 degrees is equal to (?:π|pi) radians[.!。]?$/.test(normalized)) {
+      return t(
+        'ui.practice.hint.degrees_to_radians',
+        'Remember that 180 degrees is equal to π radians.',
+      );
+    }
+    return text;
   }
 
   function selectionReasonLabel(reason: unknown) {
@@ -2880,7 +2911,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       setNextStep(null);
       setAnswer('');
       setAnswerImage('');
-      setReply(data.hint || data.question || data.summary || data.reply || '');
+      setReply(localizedQuestionHint(data.hint) || data.question || data.summary || data.reply || '');
       await refresh(controller.signal, { updateReply: false });
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -3750,10 +3781,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
             text={normalizeFeedbackDisplayText([
               practiceFeedback.feedback || practiceFeedback.reply || '',
               practiceFeedback.covered_points?.length
-                ? `${t('ui.practice.covered_points', 'Covered')}: ${practiceFeedback.covered_points.join(', ')}`
+                ? `${t('ui.practice.covered_points', 'Covered')}: ${practiceFeedback.covered_points.map(localizedPracticePoint).join(', ')}`
                 : '',
               practiceFeedback.missing_points?.length
-                ? `${t('ui.practice.missing_points', 'Missing')}: ${practiceFeedback.missing_points.join(', ')}`
+                ? `${t('ui.practice.missing_points', 'Missing')}: ${practiceFeedback.missing_points.map(localizedPracticePoint).join(', ')}`
                 : '',
               practiceFeedback.reference_answer
                 ? `${t('ui.practice.reference_answer', 'Reference')}: ${practiceFeedback.reference_answer}`
