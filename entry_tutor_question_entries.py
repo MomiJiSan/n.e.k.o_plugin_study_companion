@@ -1588,6 +1588,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
             raise SdkError(
                 validation_failure or str(exc) or "generated question failed validation",
@@ -1606,6 +1607,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
             question_instance = replace(
                 question_instance,
@@ -1673,6 +1675,7 @@ class _TutorQuestionEntriesMixin:
                     source_question_id=source_question_id,
                     vision_image_payload=vision_image_payload,
                     targeted_context=fallback_context,
+                    language=language,
                 )
         public_payload = None
         if targeted_context:
@@ -2046,7 +2049,10 @@ class _TutorQuestionEntriesMixin:
             image_only_source = False
             if not source_text and vision_image_payload:
                 source_text = _image_only_question_prompt(
-                    normalize_request_locale(locale, fallback=self._cfg.language)
+                    normalize_request_locale(
+                        locale,
+                        fallback=getattr(getattr(self, "_cfg", None), "language", "zh-CN"),
+                    )
                 )
                 image_only_source = True
             source_question_id = ""
