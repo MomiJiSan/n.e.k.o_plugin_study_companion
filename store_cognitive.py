@@ -828,6 +828,25 @@ def get_cognitive_projection_input(
     if row is None:
         return None
     question = self._json_loads(row["question_json"], {})
+    topic = self.get_topic(str(row["topic_id"])) or {}
+    topic_context = {
+        key: topic.get(key)
+        for key in (
+            "id",
+            "name",
+            "subject",
+            "chapter",
+            "stage",
+            "unit",
+            "difficulty",
+            "prerequisites",
+            "related",
+            "typical_misconceptions",
+            "skills",
+            "question_types",
+        )
+        if key in topic
+    }
     return {
         "attempt_id": str(row["attempt_id"]),
         "question_id": str(row["question_id"]),
@@ -845,6 +864,7 @@ def get_cognitive_projection_input(
         "difficulty": None if row["difficulty"] is None else int(row["difficulty"]),
         "learner_answer": str(row["user_answer"] or ""),
         "evaluation": self._json_loads(row["evaluation_json"], {}),
+        "topic_context": topic_context,
         "evaluation_metadata": {
             "evaluator_type": str(row["evaluator_type"] or ""),
             "evaluator_version": str(row["evaluator_version"] or ""),

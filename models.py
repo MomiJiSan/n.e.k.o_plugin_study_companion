@@ -447,6 +447,7 @@ class CognitiveConfig:
     read_mode: CognitiveReadMode = "off"
     intent_policy: CognitiveIntentPolicyMode = "off"
     ui_enabled: bool = False
+    knowledge_graph_enabled: bool = True
     model_version: str = COGNITIVE_V1_MODEL_VERSION
     supported_topics: tuple[str, ...] = COGNITIVE_V1_SUPPORTED_TOPICS
 
@@ -463,6 +464,11 @@ class CognitiveConfig:
             intent_policy if intent_policy in {"off", "shadow", "on"} else "off",
         )
         self.ui_enabled = self.ui_enabled if isinstance(self.ui_enabled, bool) else False
+        self.knowledge_graph_enabled = (
+            self.knowledge_graph_enabled
+            if isinstance(self.knowledge_graph_enabled, bool)
+            else False
+        )
         model_version = str(self.model_version or "").strip()
         self.model_version = (
             model_version if model_version == COGNITIVE_V1_MODEL_VERSION else COGNITIVE_V1_MODEL_VERSION
@@ -493,6 +499,7 @@ def build_cognitive_config(raw: Mapping[str, Any]) -> CognitiveConfig:
         read_mode=cognitive.get("read_mode", "off"),
         intent_policy=cognitive.get("intent_policy", "off"),
         ui_enabled=cognitive.get("ui_enabled", False),
+        knowledge_graph_enabled=cognitive.get("knowledge_graph_enabled", True),
         model_version=cognitive.get("model_version", COGNITIVE_V1_MODEL_VERSION),
         supported_topics=cognitive.get("supported_topics", COGNITIVE_V1_SUPPORTED_TOPICS),
     )

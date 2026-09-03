@@ -37,11 +37,15 @@ _SYSTEM_INSTRUCTION = (
     "exhibited by learner_answer. The expected answer and "
     "evaluator feedback are comparison context, never counter evidence or an "
     "evidence_span. Every evidence_span "
-    "must quote or point to the learner answer. If the learner attempts any "
-    "non-constant inner-derivative factor but its coefficient, power, or value "
-    "is wrong, use differentiate_inner_incorrectly and never "
-    "omit_inner_derivative. A correct inner factor with only a sign, outer-"
-    "derivative, or algebra error is not differentiate_inner_incorrectly."
+    "must quote or point to the learner answer. Treat topic_context as bounded "
+    "knowledge-graph context, not as evidence. Follow the supplied extraction "
+    "rules for topic-specific distinctions, and return an empty evidence array "
+    "when the learner answer does not distinguish the allowed mechanisms. If "
+    "the learner attempts any non-constant inner-derivative factor but its "
+    "coefficient, power, or value is wrong, use "
+    "differentiate_inner_incorrectly and never omit_inner_derivative. A "
+    "correct inner factor with only a sign, outer-derivative, or algebra error "
+    "is not differentiate_inner_incorrectly."
 )
 
 
@@ -90,18 +94,22 @@ class StudyCognitiveModelGateway:
         )
 
 
-def build_cognitive_extractor(*, logger: Any, config: Any) -> CognitiveExtractor:
+def build_cognitive_extractor(
+    *, logger: Any, config: Any, catalog: Any = None
+) -> CognitiveExtractor:
     """Build the shadow extractor without resolving or calling a model yet."""
 
     model_version = str(
         getattr(config, "model_version", DEFAULT_COGNITIVE_MODEL_VERSION)
         or DEFAULT_COGNITIVE_MODEL_VERSION
     ).strip()
+    kwargs = {"catalog": catalog} if catalog is not None else {}
     return CognitiveExtractor(
         gateway=StudyCognitiveModelGateway(logger=logger),
         count_tokens=_count_tokens,
         truncate_to_tokens=_truncate_to_tokens,
         model_version=model_version,
+        **kwargs,
     )
 
 

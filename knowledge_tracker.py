@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from .adaptive_learning.cognitive_catalog import COGNITIVE_CATALOG_V1
+from .adaptive_learning.cognitive_catalog import (
+    COGNITIVE_CATALOG_V1,
+    build_knowledge_graph_cognitive_catalog,
+)
 from .adaptive_learning.cognitive_contracts import (
     DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
     DEFAULT_COGNITIVE_MODEL_VERSION,
@@ -616,6 +619,15 @@ class KnowledgeTracker:
             _cognitive_config_value(cognitive_config, "projection_enabled", False)
             is True
         )
+        self._cognitive_catalog = build_knowledge_graph_cognitive_catalog(
+            store.get_topic
+        )
+        self._cognitive_knowledge_graph_enabled = (
+            _cognitive_config_value(
+                cognitive_config, "knowledge_graph_enabled", True
+            )
+            is True
+        )
         configured_cognitive_topics = _cognitive_config_value(
             cognitive_config,
             "supported_topics",
@@ -633,7 +645,11 @@ class KnowledgeTracker:
             )
         )
         self._cognitive_projection_enabled = bool(
-            cognitive_enabled and self._cognitive_topic_ids
+            cognitive_enabled
+            and (
+                self._cognitive_topic_ids
+                or self._cognitive_knowledge_graph_enabled
+            )
         )
         cognitive_model_version = str(
             _cognitive_config_value(
@@ -682,11 +698,13 @@ class KnowledgeTracker:
             cognitive_extractor = build_cognitive_extractor(
                 logger=logger,
                 config=cognitive_config,
+                catalog=self._cognitive_catalog,
             )
         self._cognitive_projector = (
             CognitiveProjector(
                 store,
                 cognitive_extractor,
+                catalog=self._cognitive_catalog,
                 model_version=cognitive_model_version,
             )
             if self._cognitive_projection_enabled
@@ -795,12 +813,25 @@ class KnowledgeTracker:
         return totals
 
     def _cognitive_topic_enabled(self, topic_id: str) -> bool:
-        canonical = COGNITIVE_CATALOG_V1.canonical_topic_id(topic_id)
+        canonical = self._cognitive_catalog.canonical_topic_id(topic_id)
         return bool(
             self.cognitive_projection_enabled
             and canonical
-            and canonical in self._cognitive_topic_ids
+            and (
+                canonical in self._cognitive_topic_ids
+                or (
+                    self._cognitive_knowledge_graph_enabled
+                    and self._cognitive_catalog.is_graph_topic(topic_id)
+                )
+            )
         )
+
+    def is_cognitive_topic_enabled(self, topic_id: str) -> bool:
+        return self._cognitive_topic_enabled(topic_id)
+
+    @property
+    def cognitive_catalog(self):
+        return self._cognitive_catalog
 
     @property
     def cognitive_read_mode(self) -> str:

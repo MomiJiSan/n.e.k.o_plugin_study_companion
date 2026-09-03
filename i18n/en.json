@@ -709,8 +709,8 @@
     "ui.settings.cognitive.mode.off":  "Off",
     "ui.settings.cognitive.mode.shadow":  "Shadow (observe only)",
     "ui.settings.cognitive.mode.active":  "Active",
-    "ui.settings.cognitive.help":  "Shadow analyzes answers without changing questions. Active can influence judgments and the next question.",
-    "ui.settings.cognitive.runtime.summary":  "Evaluates whether an answer is correct, updates mastery evidence, and can help select the next question.",
+    "ui.settings.cognitive.help":  "Shadow analyzes answers without changing questions. Active can influence judgments and the next question. Analysis uses topics, prerequisites, skills, and common misconceptions from the current knowledge graph.",
+    "ui.settings.cognitive.runtime.summary":  "Uses the knowledge graph to analyze answer errors, update mastery evidence, and help select the next question.",
     "ui.settings.cognitive.enabled.label":  "Enable cognitive engine",
     "ui.settings.cognitive.enabled.help":  "When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the mode in Data settings.",
     "ui.settings.cognitive.status.off":  "Off: answer evidence is not analyzed.",
@@ -1044,5 +1044,8 @@
     "ui.cognitive.hypothesis.omit_inner_derivative": "omitting the inner derivative",
     "ui.cognitive.hypothesis.differentiate_inner_incorrectly": "differentiating the inner function incorrectly",
     "ui.cognitive.hypothesis.confuse_product_and_chain": "confusing the product and chain rules",
+    "ui.cognitive.hypothesis.concept_misunderstanding": "a concept misunderstanding",
+    "ui.cognitive.hypothesis.prerequisite_gap": "a prerequisite knowledge gap",
+    "ui.cognitive.hypothesis.procedure_or_representation_error": "a procedural, conversion, or representation error",
     "ui.cognitive.hypothesis.unknown": "a recurring error pattern"
 }

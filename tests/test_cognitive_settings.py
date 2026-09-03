@@ -47,6 +47,33 @@ def _load_status_entries(
     return importlib.import_module(f"{package_name}.entry_status_entries")
 
 
+def _assert_transport_safe(value: object) -> None:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return
+    if isinstance(value, list):
+        for item in value:
+            _assert_transport_safe(item)
+        return
+    if isinstance(value, dict):
+        assert all(isinstance(key, str) for key in value)
+        for item in value.values():
+            _assert_transport_safe(item)
+        return
+    raise AssertionError(f"unsupported settings transport value: {type(value).__name__}")
+
+
+def test_settings_payload_is_transport_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(monkeypatch, "_settings_transport_safe")
+    entries = _load_status_entries(monkeypatch, package_name, models)
+
+    payload = entries._settings_config_payload(models.StudyConfig())
+
+    _assert_transport_safe(payload)
+    assert isinstance(payload["cognitive"]["supported_topics"], list)
+
+
 def test_cognitive_settings_round_trip_all_runtime_modes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -70,8 +97,9 @@ def test_cognitive_settings_round_trip_all_runtime_modes(
         "read_mode": "shadow",
         "intent_policy": "shadow",
         "ui_enabled": False,
+        "knowledge_graph_enabled": True,
         "model_version": "cognitive-v1",
-        "supported_topics": ("calculus.chain_rule", "college_chain_rule"),
+        "supported_topics": ["calculus.chain_rule", "college_chain_rule"],
     }
 
     active = entries._apply_settings_config(
@@ -122,6 +150,9 @@ def test_cognitive_settings_replace_the_running_tracker(
         ) -> None:
             self.store = store
             self.cognitive_config = cognitive_config
+            self.cognitive_projection_enabled = bool(
+                cognitive_config.projection_enabled
+            )
             self.summary_provider = None
 
         def set_memory_deck_summary_provider(self, provider) -> None:
@@ -145,6 +176,10 @@ def test_cognitive_settings_replace_the_running_tracker(
             self._pomodoro_timer = None
             self._supervision = None
             self._checkin_manager = None
+            self.cognitive_wake_calls = 0
+
+        def _request_cognitive_projection(self) -> None:
+            self.cognitive_wake_calls += 1
 
     owner = Owner()
     previous_tracker = owner._knowledge_tracker
@@ -162,6 +197,7 @@ def test_cognitive_settings_replace_the_running_tracker(
     assert owner._knowledge_tracker is not previous_tracker
     assert owner._knowledge_tracker.cognitive_config == active.cognitive
     assert callable(owner._knowledge_tracker.summary_provider)
+    assert owner.cognitive_wake_calls == 1
 
 
 def test_cognitive_setting_is_in_the_right_data_column_and_localized() -> None:

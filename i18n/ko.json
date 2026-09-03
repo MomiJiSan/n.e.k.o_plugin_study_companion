@@ -1044,5 +1044,8 @@
     "ui.cognitive.hypothesis.omit_inner_derivative": "내부 함수의 미분을 누락함",
     "ui.cognitive.hypothesis.differentiate_inner_incorrectly": "내부 함수를 잘못 미분함",
     "ui.cognitive.hypothesis.confuse_product_and_chain": "곱의 미분법과 연쇄 법칙을 혼동함",
+    "ui.cognitive.hypothesis.concept_misunderstanding": "개념 오해",
+    "ui.cognitive.hypothesis.prerequisite_gap": "선수 지식 부족",
+    "ui.cognitive.hypothesis.procedure_or_representation_error": "절차·변환·표현 오류",
     "ui.cognitive.hypothesis.unknown": "반복되는 오류 패턴"
 }

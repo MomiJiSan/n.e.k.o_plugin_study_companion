@@ -37,6 +37,11 @@ def _config_value(config: object | None, name: str, default: object) -> object:
     return getattr(config, name, default) if config is not None else default
 
 
+def _cognitive_catalog(owner: object):
+    tracker = getattr(owner, "_knowledge_tracker", None)
+    return getattr(tracker, "cognitive_catalog", COGNITIVE_CATALOG_V1)
+
+
 def _ui_enabled(owner: object, topic_id: str) -> bool:
     config = _cognitive_config(owner)
     if not (
@@ -45,18 +50,18 @@ def _ui_enabled(owner: object, topic_id: str) -> bool:
         and str(_config_value(config, "read_mode", "off")).strip().lower() in {"shadow", "active"}
     ):
         return False
-    canonical = COGNITIVE_CATALOG_V1.canonical_topic_id(topic_id)
-    if canonical is None:
-        return False
-    configured = _config_value(config, "supported_topics", ())
-    if not isinstance(configured, (list, tuple, set, frozenset)):
-        return False
-    configured_canonical = {
-        resolved
-        for item in configured
-        if isinstance(item, str) and (resolved := COGNITIVE_CATALOG_V1.canonical_topic_id(item)) is not None
-    }
-    return canonical in configured_canonical
+    tracker = getattr(owner, "_knowledge_tracker", None)
+    topic_enabled = getattr(tracker, "is_cognitive_topic_enabled", None)
+    if callable(topic_enabled):
+        return bool(topic_enabled(topic_id))
+    catalog = _cognitive_catalog(owner)
+    supports_topic = getattr(catalog, "supports_topic", None)
+    if callable(supports_topic):
+        return bool(supports_topic(topic_id))
+    canonical_topic_id = getattr(catalog, "canonical_topic_id", None)
+    return bool(
+        callable(canonical_topic_id) and canonical_topic_id(topic_id) is not None
+    )
 
 
 def _empty_payload(topic_id: str, *, status: str, enabled: bool) -> dict[str, Any]:
@@ -124,11 +129,16 @@ def _safe_evidence_item(row: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _latest_restorable_controls(rows: Sequence[Mapping[str, Any]], *, now: datetime) -> list[dict[str, str]]:
+def _latest_restorable_controls(
+    rows: Sequence[Mapping[str, Any]], *, now: datetime, catalog: object
+) -> list[dict[str, str]]:
     latest: dict[str, Mapping[str, Any]] = {}
     for row in rows:
         code = str(row.get("hypothesis_code") or "").strip()
-        if code and code not in latest and COGNITIVE_CATALOG_V1.get(str(row.get("topic_id") or "").strip(), code):
+        getter = getattr(catalog, "get", None)
+        if code and code not in latest and callable(getter) and getter(
+            str(row.get("topic_id") or "").strip(), code
+        ):
             latest[code] = row
     result: list[dict[str, str]] = []
     for code, row in latest.items():
@@ -237,11 +247,13 @@ class _CognitiveEntriesMixin:
             if store is None:
                 return _empty_payload(topic_key, status="unavailable", enabled=True)
             try:
+                catalog = _cognitive_catalog(self)
                 controls_method = getattr(store, "list_cognitive_user_controls", None)
                 control_rows = controls_method(topic_id=topic_key, limit=100) if callable(controls_method) else []
                 restorable = _latest_restorable_controls(
                     tuple(row for row in control_rows if isinstance(row, Mapping)),
                     now=datetime.now(timezone.utc),
+                    catalog=catalog,
                 )
                 view = _read_cognitive_state(self, topic_key)
                 supported = _supported_hypotheses(view)
@@ -260,7 +272,7 @@ class _CognitiveEntriesMixin:
                 for item in supported:
                     code = str(_hypothesis_ref_value(item, "code") or "").strip()
                     hypothesis_id = str(_hypothesis_ref_value(item, "hypothesis_id") or "").strip()
-                    if not code or COGNITIVE_CATALOG_V1.get(topic_key, code) is None:
+                    if not code or catalog.get(topic_key, code) is None:
                         continue
                     evidence_rows = list_evidence(
                         topic_id=topic_key,
@@ -380,7 +392,7 @@ class _CognitiveEntriesMixin:
         try:
             if action_key not in _CONTROL_ACTIONS:
                 raise ValueError("unsupported cognitive control action")
-            if COGNITIVE_CATALOG_V1.get(topic_key, code_key) is None:
+            if _cognitive_catalog(self).get(topic_key, code_key) is None:
                 raise ValueError("unsupported cognitive hypothesis")
             now = datetime.now(timezone.utc)
             expiry = _normalize_suppression_expiry(expires_at, now=now) if action_key == "suppress" else ""

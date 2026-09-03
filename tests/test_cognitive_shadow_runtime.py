@@ -47,6 +47,30 @@ class _FailingExtractor:
         )
 
 
+class _GraphExtractor:
+    def __init__(self, contracts: Any) -> None:
+        self._contracts = contracts
+        self.inputs: list[Any] = []
+
+    async def extract(self, extraction_input: Any) -> Any:
+        self.inputs.append(extraction_input)
+        return self._contracts.CognitiveExtractionOutcome(
+            status="success",
+            evidence=(
+                self._contracts.CognitiveEvidenceDraft(
+                    topic_id=extraction_input.topic_id,
+                    hypothesis_code="procedure_or_representation_error",
+                    direction="support",
+                    strength=0.8,
+                    extractor_confidence=0.8,
+                    evidence_span=extraction_input.learner_answer,
+                ),
+            ),
+            extractor_version=self._contracts.DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+            model_version=self._contracts.DEFAULT_COGNITIVE_MODEL_VERSION,
+        )
+
+
 def _install_package(monkeypatch: pytest.MonkeyPatch, name: str) -> str:
     package = ModuleType(name)
     package.__path__ = [str(ROOT)]  # type: ignore[attr-defined]
@@ -251,6 +275,164 @@ def test_projection_enabled_does_not_enqueue_unvalidated_answer(
         store.close()
 
 
+def test_projection_uses_existing_knowledge_graph_topics_outside_legacy_whitelist(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, Tracker, contracts, _ = _load_runtime(
+        monkeypatch, "_cognitive_graph_topic"
+    )
+    store = _store(tmp_path, Store)
+    extractor = _GraphExtractor(contracts)
+    try:
+        store.upsert_topic(
+            {
+                "id": "algebra.linear_equation",
+                "name": "Linear equation",
+                "subject": "math",
+                "chapter": "Algebra",
+                "prerequisites": ["arithmetic.inverse_operations"],
+                "related": ["algebra.systems_of_equations"],
+                "typical_misconceptions": [
+                    "changes one side of the equation without changing the other"
+                ],
+                "skills": ["isolate_variable", "check_solution"],
+                "question_types": ["solve_equation"],
+                "source": "runtime",
+            }
+        )
+        tracker = Tracker(
+            store,
+            logger=_Logger(),
+            cognitive_config=_cognitive_config(read_mode="shadow"),
+            cognitive_extractor=extractor,
+        )
+
+        _answer(
+            tracker,
+            topic_id="algebra.linear_equation",
+            attempt_id="attempt-graph-topic",
+            require_existing_topic=True,
+        )
+        queued = store.list_cognitive_projection_queue()
+        assert queued[0]["attempt_id"] == "attempt-graph-topic"
+
+        summary = asyncio.run(tracker.project_cognitive_pending())
+
+        assert summary["completed"] == 1
+        assert extractor.inputs[0].topic_id == "algebra.linear_equation"
+        assert extractor.inputs[0].topic_context["name"] == "Linear equation"
+        assert extractor.inputs[0].topic_context["prerequisites"] == [
+            "arithmetic.inverse_operations"
+        ]
+        assert extractor.inputs[0].topic_context["related"] == [
+            "algebra.systems_of_equations"
+        ]
+        assert extractor.inputs[0].topic_context["typical_misconceptions"] == [
+            "changes one side of the equation without changing the other"
+        ]
+        assert extractor.inputs[0].topic_context["skills"] == [
+            "isolate_variable",
+            "check_solution",
+        ]
+        evidence = store.list_cognitive_evidence(
+            topic_id="algebra.linear_equation"
+        )
+        assert evidence[0]["hypothesis_code"] == (
+            "procedure_or_representation_error"
+        )
+    finally:
+        store.close()
+
+
+def test_graph_scope_can_be_disabled_without_disabling_reviewed_topics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, Tracker, _, _ = _load_runtime(
+        monkeypatch, "_cognitive_graph_scope_off"
+    )
+    store = _store(tmp_path, Store)
+    extractor = _NeverCalledExtractor()
+    try:
+        tracker = Tracker(
+            store,
+            logger=_Logger(),
+            cognitive_config=SimpleNamespace(
+                projection_enabled=True,
+                read_mode="shadow",
+                intent_policy="shadow",
+                ui_enabled=False,
+                knowledge_graph_enabled=False,
+                model_version="cognitive-v1",
+                supported_topics=("calculus.chain_rule",),
+            ),
+            cognitive_extractor=extractor,
+        )
+
+        _answer(
+            tracker,
+            topic_id="algebra.linear_equation",
+            attempt_id="attempt-graph-disabled",
+            require_existing_topic=True,
+        )
+        _answer(
+            tracker,
+            topic_id="calculus.chain_rule",
+            attempt_id="attempt-reviewed-enabled",
+            require_existing_topic=True,
+        )
+
+        queued = store.list_cognitive_projection_queue()
+        assert [item["attempt_id"] for item in queued] == [
+            "attempt-reviewed-enabled"
+        ]
+        assert tracker.is_cognitive_topic_enabled("algebra.linear_equation") is False
+        assert tracker.is_cognitive_topic_enabled("calculus.chain_rule") is True
+        assert extractor.calls == 0
+    finally:
+        store.close()
+
+
+def test_projection_fails_closed_for_unknown_and_deleted_graph_topics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, Tracker, _, _ = _load_runtime(
+        monkeypatch, "_cognitive_graph_topic_fail_closed"
+    )
+    store = _store(tmp_path, Store)
+    extractor = _NeverCalledExtractor()
+    try:
+        deleted_topic_id = "algebra.deleted_topic"
+        store.ensure_topic(topic_id=deleted_topic_id, name="Deleted topic")
+        with store._lock:
+            connection = store._require_conn()
+            connection.execute("DELETE FROM topics WHERE id = ?", (deleted_topic_id,))
+            connection.commit()
+
+        tracker = Tracker(
+            store,
+            logger=_Logger(),
+            cognitive_config=_cognitive_config(read_mode="shadow"),
+            cognitive_extractor=extractor,
+        )
+        for topic_id, attempt_id in (
+            ("algebra.unknown_topic", "attempt-unknown-topic"),
+            (deleted_topic_id, "attempt-deleted-topic"),
+        ):
+            result = _answer(
+                tracker,
+                topic_id=topic_id,
+                attempt_id=attempt_id,
+                require_existing_topic=True,
+            )
+            assert result["knowledge_tracking_status"] == "qa_only"
+            assert tracker._cognitive_topic_enabled(topic_id) is False
+
+        assert store.list_cognitive_projection_queue() == []
+        assert extractor.calls == 0
+    finally:
+        store.close()
+
+
 def test_only_catalog_topic_and_alias_enqueue_without_waiting_for_extractor(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -281,6 +463,7 @@ def test_only_catalog_topic_and_alias_enqueue_without_waiting_for_extractor(
         assert {item["attempt_id"] for item in queued} == {
             "attempt-canonical",
             "attempt-alias",
+            "attempt-outside",
         }
         assert all(item["extractor_version"] == "cognitive-extractor-v1" for item in queued)
         assert extractor.calls == 0

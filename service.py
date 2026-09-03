@@ -206,12 +206,29 @@ def _inspect_dxcam() -> dict[str, Any]:
     }
 
 
-def build_tutor_payload(reply: TutorReply) -> dict[str, Any]:
-    payload = reply.to_dict()
-    if reply.payload:
-        payload.update(copy.deepcopy(reply.payload))
+def build_tutor_payload(reply: Any) -> dict[str, Any]:
+    normalized_reply = (
+        reply
+        if isinstance(reply, TutorReply)
+        else TutorReply(
+            operation=str(getattr(reply, "operation", "") or ""),
+            input_text=str(getattr(reply, "input_text", "") or ""),
+            reply=str(getattr(reply, "reply", "") or ""),
+            payload=(
+                dict(getattr(reply, "payload", {}) or {})
+                if isinstance(getattr(reply, "payload", {}), dict)
+                else {}
+            ),
+            degraded=bool(getattr(reply, "degraded", False)),
+            diagnostic=str(getattr(reply, "diagnostic", "") or ""),
+            created_at=str(getattr(reply, "created_at", "") or ""),
+        )
+    )
+    payload = normalized_reply.to_dict()
+    if normalized_reply.payload:
+        payload.update(copy.deepcopy(normalized_reply.payload))
     if not payload.get("summary"):
-        payload["summary"] = reply.reply
+        payload["summary"] = normalized_reply.reply
     return payload
 
 
