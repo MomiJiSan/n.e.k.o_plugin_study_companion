@@ -179,7 +179,7 @@ process.stdout.write(`FIXTURE_JSON:${{JSON.stringify(result)}}\n`);
 def test_market_package_excludes_worktree_and_test_artifacts() -> None:
     pyproject = PYPROJECT.read_text(encoding="utf-8")
     assert '[tool.neko.build]' in pyproject
-    assert 'exclude_dirs = ["tests", "experimental"]' in pyproject
+    assert 'exclude_dirs = ["tests", "experimental", ".gitnexus"]' in pyproject
     assert 'exclude_files = [".git", ".coverage", "coverage.xml"]' in pyproject
 
 

@@ -327,4 +327,4 @@ def test_release_versions_stay_in_sync() -> None:
             for package in tomllib.load(lock_file)["package"]
             if package["name"] == "study-companion"
         )
-    assert plugin_version == project_version == locked_version == "0.2.4"
+    assert plugin_version == project_version == locked_version == "0.2.5"

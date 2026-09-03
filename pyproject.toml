@@ -1,6 +1,6 @@
 [project]
 name = "study_companion"
-version = "0.2.4"
+version = "0.2.5"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28,<1",
@@ -19,5 +19,5 @@ addopts = "--confcutdir=tests --basetemp=.pytest-tmp"
 testpaths = ["tests"]
 
 [tool.neko.build]
-exclude_dirs = ["tests", "experimental"]
+exclude_dirs = ["tests", "experimental", ".gitnexus"]
 exclude_files = [".git", ".coverage", "coverage.xml"]
