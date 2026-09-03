@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
-
 LEGACY_COGNITIVE_VERSION_SET = "cognitive-v1"
 DEFAULT_COGNITIVE_VERSION_SET = "cognitive-v2.1-1"
 
