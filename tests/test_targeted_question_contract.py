@@ -1066,6 +1066,35 @@ def test_blocked_diagnostic_never_overrides_retry_due_or_weak_priority(
     assert Subject()._selection_from_question_params(without_due)["selection_reason"] == "weak_topic"
 
 
+def test_weak_topic_selection_uses_the_canonical_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _ = _load_entries(monkeypatch, "_targeted_weak_topic_name_test")
+
+    class Store:
+        @staticmethod
+        def get_topic(topic_id):
+            return {"id": topic_id, "name": "任意角与弧度制"}
+
+    class Subject(entries._TutorQuestionEntriesMixin):
+        _knowledge_tracker = SimpleNamespace(store=Store())
+
+    selection = Subject()._selection_from_question_params(
+        {
+            "weak_topics": [
+                {
+                    "topic_id": "senior_trig_angle_system",
+                    "topic_name": "senior_trig_angle_system",
+                }
+            ]
+        }
+    )
+
+    assert selection["selection_reason"] == "weak_topic"
+    assert selection["selected_topic_id"] == "senior_trig_angle_system"
+    assert selection["selected_topic_name"] == "任意角与弧度制"
+
+
 def test_server_target_binding_uses_only_selected_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

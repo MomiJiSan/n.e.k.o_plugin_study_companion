@@ -766,7 +766,16 @@ class _TutorQuestionEntriesMixin:
         elif weak_topics:
             first_weak = dict(weak_topics[0] or {})
             selected_topic_id = str(first_weak.get("topic_id") or first_weak.get("id") or selected_topic_id).strip()
-            selected_topic_name = str(first_weak.get("name") or first_weak.get("topic") or selected_topic_id).strip()
+            weak_topic = self._knowledge_tracker.store.get_topic(selected_topic_id)
+            selected_topic_name = _topic_name(
+                weak_topic,
+                str(
+                    first_weak.get("topic_name")
+                    or first_weak.get("name")
+                    or first_weak.get("topic")
+                    or selected_topic_id
+                ),
+            )
             reason = "weak_topic"
             reason_payload = {"weak_topic": first_weak}
         elif params.get("blocked_diagnostic"):

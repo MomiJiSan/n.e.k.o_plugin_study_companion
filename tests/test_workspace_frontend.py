@@ -834,7 +834,9 @@ document.body.innerHTML = `
   <section id="centralHost"></section>
   <section id="fullscreenHost"></section>`;
 
-window.t = (_key, fallback) => fallback;
+window.t = (key, fallback) => ({
+  'ui.knowledge.subject.math': '数学',
+}[key] || fallback);
 window.tf = (_key, fallback, values = {}) => fallback.replace(/\{([^}]+)\}/g, (_match, name) => values[name] ?? '');
 window.drawerElement = (tag, className = '', text = '') => {
   const node = document.createElement(tag);
@@ -864,7 +866,7 @@ window.countFromSummary = (summary, keys) => {
 };
 window.normalizeLearningStage = (value) => String(value || '').trim();
 window.learningProfile = { stage: 'senior_high' };
-window.learningStageLabel = (value = window.learningProfile.stage) => value || 'all';
+window.learningStageLabel = (value = window.learningProfile.stage) => value === 'senior_high' ? '高中' : value || 'all';
 window.knowledgeStageLabel = (value) => value || 'uncategorized';
 window.stageValueFromNode = (node) => String(node.stage || '');
 window.masteryLevelForPanel = (node) => node.weak ? 'weak' : 'new';
@@ -895,7 +897,7 @@ window.callPlugin = async (entryId, args = {}) => {
   if (entryId !== 'study_set_practice_scope') throw new Error(`Unexpected entry: ${entryId}`);
   return {
     active: true,
-    scope: { ...args.scope, scope_key: 'scope-1', scope_revision: 7, display_path: ['Senior high', 'Math'] },
+    scope: { ...args.scope, scope_key: 'scope-1', scope_revision: 7, display_path: ['senior_high', 'math', '三角函数'] },
     scope_revision: 7,
   };
 };
@@ -1017,6 +1019,9 @@ for (let index = 0; index < 12; index += 1) await Promise.resolve();
 const scopeCall = pluginCalls.find((call) => call.entryId === 'study_set_practice_scope');
 if (!scopeCall || scopeCall.args.scope.subject !== 'math' || scopeCall.args.scope.stage !== 'senior_high') {
   throw new Error(`knowledge scope did not reach the existing backend contract: ${JSON.stringify(scopeCall)}`);
+}
+if (document.querySelector('#practiceScopePath')?.textContent !== '高中 / 数学 / 三角函数') {
+  throw new Error(`practice scope path was not localized: ${document.querySelector('#practiceScopePath')?.textContent}`);
 }
 if (practiceActivations !== 1 || document.activeElement !== window.generateQuestionBtn) {
   throw new Error('saved knowledge scope did not activate practice and focus Generate');

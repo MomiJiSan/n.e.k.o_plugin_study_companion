@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from '@neko/plugin-ui';
 import type { PluginSurfaceProps } from '@neko/plugin-ui';
 import { callPlugin as callHostedPlugin, ensureBrandCSS } from './study_surface_utils';
+import { practiceScopeDisplayPath as formatPracticeScopeDisplayPath } from './practice_scope_display';
 import {
   estimateDocumentChunkCount,
   estimatedDocumentAnalysisMode,
@@ -1167,6 +1168,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       t(key, fallback),
     )
   );
+  const practiceScopeDisplayPath = (scope?: PracticeScope | null) => {
+    return formatPracticeScopeDisplayPath(scope, t);
+  };
   const [status, setStatus] = useState<StudyStatus>({});
   const [modelRuntime, setModelRuntime] = useState<Record<string, StudyModelRuntime>>({});
   const [modelRuntimeLoading, setModelRuntimeLoading] = useState(false);
@@ -3122,6 +3126,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
 
   const stateValue = status.status || 'unknown';
   const stateLabel = t(`status.state.${stateValue}`, stateValue);
+  const activePracticeScopePath = practiceScopeDisplayPath(activePracticeScope);
   const explainLabel = interactionBusy ? t('ui.button.loading', 'Loading...') : t('ui.button.explain', 'Explain');
   const screenType = status.screen_classification?.screen_type || 'idle';
   const evaluation = status.last_answer_evaluation;
@@ -3256,8 +3261,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       <section className="study-panel__state">
         <div>
           <span>{t('ui.practice.scope_label', 'Practice scope')}</span>
-          <strong>{activePracticeScope?.display_path?.length
-            ? activePracticeScope.display_path.join(' / ')
+          <strong>{activePracticeScopePath
+            ? activePracticeScopePath
             : t('ui.practice.scope_automatic', 'Automatic selection')}</strong>
         </div>
         <div>

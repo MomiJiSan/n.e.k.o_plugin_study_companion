@@ -1131,13 +1131,27 @@ class StudyCompanionPlugin(
                 limit=8
             ),
         }
-        return build_status_payload(
+        payload = build_status_payload(
             config=self._cfg,
             state=self._state,
             history=history,
             knowledge={**knowledge, "habit": habit_payload},
             is_first_run=is_first_run,
         )
+        current_question = payload.get("current_question")
+        if isinstance(current_question, dict):
+            topic_id = str(
+                current_question.get("selected_topic_id")
+                or current_question.get("topic")
+                or ""
+            ).strip()
+            topic_name = str(current_question.get("selected_topic_name") or "").strip()
+            if topic_id and (not topic_name or topic_name == topic_id):
+                topic = self._store.get_topic(topic_id) or {}
+                canonical_name = str(topic.get("name") or topic.get("title") or "").strip()
+                if canonical_name:
+                    current_question["selected_topic_name"] = canonical_name
+        return payload
 
     def _habit_status_payload(self, today: str) -> dict[str, Any]:
         if (

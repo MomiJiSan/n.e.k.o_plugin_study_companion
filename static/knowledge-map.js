@@ -189,6 +189,10 @@ function practiceScopeDisplayPath(scope = currentPracticeScope) {
   const path = Array.isArray(scope?.display_path)
     ? scope.display_path.map((part) => String(part || '').trim()).filter(Boolean)
     : [];
+  const stage = String(scope?.stage || '').trim();
+  const subject = String(scope?.subject || '').trim();
+  if (path.length && stage) path[0] = learningStageLabel(stage);
+  if (path.length > 1 && subject) path[1] = knowledgeSubjectLabel(subject);
   return path.join(' / ');
 }
 
