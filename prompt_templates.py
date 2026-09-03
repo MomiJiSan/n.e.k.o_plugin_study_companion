@@ -140,7 +140,8 @@ STUDY_QUESTION_GENERATE_REQUIREMENTS = (
     "12. math_equivalence_engine.enabled must be false.\n"
     "13. Keep the output grounded in context.screen_classification when present.\n"
     "14. For targeted_question context, target_topic_id must exactly copy context.selected_topic_id.\n"
-    "15. Output must match this JSON structure:\n"
+    "15. All learner-facing text fields, including question, hint, topic, key_points, rubric labels, and solution_steps, must use context.language.\n"
+    "16. Output must match this JSON structure:\n"
 )
 
 STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS = (

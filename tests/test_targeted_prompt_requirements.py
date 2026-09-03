@@ -50,6 +50,8 @@ def test_targeted_question_prompt_includes_strict_generation_requirements(
         "difficulty must exactly copy "
         "context.knowledge_question_params.suggested_difficulty"
     ) in user_prompt
+    assert "question, hint, topic, key_points" in user_prompt
+    assert "must use context.language" in user_prompt
 
 
 def test_ordinary_question_prompt_keeps_base_requirements_unchanged(
