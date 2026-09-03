@@ -39,6 +39,15 @@ def _normalized_text(value: object) -> str:
     return " ".join(unicodedata.normalize("NFKC", str(value or "")).casefold().split())
 
 
+def _normalized_math_text(value: object) -> str:
+    """Normalize harmless math typography for an exact declared-answer match."""
+
+    text = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+    text = text.replace("$", "").replace("π", r"\pi")
+    text = text.replace(r"\left", "").replace(r"\right", "")
+    return "".join(text.split())
+
+
 def _closed_world(request: AssessmentRequest) -> bool:
     answer_spec = _mapping(request.context.get("answer_spec"))
     return (
@@ -52,10 +61,15 @@ def _accepted_answers(request: AssessmentRequest) -> tuple[str, ...]:
     if isinstance(raw, (str, bytes)) or not isinstance(raw, Sequence):
         raw = ()
     values = [request.expected_answer, *raw]
+    normalizer = (
+        _normalized_math_text
+        if _question_type(request) == "math_exact"
+        else _normalized_text
+    )
     return tuple(
         normalized
         for value in values
-        if (normalized := _normalized_text(value))
+        if (normalized := normalizer(value))
     )
 
 
@@ -65,7 +79,8 @@ def _correct_decision(evaluator_type: str, evaluator_version: str) -> Assessment
             "verdict": "correct",
             "score": 100,
             "final_answer_correct": True,
-            "feedback": "Your answer is correct.",
+            # The UI renders its localized verdict message from these facts.
+            "feedback": "",
         },
         evaluator_type=evaluator_type,
         evaluator_version=evaluator_version,
@@ -80,7 +95,8 @@ def _wrong_decision(evaluator_type: str, evaluator_version: str) -> AssessmentDe
             "verdict": "wrong",
             "score": 0,
             "final_answer_correct": False,
-            "feedback": "Your answer is not correct.",
+            # Avoid leaking an English-only fallback into localized clients.
+            "feedback": "",
         },
         evaluator_type=evaluator_type,
         evaluator_version=evaluator_version,
@@ -90,7 +106,7 @@ def _wrong_decision(evaluator_type: str, evaluator_version: str) -> AssessmentDe
 
 
 class ExactShortAnswerEvaluator:
-    """Confirm server-approved short answers without deciding open-world misses."""
+    """Confirm server-declared exact answers without deciding open-world misses."""
 
     evaluator_type = "exact_short_answer"
     evaluator_version = "exact-short-answer-v1"
@@ -104,9 +120,14 @@ class ExactShortAnswerEvaluator:
     ) -> AssessmentDecision | None:
         if not _feature_enabled(feature_flags, self.feature_flag):
             return None
-        if _question_type(request) != "short_answer":
+        question_type = _question_type(request)
+        if question_type not in {"short_answer", "math_exact"}:
             return None
-        answer = _normalized_text(request.answer)
+        answer = (
+            _normalized_math_text(request.answer)
+            if question_type == "math_exact"
+            else _normalized_text(request.answer)
+        )
         expected_answers = _accepted_answers(request)
         if not answer or not expected_answers:
             return None

@@ -311,6 +311,20 @@ def query_knowledge_map_page(
         .execute("SELECT COUNT(*) AS count FROM topics" + where_sql, tuple(params))
         .fetchone()["count"]
     )
+    facet_filters = _scope_filters(stage=filters["stage"])
+    facet_clauses, facet_params = _scope_sql(facet_filters)
+    facet_rows = self._require_read_conn().execute(
+        "SELECT COALESCE(subject, '') AS subject_key, COUNT(*) AS count "
+        "FROM topics WHERE "
+        + " AND ".join(facet_clauses)
+        + " GROUP BY COALESCE(subject, '')",
+        tuple(facet_params),
+    ).fetchall()
+    subject_counts = {
+        str(row["subject_key"] or ""): int(row["count"] or 0)
+        for row in facet_rows
+        if int(row["count"] or 0) > 0
+    }
     key_select = """COALESCE(stage, '') AS stage_key,
         COALESCE(subject, '') AS subject_key,
         COALESCE(course_family, '') AS course_family_key,
@@ -356,6 +370,7 @@ def query_knowledge_map_page(
         "scope": filters,
         "scope_total_count": total,
         "scope_returned_count": len(page_nodes),
+        "subject_counts": subject_counts,
         "has_more": has_more,
         "next_cursor": next_cursor,
         "nodes": page_nodes,

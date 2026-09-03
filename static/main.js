@@ -64,6 +64,7 @@ const saveOcrQuestionBtn = $id('saveOcrQuestionBtn');
 const undoOcrQuestionBtn = $id('undoOcrQuestionBtn');
 const clearOcrQuestionsBtn = $id('clearOcrQuestionsBtn');
 const generateQuestionBtn = $id('generateQuestionBtn');
+const baselineAssessmentBtn = $id('baselineAssessmentBtn');
 const explainBtn = $id('explainBtn');
 const evaluateAnswerBtn = $id('evaluateAnswerBtn');
 const summarizeBtn = $id('summarizeBtn');
@@ -86,6 +87,7 @@ const questionAttemptMeta = $id('questionAttemptMeta');
 const hintToggleBtn = $id('hintToggleBtn');
 const hintText = $id('hintText');
 const feedbackPanel = $id('feedbackPanel');
+const evaluationVerdict = $id('evaluationVerdict');
 const feedbackText = $id('feedbackText');
 const masteryDeltaText = $id('masteryDeltaText');
 const nextStepDetails = $id('nextStepDetails');
@@ -173,7 +175,10 @@ const settingsSaveBtn = $id('settingsSaveBtn');
 const settingsConfigStatus = $id('settingsConfigStatus');
 const settingsDataSaveBtn = $id('settingsDataSaveBtn');
 const settingsDataConfigStatus = $id('settingsDataConfigStatus');
+const settingsRuntimeSaveBtn = $id('settingsRuntimeSaveBtn');
+const settingsRuntimeConfigStatus = $id('settingsRuntimeConfigStatus');
 const settingsDocExportEnabled = $id('settingsDocExportEnabled');
+const settingsCognitiveMode = $id('settingsCognitiveMode');
 const settingsDefaultMode = $id('settingsDefaultMode');
 const settingsLearningProfileSummary = $id('settingsLearningProfileSummary');
 const settingsLearningStage = $id('settingsLearningStage');
@@ -379,6 +384,33 @@ function nextStepActionLabel(action) {
 
 function pluginErrorCode(error) {
   return String(error?.code || error?.message || '').trim();
+}
+
+function localizedEvaluationNextAction(value, status) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const locale = String(
+    window.I18n && typeof window.I18n.lang === 'function'
+      ? window.I18n.lang()
+      : (document.documentElement.lang || 'en'),
+  ).toLowerCase();
+  if (locale.startsWith('en') || !/^[\x00-\x7F]*$/.test(text)) return text;
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const messages = {
+    correct: ['ui.practice.next_action.correct', 'Proceed to the next question.'],
+    partial: ['ui.practice.next_action.partial', 'Complete the missing step, then check the answer again.'],
+    dont_know: ['ui.practice.next_action.dont_know', 'Review the hint, then try the answer again.'],
+    wrong: ['ui.practice.next_action.wrong', 'Review the misconception, then try a simpler question.'],
+  };
+  const message = messages[normalizedStatus];
+  return message ? t(message[0], message[1]) : text;
+}
+
+function hasUsableSelectionContext(nextStep) {
+  const contextId = String(nextStep?.selection_context_id || '').trim();
+  if (!contextId) return false;
+  const expiresAt = Number(nextStep?.expires_at || 0);
+  return expiresAt <= 0 || (Number.isFinite(expiresAt) && expiresAt > Date.now() / 1000);
 }
 
 function formatLearningPlanError(error) {
@@ -601,13 +633,13 @@ function setQuestionContext(data = {}) {
       || currentSelectionContext?.selected_topic_id
       || practiceScopeDisplayPath(currentSelectionContext?.practice_scope)
       || practiceScopeDisplayPath()
-      || t('ui.practice.no_data_title', 'Not enough study records yet');
+      || t('ui.practice.no_data_title', 'Choose how to begin');
   }
   if (selectionReason) {
     selectionReason.textContent = currentPracticeScope && !currentSelectionContext?.selection_context_id
       ? t('ui.practice.scope_ready_body', 'The selected scope is ready. Questions are generated only after you click Generate Question.')
       : currentSelectionContext?.no_data
-      ? t('ui.practice.no_data_body', 'Review cards, open the knowledge map, or save notes first; this view does not use manual or OCR text to make practice questions.')
+      ? t('ui.practice.no_data_body', 'Tell me what you want to practice, or paste, import, or capture learning content. I will extract topics for confirmation before generating questions.')
       : tf('ui.practice.selection_reason_fmt', 'Reason: {reason}', { reason: selectionReasonLabel(reason) });
   }
 }
@@ -629,8 +661,16 @@ function setGeneratedQuestion(data = {}) {
   if (evaluateAnswerBtn) {
     evaluateAnswerBtn.disabled = !canEvaluateCurrentQuestion;
   }
+  const renderQuestionContent = (element, value) => {
+    if (window.renderMathInText && typeof window.renderMathInText === 'function') {
+      element.innerHTML = window.renderMathInText(value);
+    } else {
+      element.textContent = value;
+    }
+  };
   if (questionText) {
-    questionText.textContent = currentQuestion?.question || t('ui.practice.empty_question', 'Generate a practice question to begin.');
+    const questionValue = currentQuestion?.question || t('ui.practice.empty_question', 'Generate a practice question to begin.');
+    renderQuestionContent(questionText, questionValue);
   }
   if (questionStatus) {
     questionStatus.textContent = compactText(currentQuestion?.question || '');
@@ -657,7 +697,7 @@ function setGeneratedQuestion(data = {}) {
     hintToggleBtn.setAttribute('aria-expanded', 'false');
   }
   if (hintText) {
-    hintText.textContent = hint;
+    renderQuestionContent(hintText, hint);
     hintText.hidden = true;
   }
 }
@@ -665,6 +705,10 @@ function setGeneratedQuestion(data = {}) {
 function clearFeedback() {
   currentNextStep = null;
   if (feedbackPanel) feedbackPanel.hidden = true;
+  if (evaluationVerdict) {
+    evaluationVerdict.textContent = '';
+    delete evaluationVerdict.dataset.status;
+  }
   if (feedbackText) feedbackText.textContent = '';
   if (masteryDeltaText) masteryDeltaText.textContent = '';
   if (nextStepDetails) nextStepDetails.textContent = '';
@@ -672,10 +716,23 @@ function clearFeedback() {
   if (evaluationStatus) evaluationStatus.textContent = t('ui.status.ready', 'Ready');
 }
 
+function normalizeFeedbackDisplayText(value) {
+  return String(value || '')
+    .replace(/(?:&#x20;|&#32;|&nbsp;)/gi, ' ')
+    .trimEnd();
+}
+
 function renderFeedback(data = {}) {
+  const attemptStatus = String(data.attempt_status || data.verdict || '').trim().toLowerCase();
+  const attemptMessage = practiceAttemptMessage(data);
   if (evaluationStatus) {
-    evaluationStatus.textContent = practiceAttemptMessage(data)
+    evaluationStatus.textContent = attemptMessage
       || (data.verdict ? `${data.verdict}${Number.isFinite(Number(data.score)) ? ` / ${data.score}` : ''}` : '-');
+  }
+  if (evaluationVerdict) {
+    evaluationVerdict.textContent = attemptMessage
+      || t('ui.practice.attempt.unknown', 'Answer evaluated.');
+    evaluationVerdict.dataset.status = attemptStatus || 'unknown';
   }
   const learningUpdate = data.learning_update && typeof data.learning_update === 'object'
     ? data.learning_update
@@ -690,6 +747,10 @@ function renderFeedback(data = {}) {
       })
       : '';
   }
+  const localizedNextAction = localizedEvaluationNextAction(
+    data.next_action,
+    data.attempt_status || data.verdict,
+  );
   const lines = [data.feedback || data.reply || '',
     Array.isArray(data.covered_points) && data.covered_points.length
       ? `${t('ui.practice.covered_points', 'Covered')}: ${data.covered_points.join(', ')}`
@@ -698,10 +759,15 @@ function renderFeedback(data = {}) {
       ? `${t('ui.practice.missing_points', 'Missing')}: ${data.missing_points.join(', ')}`
       : '',
     data.reference_answer ? `${t('ui.practice.reference_answer', 'Reference')}: ${data.reference_answer}` : '',
-    data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
+    localizedNextAction ? `${t('ui.practice.next_action', 'Next')}: ${localizedNextAction}` : '',
   ].filter(Boolean);
   if (feedbackText) {
-    feedbackText.textContent = lines.join('\n');
+    const value = normalizeFeedbackDisplayText(lines.join('\n'));
+    if (window.renderMathInText && typeof window.renderMathInText === 'function') {
+      feedbackText.innerHTML = window.renderMathInText(value);
+    } else {
+      feedbackText.textContent = value;
+    }
   }
   currentNextStep = data.next_step && typeof data.next_step === 'object'
     ? data.next_step
@@ -729,13 +795,21 @@ function renderFeedback(data = {}) {
       })
       : '',
   ].filter(Boolean);
-  if (nextStepDetails) nextStepDetails.textContent = nextLines.join('\n');
+  if (nextStepDetails) {
+    const value = normalizeFeedbackDisplayText(nextLines.join('\n'));
+    if (window.renderMathInText && typeof window.renderMathInText === 'function') {
+      nextStepDetails.innerHTML = window.renderMathInText(value);
+    } else {
+      nextStepDetails.textContent = value;
+    }
+  }
   if (continueQuestionBtn) {
-    continueQuestionBtn.hidden = !(
-      currentNextStep?.status === 'ready'
-      && currentNextStep?.available_now === true
-    );
-    continueQuestionBtn.textContent = currentNextStep?.action === 'summarize_plan'
+    // A successful evaluation always permits an explicit next action. When the
+    // preview is missing or stale, generateQuestion refreshes the context.
+    continueQuestionBtn.hidden = false;
+    const canUsePreview = currentNextStep?.status === 'ready'
+      && currentNextStep?.available_now === true;
+    continueQuestionBtn.textContent = canUsePreview && currentNextStep?.action === 'summarize_plan'
       ? t('ui.button.view_plan_summary', 'View plan summary')
       : t('ui.button.continue_next_question', 'Continue to next question');
   }
@@ -1879,7 +1953,15 @@ async function loadKnowledgeMap(requestId) {
     : (options.stage || knowledgeMapStage || learningProfile.stage || 'all');
   const append = options.append === true;
   const normalizedStage = requestedStage === 'all' ? '' : normalizeLearningStage(requestedStage);
-  const scope = { stage: normalizedStage, subject: '', chapter: '', unit: '' };
+  const selectedSubject = typeof knowledgeMapSubject === 'undefined'
+    ? ''
+    : String(knowledgeMapSubject || '').trim();
+  const scope = {
+    stage: normalizedStage,
+    subject: selectedSubject === 'uncategorized' ? '' : selectedSubject,
+    chapter: '',
+    unit: '',
+  };
   const contracts = window.StudyCompanionUiContracts;
   if (!contracts?.mergeKnowledgeMapPage || !contracts?.isCursorStale) {
     throw new Error('StudyCompanionUiContracts failed to load');
@@ -2238,6 +2320,19 @@ async function activateWorkspace(workspaceId, options = {}) {
   return workspaceController.activateWorkspace(workspaceId, options);
 }
 
+async function startBaselineAssessment() {
+  const prompt = t(
+    'ui.practice.baseline_topic_prompt',
+    'Choose a topic in the knowledge map. The first questions will start from the basics.',
+  );
+  setStatus(prompt);
+  setReply(prompt);
+  return activateWorkspace('knowledge', {
+    focus: 'workspace',
+    source: 'baseline-assessment',
+  });
+}
+
 async function routeSurfaceEntry(surfaceId, options = {}) {
   const normalizedSurfaceId = String(surfaceId || '').trim();
   const route = SURFACE_WORKSPACE_ROUTES[normalizedSurfaceId];
@@ -2435,7 +2530,9 @@ function syncCommunicationControls(saving = false) {
 function syncSettingsSavingControls(saving = false) {
   if (settingsSaveBtn) settingsSaveBtn.disabled = saving;
   if (settingsDataSaveBtn) settingsDataSaveBtn.disabled = saving;
+  if (settingsRuntimeSaveBtn) settingsRuntimeSaveBtn.disabled = saving;
   if (settingsDocExportEnabled) settingsDocExportEnabled.disabled = saving;
+  if (settingsCognitiveMode) settingsCognitiveMode.disabled = saving;
   if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = true;
   syncCommunicationControls(saving);
 }
@@ -2499,6 +2596,7 @@ function applySettingsConfig(config) {
   const llm = config.llm || {};
   const communication = config.communication || {};
   const docExport = config.doc_export || {};
+  const cognitive = config.cognitive || {};
   if (settingsDefaultMode) settingsDefaultMode.value = ['companion', 'interactive', 'teaching'].includes(study.default_mode) ? study.default_mode : 'companion';
   syncLearningProfileUi();
   if (settingsOcrEnabled) settingsOcrEnabled.checked = ocr.enabled !== false;
@@ -2518,6 +2616,13 @@ function applySettingsConfig(config) {
   if (settingsSolutionNarrationEnabled) settingsSolutionNarrationEnabled.checked = communication.solution_narration_enabled !== false;
   if (settingsGeneralNarrationEnabled) settingsGeneralNarrationEnabled.checked = communication.general_narration_enabled !== false;
   if (settingsDocExportEnabled) settingsDocExportEnabled.checked = docExport.enabled === true;
+  if (settingsCognitiveMode) {
+    settingsCognitiveMode.value = cognitive.projection_enabled !== true || cognitive.read_mode === 'off'
+      ? 'off'
+      : cognitive.read_mode === 'active' && cognitive.intent_policy === 'on'
+        ? 'active'
+        : 'shadow';
+  }
   syncCommunicationControls();
   renderCommunicationRuntime();
   renderLocalModelsRuntime();
@@ -2555,6 +2660,7 @@ function collectSettingsConfig() {
   const llm = ensureConfigSection(next, 'llm');
   const communication = ensureConfigSection(next, 'communication');
   const docExport = ensureConfigSection(next, 'doc_export');
+  const cognitive = ensureConfigSection(next, 'cognitive');
   study.default_mode = settingsDefaultMode ? settingsDefaultMode.value : 'companion';
   ocr.enabled = settingsOcrEnabled ? settingsOcrEnabled.checked : true;
   rapidocr.lang_type = settingsOcrLanguages && ['ch', 'japan', 'korean', 'en'].includes(settingsOcrLanguages.value)
@@ -2574,6 +2680,13 @@ function collectSettingsConfig() {
   communication.solution_narration_enabled = settingsSolutionNarrationEnabled ? settingsSolutionNarrationEnabled.checked : true;
   communication.general_narration_enabled = settingsGeneralNarrationEnabled ? settingsGeneralNarrationEnabled.checked : true;
   docExport.enabled = settingsDocExportEnabled ? settingsDocExportEnabled.checked : false;
+  const cognitiveMode = ['off', 'shadow', 'active'].includes(settingsCognitiveMode?.value)
+    ? settingsCognitiveMode.value
+    : 'off';
+  cognitive.projection_enabled = cognitiveMode !== 'off';
+  cognitive.read_mode = cognitiveMode;
+  cognitive.intent_policy = cognitiveMode === 'active' ? 'on' : cognitiveMode;
+  cognitive.ui_enabled = cognitiveMode === 'active';
   return next;
 }
 
@@ -2886,7 +2999,8 @@ async function explainText(options = {}) {
 async function generateQuestion(preferredNextStep = null) {
   currentSelectionContext = null;
   await loadPracticeScope();
-  let context = preferredNextStep?.selection_context_id
+  const usePreferredContext = hasUsableSelectionContext(preferredNextStep);
+  let context = usePreferredContext
     ? {
       selection_context_id: preferredNextStep.selection_context_id,
       selected_topic_id: preferredNextStep.topic_id,
@@ -2903,7 +3017,6 @@ async function generateQuestion(preferredNextStep = null) {
     throw new Error(t('ui.error.no_targeted_question_data', 'Not enough study records to generate a practice question yet.'));
   }
   setStatus(t('ui.status.generating_question', 'Generating question...'));
-  clearFeedback();
   const requestQuestion = (selectionContextId) => callPlugin('study_generate_targeted_question', {
     selection_context_id: selectionContextId,
   });
@@ -2911,7 +3024,7 @@ async function generateQuestion(preferredNextStep = null) {
   try {
     data = await requestQuestion(context.selection_context_id);
   } catch (error) {
-    if (!preferredNextStep?.selection_context_id || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
+    if (!usePreferredContext || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
       throw error;
     }
     context = await loadQuestionContext({ silent: true });
@@ -2926,6 +3039,7 @@ async function generateQuestion(preferredNextStep = null) {
     await refreshStatus({ updateReply: false });
     return;
   }
+  clearFeedback();
   setGeneratedQuestion(data);
   setQuestionContext({ ...context, ...data, no_data: false, selection_context_id: '' });
   if (answerInput) answerInput.value = '';
@@ -2948,7 +3062,15 @@ async function evaluateAnswer() {
   if (!answer && !answerInputImageValue) {
     throw new Error(t('ui.error.missing_answer', 'Please enter an answer first.'));
   }
-  setStatus(t('ui.status.evaluating_answer', 'Evaluating answer...'));
+  const evaluatingMessage = t('ui.status.evaluating_answer', 'Evaluating answer...');
+  setStatus(evaluatingMessage);
+  if (evaluationStatus) evaluationStatus.textContent = evaluatingMessage;
+  if (feedbackPanel) feedbackPanel.hidden = false;
+  if (feedbackText) feedbackText.textContent = evaluatingMessage;
+  if (masteryDeltaText) masteryDeltaText.textContent = '';
+  if (nextStepDetails) nextStepDetails.textContent = '';
+  if (continueQuestionBtn) continueQuestionBtn.hidden = true;
+  if (evaluateAnswerBtn) evaluateAnswerBtn.textContent = evaluatingMessage;
   const args = {
     answer,
     question_id: currentQuestion.question_id,
@@ -2960,7 +3082,19 @@ async function evaluateAnswer() {
   if (answerInputImageValue) {
     args.vision_image_base64 = answerInputImageValue;
   }
-  const data = await callPlugin('study_evaluate_answer', args);
+  let data;
+  try {
+    data = await callPlugin('study_evaluate_answer', args);
+  } catch (error) {
+    const errorMessage = formatPluginError(error);
+    if (evaluationStatus) evaluationStatus.textContent = errorMessage;
+    if (feedbackText) feedbackText.textContent = errorMessage;
+    throw error;
+  } finally {
+    if (evaluateAnswerBtn) {
+      evaluateAnswerBtn.textContent = t('ui.button.evaluate_answer', 'Evaluate Answer');
+    }
+  }
   setStatus(data.degraded
     ? t('ui.status.reply_ready_fallback', 'Reply ready (fallback)')
     : t('ui.status.reply_ready', 'Reply ready'));
@@ -2980,7 +3114,9 @@ async function evaluateAnswer() {
     practiceAttemptMessage(data),
     practiceMasteryMessage(data),
     data.feedback || data.reply || '',
-    data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
+    data.next_action
+      ? `${t('ui.practice.next_action', 'Next')}: ${localizedEvaluationNextAction(data.next_action, data.attempt_status || data.verdict)}`
+      : '',
   ].filter(Boolean);
   setReply(replyLines.join('\n\n') || data.summary || '');
   canEvaluateCurrentQuestion = false;
@@ -2989,11 +3125,13 @@ async function evaluateAnswer() {
 }
 
 async function continueAdaptiveLoop() {
-  if (currentNextStep?.action === 'summarize_plan') {
+  const canUsePreview = currentNextStep?.status === 'ready'
+    && currentNextStep?.available_now === true;
+  if (canUsePreview && currentNextStep?.action === 'summarize_plan') {
     await summarizeSession();
     return;
   }
-  await generateQuestion(currentNextStep);
+  await generateQuestion(canUsePreview ? currentNextStep : null);
 }
 
 async function summarizeSession() {
@@ -3200,6 +3338,7 @@ async function bootstrap() {
   }
   bindButton(clearOcrQuestionsBtn, clearSavedOcrQuestions);
   bindButton(generateQuestionBtn, generateQuestion);
+  bindButton(baselineAssessmentBtn, startBaselineAssessment);
   bindButton(clearPracticeScopeBtn, clearPracticeScope);
   bindButton(explainBtn, explainText);
   documentController.bind();
@@ -3326,6 +3465,11 @@ async function bootstrap() {
   if (settingsDataSaveBtn) {
     settingsDataSaveBtn.addEventListener('click', () => {
       saveSettingsConfig(settingsDataConfigStatus);
+    });
+  }
+  if (settingsRuntimeSaveBtn) {
+    settingsRuntimeSaveBtn.addEventListener('click', () => {
+      saveSettingsConfig(settingsRuntimeConfigStatus);
     });
   }
   if (settingsCommunicationEnabled) {

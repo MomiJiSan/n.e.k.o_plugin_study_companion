@@ -39,6 +39,47 @@ def _render_hosted_practice_scope_path(
     return str(json.loads(completed.stdout)["path"])
 
 
+def test_static_empty_practice_state_offers_three_safe_start_paths() -> None:
+    markup = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    runtime = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    assert 'data-workspace-link="knowledge" data-i18n="ui.button.choose_practice_topic"' in markup
+    assert 'data-workspace-link="study" data-i18n="ui.button.import_learning_content"' in markup
+    assert 'id="baselineAssessmentBtn"' in markup
+    assert "async function startBaselineAssessment()" in runtime
+    assert "bindButton(baselineAssessmentBtn, startBaselineAssessment)" in runtime
+    assert "source: 'baseline-assessment'" in runtime
+
+
+def test_empty_practice_state_i18n_contract_is_complete_in_all_locales() -> None:
+    required = {
+        "ui.practice.no_data_title",
+        "ui.practice.no_data_body",
+        "ui.practice.baseline_topic_prompt",
+        "ui.button.choose_practice_topic",
+        "ui.button.import_learning_content",
+        "ui.button.start_baseline_assessment",
+    }
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+        assert all(str(locale[key]).strip() for key in required), locale_path.name
+
+
+def test_both_knowledge_maps_use_stage_wide_subject_facets_and_subject_scoped_pages() -> None:
+    hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
+    static_map = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+    static_runtime = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+
+    for source in (hosted, static_map):
+        assert "subject_counts" in source
+        assert "KNOWLEDGE_SUBJECT_OPTIONS.filter" in source
+    assert "knowledgeMapScope(stage, subject)" in hosted
+    assert "[props.api, selectedStage, selectedSubject]" in hosted
+    assert "subject: selectedSubject" in static_runtime
+    assert "reloadKnowledgeMapForStage(stage)" in static_map
+
+
 def test_hosted_and_static_practice_status_contracts_match() -> None:
     hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
     static = "\n".join(
@@ -317,6 +358,42 @@ def test_both_knowledge_maps_render_boundary_prerequisites() -> None:
             assert locale.get(key, "").strip(), f"{locale_path.name}: {key}"
 
 
+def test_both_knowledge_maps_separate_practice_scope_from_related_topics() -> None:
+    hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+
+    for source in (hosted, static):
+        assert "ui.knowledge.scope_topics" in source
+        assert "ui.knowledge.scope_topics_description" in source
+        assert "ui.knowledge.related_topics" in source
+        assert "ui.knowledge.related_topics_description" in source
+        assert "knowledge-related-card__relation" in source
+        assert "knowledge-related-card__direction" in source
+        assert "knowledge-related-card__reason" in source
+
+    assert "const scopeNodes = nodes.filter" in static
+    assert "const relatedNodes = nodes.filter" in static
+    assert "scopedNodes.slice(0, 60)" in hosted
+    assert "boundaryNodes.slice(0, 24)" in hosted
+    assert ".knowledge-related-section" in css
+    assert ".knowledge-related-card" in css
+
+    import json
+
+    required = {
+        "ui.knowledge.scope_topics",
+        "ui.knowledge.scope_topics_description",
+        "ui.knowledge.related_topics",
+        "ui.knowledge.related_topics_description",
+        "ui.knowledge.related_more_connections",
+    }
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+        assert all(str(locale[key]).strip() for key in required), locale_path.name
+
+
 def test_static_knowledge_map_marks_local_one_hop_nodes_as_render_only_boundaries() -> None:
     import json
     import subprocess
@@ -372,9 +449,121 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    assert "./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825" in index
+    assert "./knowledge-map.js?v=study-related-topics-20260903" in index
+    assert "./style.css?v=study-practice-answer-flow-20260903" in index
     assert "./local-models-controller.js" not in index
-    assert "./main.js?v=study-scanned-pdf-hybrid-0.2.4" in index
+    assert "./main.js?v=study-feedback-i18n-20260903" in index
+
+
+def test_generated_questions_use_math_rendering_in_static_and_hosted_ui() -> None:
+    index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+
+    assert '<div id="questionText" class="study-panel__math-reply"' in index
+    assert '<div id="hintText" class="hint-text" hidden></div>' in index
+    assert "renderQuestionContent(questionText, questionValue);" in static
+    assert "renderQuestionContent(hintText, hint);" in static
+    assert "element.innerHTML = window.renderMathInText(value);" in static
+    assert "<MathReply text={question}" in hosted
+    assert "<pre>{question}</pre>" not in hosted
+
+
+def test_evaluation_feedback_uses_math_rendering_and_removes_whitespace_entities() -> None:
+    index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+
+    assert '<div id="feedbackText" class="study-panel__math-reply"></div>' in index
+    assert '<div id="nextStepDetails" class="study-panel__math-reply"></div>' in index
+    assert "feedbackText.innerHTML = window.renderMathInText(value);" in static
+    assert "nextStepDetails.innerHTML = window.renderMathInText(value);" in static
+    for source in (static, hosted):
+        assert "&#x20;|&#32;|&nbsp;" in source
+    assert "practiceFeedback.reference_answer" in hosted
+    assert "practiceFeedback.missing_points" in hosted
+    assert "normalizeFeedbackDisplayText([" in hosted
+
+
+def test_continue_next_question_refreshes_an_expired_selection_context() -> None:
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+
+    for source in (static, hosted):
+        assert "function hasUsableSelectionContext" in source
+        assert "expiresAt > Date.now() / 1000" in source
+        assert "const usePreferredContext = hasUsableSelectionContext(preferredNextStep);" in source
+        assert "let context" in source and "= usePreferredContext" in source
+        assert "if (!usePreferredContext || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED')" in source
+
+
+def test_failed_next_question_generation_keeps_feedback_and_retry_action_visible() -> None:
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    generate_question = static[
+        static.index("async function generateQuestion"):
+        static.index("async function evaluateAnswer")
+    ]
+
+    request_position = generate_question.index("data = await requestQuestion")
+    degraded_position = generate_question.index("if (data.degraded)")
+    clear_position = generate_question.index("clearFeedback();")
+    question_position = generate_question.index("setGeneratedQuestion(data);")
+    assert request_position < degraded_position < clear_position < question_position
+
+
+def test_static_evaluation_shows_inline_progress_and_errors() -> None:
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    evaluate_answer = static[
+        static.index("async function evaluateAnswer"):
+        static.index("async function continueAdaptiveLoop")
+    ]
+
+    assert "const evaluatingMessage = t('ui.status.evaluating_answer'" in evaluate_answer
+    assert "evaluationStatus.textContent = evaluatingMessage" in evaluate_answer
+    assert "feedbackPanel.hidden = false" in evaluate_answer
+    assert "feedbackText.textContent = evaluatingMessage" in evaluate_answer
+    assert "evaluateAnswerBtn.textContent = evaluatingMessage" in evaluate_answer
+    assert "evaluationStatus.textContent = errorMessage" in evaluate_answer
+    assert "feedbackText.textContent = errorMessage" in evaluate_answer
+    assert "evaluateAnswerBtn.textContent = t('ui.button.evaluate_answer'" in evaluate_answer
+
+
+def test_successful_evaluation_shows_verdict_and_always_offers_next_action() -> None:
+    index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+
+    assert 'id="evaluationVerdict" class="practice-verdict" role="status"' in index
+    assert "evaluationVerdict.dataset.status = attemptStatus || 'unknown'" in static
+    assert "continueQuestionBtn.hidden = false" in static
+    assert 'className="practice-verdict"' in hosted
+    assert "practiceAttemptMessage(practiceFeedback.attempt_status || practiceFeedback.verdict)" in hosted
+    assert "nextStep?.action === 'summarize_plan'" in hosted
+    for source, state_name in ((static, "currentNextStep"), (hosted, "nextStep")):
+        assert "const canUsePreview" in source
+        assert f"generateQuestion(canUsePreview ? {state_name} : null)" in source
+
+
+def test_evaluation_feedback_localizes_model_next_actions_in_both_uis() -> None:
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+    prompts = (ROOT / "prompt_templates.py").read_text(encoding="utf-8")
+    required = {
+        "ui.practice.next_action.correct",
+        "ui.practice.next_action.partial",
+        "ui.practice.next_action.dont_know",
+        "ui.practice.next_action.wrong",
+    }
+
+    for source in (static, hosted):
+        assert "localizedEvaluationNextAction" in source
+        for key in required:
+            assert key in source
+    assert "must use context.language" in prompts
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+        assert all(str(locale[key]).strip() for key in required), locale_path.name
 
 
 def test_local_model_controller_normalizes_transfer_states_and_uses_canceled() -> None:

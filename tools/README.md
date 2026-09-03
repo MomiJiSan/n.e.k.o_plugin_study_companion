@@ -27,8 +27,13 @@ content. Recompute it whenever seed topics or their revision change; do not use
 Run the bounded Shadow gate from the repository root:
 
 ```powershell
-uv run python tools/cognitive_shadow_validation.py --real-model --host-root E:\Work\CODE\N.E.K.O
+uv run --project <N.E.K.O-root> python tools/cognitive_shadow_validation.py `
+  --real-model --host-root <N.E.K.O-root>
 ```
+
+Use the N.E.K.O project environment for a real-model run because the configured
+provider client and its transport dependencies are host-owned. A synthetic-only
+run may continue to use the plugin project's normal `uv run` environment.
 
 The tool uses the reviewed synthetic chain-rule fixture, runs only the listed
 cognitive-engine pytest files, checks model-unavailable fail-closed behavior,

@@ -65,6 +65,7 @@ type KnowledgeMapPage = {
   catalog_revision?: string;
   has_more?: boolean;
   next_cursor?: string;
+  subject_counts?: Record<string, number>;
   edge_truncated?: boolean;
   boundary?: { truncated?: boolean; returned_count?: number; [key: string]: unknown };
   [key: string]: unknown;
@@ -105,10 +106,10 @@ function writeDefaultLearningStage(stage: string) {
   return normalized;
 }
 
-function knowledgeMapScope(stage: string) {
+function knowledgeMapScope(stage: string, subject = 'all') {
   return {
     stage: stage === 'all' ? '' : normalizeLearningStage(stage),
-    subject: '',
+    subject: subject === 'all' ? '' : String(subject || '').trim(),
     chapter: '',
     unit: '',
   };
@@ -117,6 +118,7 @@ function knowledgeMapScope(stage: string) {
 async function loadKnowledgeMapPage(
   api: PluginSurfaceProps['api'],
   stage: string,
+  subject: string,
   current: KnowledgeMapPage | null,
 ): Promise<KnowledgeMapPage> {
   let retryAfterStaleCursor = true;
@@ -128,7 +130,7 @@ async function loadKnowledgeMapPage(
     }
     try {
       const page = await callPlugin(api, 'study_query_knowledge_map', {
-        scope: knowledgeMapScope(stage),
+        scope: knowledgeMapScope(stage, subject),
         page_size: 100,
         cursor,
         include_boundary: true,
@@ -506,7 +508,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     let mounted = true;
     const requestId = mapLoadRequestRef.current += 1;
     setIsLoading(true);
-    loadKnowledgeMapPage(props.api, selectedStage, null)
+    loadKnowledgeMapPage(props.api, selectedStage, selectedSubject, null)
       .then((payload: any) => {
         if (!mounted || requestId !== mapLoadRequestRef.current) {
           return;
@@ -526,7 +528,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     return () => {
       mounted = false;
     };
-  }, [props.api, selectedStage]);
+  }, [props.api, selectedStage, selectedSubject]);
 
   async function loadMoreKnowledgeMap() {
     const current = mapPayloadRef.current;
@@ -534,7 +536,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
     const requestId = mapLoadRequestRef.current;
     setIsLoading(true);
     try {
-      const payload = await loadKnowledgeMapPage(props.api, selectedStage, current);
+      const payload = await loadKnowledgeMapPage(props.api, selectedStage, selectedSubject, current);
       if (requestId !== mapLoadRequestRef.current) return;
       applyMapPayload(payload);
       setError('');
@@ -693,12 +695,19 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   }
 
   const inScopeNodes = nodes.filter((node) => !isBoundaryNode(node));
-  const subjectCounts = new Map<string, number>();
+  const hasSubjectFacets = Boolean(mapPayload?.subject_counts && typeof mapPayload.subject_counts === 'object');
+  const subjectCounts = new Map<string, number>(Object.entries(mapPayload?.subject_counts || {}).map(
+    ([subject, count]) => [subject, Math.max(0, Number(count) || 0)],
+  ));
   inScopeNodes.forEach((node) => {
     const subject = nodeSubject(node);
-    subjectCounts.set(subject, (subjectCounts.get(subject) || 0) + 1);
+    if (!hasSubjectFacets) {
+      subjectCounts.set(subject, (subjectCounts.get(subject) || 0) + 1);
+    } else if (!subjectCounts.has(subject)) {
+      subjectCounts.set(subject, 0);
+    }
   });
-  const knownSubjects = KNOWLEDGE_SUBJECT_OPTIONS.filter((subject) => subjectCounts.has(subject));
+  const knownSubjects = KNOWLEDGE_SUBJECT_OPTIONS.filter((subject) => (subjectCounts.get(subject) || 0) > 0);
   const dynamicSubjects = Array.from(subjectCounts.keys()).filter((subject) => subject && !KNOWLEDGE_SUBJECT_OPTIONS.includes(subject));
   const subjects = ['all', ...knownSubjects, ...dynamicSubjects.sort((left, right) => (
     subjectLabel(props, left).localeCompare(subjectLabel(props, right))
@@ -725,8 +734,8 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   });
   const selectableModules = activeStage === 'college'
     ? modules
-    : subjects.filter((subject) => subject !== 'all' && moduleCounts.has(subject));
-  const activeSubject = selectedSubject !== 'all' && moduleCounts.has(selectedSubject)
+    : subjects.filter((subject) => subject !== 'all' && (subjectCounts.get(subject) || 0) > 0);
+  const activeSubject = selectedSubject !== 'all' && (subjectCounts.get(selectedSubject) || 0) > 0
     ? selectedSubject
     : 'all';
   const moduleNodes = activeSubject === 'all'
@@ -769,6 +778,7 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
   });
   const visibleNodes = [...scopedNodes, ...boundaryNodes];
   const visibleIds = new Set(visibleNodes.map((node) => String(node.id || '')));
+  const visibleNodeById = new Map(visibleNodes.map((node) => [String(node.id || ''), node]));
   const visibleEdges = edges.filter((edge) => (
     visibleIds.has(String(edge.from || '')) && visibleIds.has(String(edge.to || ''))
   ));
@@ -899,7 +909,9 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           <div className="knowledge-stage-selector__actions">
             {selectableModules.map((module) => {
               const label = activeStage === 'college' ? valueLabel(module) : subjectLabel(props, module);
-              const count = moduleCounts.get(module) || 0;
+              const count = activeStage === 'college'
+                ? (moduleCounts.get(module) || 0)
+                : (subjectCounts.get(module) || 0);
               return (
                 <button
                   key={module}
@@ -999,18 +1011,23 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
           </button>
         </div>
       ) : null}
-      {!isLoading ? <div className="study-panel__actions">
-        {visibleNodes.slice(0, 60).map((node) => {
+      {!isLoading ? <section className="knowledge-topic-section knowledge-topic-section--scope">
+        <header className="knowledge-topic-section__header">
+          <strong>{text(props, 'ui.knowledge.scope_topics', 'Topics in current scope')}</strong>
+          <span className="knowledge-topic-section__count">{scopedNodes.length}</span>
+        </header>
+        <p className="knowledge-topic-section__hint">
+          {text(props, 'ui.knowledge.scope_topics_description', 'Practice uses only the topics in this section.')}
+        </p>
+        <div className="study-panel__actions">
+        {scopedNodes.slice(0, 60).map((node) => {
           const masteryText = nodeMasteryText(props, node);
-          const boundary = isBoundaryNode(node);
           return (
             <button
               key={node.id}
               type="button"
-              className={`knowledge-node${boundary ? ' knowledge-node--boundary' : ''}`}
+              className="knowledge-node"
               data-mastery={nodeMasteryLevel(node)}
-              data-boundary={boundary ? 'true' : undefined}
-              aria-label={boundary ? `${nodeLabel(node)}${masteryText}: ${text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}` : undefined}
               aria-pressed={currentNode?.id === node.id ? 'true' : 'false'}
               onClick={(event: any) => {
                 nodeTriggerRef.current = event.currentTarget;
@@ -1018,14 +1035,84 @@ export default function KnowledgeMap(props: PluginSurfaceProps) {
               }}
             >
               <span className="knowledge-node__label">{node.label}{masteryText}</span>
-              {boundary ? <small className="knowledge-node__boundary-label">{text(props, 'ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}</small> : null}
             </button>
           );
         })}
-        {visibleNodes.length > 60 ? (
-          <span className="knowledge-edge-more">+ {visibleNodes.length - 60} {text(props, 'ui.knowledge.edge_more_suffix', 'more')}</span>
+        {scopedNodes.length > 60 ? (
+          <span className="knowledge-edge-more">+ {scopedNodes.length - 60} {text(props, 'ui.knowledge.edge_more_suffix', 'more')}</span>
         ) : null}
-      </div> : null}
+        </div>
+      </section> : null}
+      {!isLoading && boundaryNodes.length ? (
+        <details className="knowledge-related-section">
+          <summary className="knowledge-related-section__summary">
+            <strong>{text(props, 'ui.knowledge.related_topics', 'Related topics')}</strong>
+            <span className="knowledge-topic-section__count">{boundaryNodes.length}</span>
+          </summary>
+          <p className="knowledge-topic-section__hint">
+            {text(
+              props,
+              'ui.knowledge.related_topics_description',
+              'These topics explain prerequisites, applications, confusable ideas, and extensions. They are not included in the current practice scope.',
+            )}
+          </p>
+          <div className="knowledge-related-list">
+            {boundaryNodes.slice(0, 24).map((node) => {
+              const nodeId = String(node.id || '');
+              const connections = visibleEdges.filter((edge) => (
+                (String(edge.from || '') === nodeId && scopedIds.has(String(edge.to || '')))
+                || (String(edge.to || '') === nodeId && scopedIds.has(String(edge.from || '')))
+              ));
+              const primary = connections[0];
+              const rawRelation = String(primary?.relation || 'related').trim().toLowerCase();
+              const source = primary ? nodeLabel(visibleNodeById.get(String(primary.from || '')) || { id: primary.from }) : '';
+              const target = primary ? nodeLabel(visibleNodeById.get(String(primary.to || '')) || { id: primary.to }) : '';
+              const reason = primary ? edgeReason(props, primary, source, target) : '';
+              const path = [
+                stageLabel(props, String(node.stage || '')),
+                subjectLabel(props, String(node.subject || '')),
+                node.chapter,
+                node.unit,
+              ].filter(Boolean).join(' / ');
+              return (
+                <button
+                  key={node.id}
+                  type="button"
+                  className="knowledge-related-card"
+                  data-boundary="true"
+                  data-relation={rawRelation}
+                  aria-label={`${nodeLabel(node)}: ${relationLabel(props, primary?.relation)}`}
+                  onClick={(event: any) => {
+                    nodeTriggerRef.current = event.currentTarget;
+                    setSelectedNode(node);
+                  }}
+                >
+                  <span className="knowledge-related-card__top">
+                    <small className="knowledge-related-card__path">{path}</small>
+                    <span className="knowledge-related-card__relation">{relationLabel(props, primary?.relation)}</span>
+                  </span>
+                  <strong className="knowledge-related-card__title">{nodeLabel(node)}</strong>
+                  {primary ? <span className="knowledge-related-card__direction">{source} → {target}</span> : null}
+                  {reason ? <small className="knowledge-related-card__reason">{reason}</small> : null}
+                  {connections.length > 1 ? (
+                    <small className="knowledge-related-card__more">
+                      {formatText(
+                        props,
+                        'ui.knowledge.related_more_connections',
+                        '+ {count} more connections',
+                        { count: connections.length - 1 },
+                      )}
+                    </small>
+                  ) : null}
+                </button>
+              );
+            })}
+            {boundaryNodes.length > 24 ? (
+              <span className="knowledge-edge-more">+ {boundaryNodes.length - 24} {text(props, 'ui.knowledge.edge_more_suffix', 'more')}</span>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
       <div className="study-panel__reply-label">{text(props, 'ui.knowledge.edge_section', 'Relationships')}</div>
       {!isLoading && visibleEdges.length ? edgeGraph(props, visibleNodes, visibleEdges) : null}
       <div className="knowledge-edge-list">

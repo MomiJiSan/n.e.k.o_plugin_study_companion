@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; object-src 'none'" />
     <title>Study Companion</title>
     <link rel="stylesheet" href="./katex.min.css?v=study-hotfix-20260615v" />
-    <link rel="stylesheet" href="./style.css?v=study-settings-dialog-20260824" />
+    <link rel="stylesheet" href="./style.css?v=study-practice-answer-flow-20260903" />
     <link rel="stylesheet" href="./notebook.css?v=study-notebook-migration-20260823" />
     <link rel="stylesheet" href="./workspace.css?v=study-settings-dialog-20260824" />
   </head>
@@ -223,9 +223,9 @@
                   <button id="clearPracticeScopeBtn" class="button button-secondary" type="button" data-i18n="ui.button.clear_practice_scope" hidden>Clear scope</button>
                 </div>
                 <div class="no-data-actions">
-                  <button class="button button-secondary" type="button" data-open-surface="knowledge-map" data-i18n="ui.button.open_knowledge_map">Open Knowledge Map</button>
-                  <button class="button button-secondary" type="button" data-open-surface="due-review-panel" data-i18n="ui.button.due_reviews">Due Reviews</button>
-                  <button class="button button-secondary" type="button" data-open-surface="memory-deck-list" data-i18n="ui.button.open_decks">Open Decks</button>
+                  <button class="button button-secondary" type="button" data-workspace-link="knowledge" data-i18n="ui.button.choose_practice_topic">Choose a topic</button>
+                  <button class="button button-secondary" type="button" data-workspace-link="study" data-i18n="ui.button.import_learning_content">Import learning content</button>
+                  <button id="baselineAssessmentBtn" class="button button-primary" type="button" data-i18n="ui.button.start_baseline_assessment">Start baseline assessment</button>
                 </div>
               </div>
               <div class="action-row">
@@ -237,9 +237,9 @@
                   <span id="questionDifficultyMeta">-</span>
                   <span id="questionAttemptMeta">-</span>
                 </div>
-                <pre id="questionText" data-i18n="ui.practice.empty_question">Generate a practice question to begin.</pre>
+                <div id="questionText" class="study-panel__math-reply" data-i18n="ui.practice.empty_question">Generate a practice question to begin.</div>
                 <button id="hintToggleBtn" class="button button-secondary" type="button" hidden data-i18n="ui.button.show_hint">Show Hint</button>
-                <p id="hintText" class="hint-text" hidden></p>
+                <div id="hintText" class="hint-text" hidden></div>
               </article>
               <div class="answer-panel" data-i18n-aria-label="ui.label.answer_panel" aria-label="Answer panel">
                 <label class="input-label" for="answerInput" data-i18n="ui.label.answer">Answer</label>
@@ -256,9 +256,10 @@
               </div>
               <div id="feedbackPanel" class="feedback-panel" hidden>
                 <strong data-i18n="ui.practice.feedback_title">Feedback</strong>
+                <div id="evaluationVerdict" class="practice-verdict" role="status"></div>
                 <p id="masteryDeltaText"></p>
-                <pre id="feedbackText"></pre>
-                <p id="nextStepDetails"></p>
+                <div id="feedbackText" class="study-panel__math-reply"></div>
+                <div id="nextStepDetails" class="study-panel__math-reply"></div>
                 <button id="continueQuestionBtn" class="button button-primary" type="button" data-i18n="ui.button.continue_next_question" hidden>Continue to next question</button>
               </div>
             </details>
@@ -532,6 +533,7 @@
                 <button id="tab-memory" role="tab" type="button" aria-selected="false" aria-controls="panel-memory" tabindex="-1" data-settings-tab="memory"><span aria-hidden="true">◫</span><span data-i18n="ui.settings.tab.memory">Memory</span></button>
                 <button id="tab-habit" role="tab" type="button" aria-selected="false" aria-controls="panel-habit" tabindex="-1" data-settings-tab="habit"><span aria-hidden="true">◷</span><span data-i18n="ui.settings.tab.habit">Habit</span></button>
                 <button id="tab-data" role="tab" type="button" aria-selected="false" aria-controls="panel-data" tabindex="-1" data-settings-tab="data"><span aria-hidden="true">▤</span><span data-i18n="ui.settings.tab.data">Data</span></button>
+                <button id="tab-runtime" role="tab" type="button" aria-selected="false" aria-controls="panel-runtime" tabindex="-1" data-settings-tab="runtime"><span aria-hidden="true">⚙</span><span data-i18n="ui.settings.tab.runtime">Runtime</span></button>
               </div>
 
               <div class="settings-drawer__content">
@@ -567,89 +569,6 @@
                   </label>
                 </article>
                 <article class="settings-card">
-                  <h3 data-i18n="ui.settings.ocr.title">OCR</h3>
-                  <p id="settingsOcrSummary" data-i18n="ui.settings.ocr.summary">Waiting for dependency status.</p>
-                  <label class="setting-toggle">
-                    <input id="settingsOcrEnabled" type="checkbox" />
-                    <span data-i18n="ui.settings.ocr_enabled.label">Enable OCR</span>
-                  </label>
-                  <label class="setting-field">
-                    <span data-i18n="ui.settings.recognition_language.label">Recognition language</span>
-                    <select id="settingsOcrLanguages" aria-describedby="settingsRecognitionLanguageHelp">
-                      <option value="ch" data-i18n="ui.settings.recognition_language.ch">Chinese</option>
-                      <option value="japan" data-i18n="ui.settings.recognition_language.japan">Japanese</option>
-                      <option value="korean" data-i18n="ui.settings.recognition_language.korean">Korean</option>
-                      <option value="en" data-i18n="ui.settings.recognition_language.en">English</option>
-                    </select>
-                  </label>
-                  <p id="settingsRecognitionLanguageHelp" class="model-runtime__help" data-i18n="ui.settings.recognition_language.help">Choose the language used to read screenshots and document pages.</p>
-                  <label class="setting-field">
-                    <span data-i18n="ui.settings.ocr_question_persistence.label">Recognized question storage</span>
-                    <select id="settingsOcrQuestionPersistence">
-                      <option value="save_when_used" data-i18n="ui.settings.ocr_question_persistence.save_when_used">Save only when used</option>
-                      <option value="auto_save_questions" data-i18n="ui.settings.ocr_question_persistence.auto_save_questions">Automatically save recognized questions</option>
-                    </select>
-                  </label>
-                  <button id="clearOcrQuestionsBtn" class="button button-secondary" type="button" data-i18n="ui.button.clear_ocr_questions">Clear saved OCR questions</button>
-                </article>
-                <article class="settings-card">
-                  <h3 data-i18n="ui.settings.llm.title">LLM</h3>
-                  <p id="settingsLlmSummary" data-i18n="ui.settings.llm.summary">Uses the Agent and Vision model groups configured by N.E.K.O.</p>
-                  <div class="model-runtime-list" aria-live="polite">
-                    <section class="model-runtime" data-model-runtime="text">
-                      <span class="model-runtime__label" data-i18n="ui.settings.model_runtime.text">Text and document model</span>
-                      <strong class="model-runtime__model">-</strong>
-                      <span class="model-runtime__meta"></span>
-                      <span class="model-runtime__status"></span>
-                    </section>
-                    <section class="model-runtime" data-model-runtime="vision">
-                      <span class="model-runtime__label" data-i18n="ui.settings.model_runtime.vision">Image explanation model</span>
-                      <strong class="model-runtime__model">-</strong>
-                      <span class="model-runtime__meta"></span>
-                      <span class="model-runtime__status"></span>
-                    </section>
-                  </div>
-                  <p class="model-runtime__help" data-i18n="ui.settings.model_runtime.managed_by_neko">Models and credentials are managed in N.E.K.O. Study Companion does not store a separate copy. Long-document analysis may consume multiple free Agent calls.</p>
-                  <div class="model-runtime__actions">
-                    <button id="settingsModelRefreshBtn" class="button button-secondary" type="button" data-i18n="ui.button.refresh_model_status">Refresh model status</button>
-                    <a class="button button-secondary" href="/api_key" target="_blank" rel="noopener noreferrer" data-i18n="ui.button.open_model_settings">Open N.E.K.O model settings</a>
-                  </div>
-                  <label class="setting-field">
-                    <span data-i18n="ui.settings.llm_timeout.label">LLM timeout (seconds)</span>
-                    <input id="settingsLlmTimeout" type="number" min="1" max="3600" step="1" />
-                  </label>
-                  <label class="setting-field setting-field-inline">
-                    <input id="settingsLlmVisionEnabled" type="checkbox" aria-describedby="settingsLlmVisionHelp" />
-                    <span data-i18n="ui.settings.llm_vision_enabled.label">Enable image explanation</span>
-                  </label>
-                  <p id="settingsLlmVisionHelp" data-i18n="ui.settings.llm_vision_enabled.help">Allows pasted JPEG/PNG images to be used for explanation, question generation, and answer evaluation. Requires a vision-capable model.</p>
-                  <section class="local-models-setting" aria-labelledby="settingsLocalModelsTitle">
-                    <h4 id="settingsLocalModelsTitle" data-i18n="ui.settings.local_models.title">Local models (coming soon)</h4>
-                    <label class="setting-toggle">
-                      <input id="settingsLocalModelsEnabled" type="checkbox" disabled aria-describedby="settingsLocalModelsHelp settingsLocalModelsRuntime settingsLocalModelsNotInstalled" />
-                      <span data-i18n="ui.settings.local_models.enabled.label">Coming soon</span>
-                    </label>
-                    <p id="settingsLocalModelsHelp" data-i18n="ui.settings.local_models.enabled.help">Local model support is under development. Requests currently use the N.E.K.O API; no local model is downloaded or started.</p>
-                    <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="coming-soon" data-i18n="ui.settings.local_models.status.not_started">Coming soon</p>
-                    <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">Local model support is not available yet.</p>
-                  </section>
-                  <section class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle" hidden>
-                    <h4 id="settingsLocalModelsAssetsTitle" data-i18n="ui.settings.local_models.assets.title">Local model files</h4>
-                    <label class="setting-field">
-                      <span data-i18n="ui.settings.local_models.directory.label">Model directory</span>
-                      <input id="settingsLocalModelsDirectory" type="text" autocomplete="off" aria-describedby="settingsLocalModelsDirectoryHelp" />
-                    </label>
-                    <p id="settingsLocalModelsDirectoryHelp" class="model-runtime__help" data-i18n="ui.settings.local_models.directory.help">Leave empty to use the app default directory. Applying a directory does not download or start models.</p>
-                    <div class="local-models-assets__actions">
-                      <button id="settingsLocalModelsDirectoryApply" class="button button-secondary" type="button" data-i18n="ui.button.apply_local_model_directory">Apply directory</button>
-                      <button id="settingsLocalModelsAssetsRefresh" class="button button-secondary" type="button" data-i18n="ui.button.refresh_local_models">Refresh local model files</button>
-                    </div>
-                    <p id="settingsLocalModelsAssetsSummary" class="settings-status" aria-live="polite" data-i18n="ui.settings.local_models.assets.status.not_started">Local model assets are not started.</p>
-                    <p id="settingsLocalModelsAssetsDisk" class="model-runtime__help" aria-live="polite" data-i18n="ui.settings.local_models.assets.disk">Disk: — used · — free</p>
-                    <div id="settingsLocalModelsCatalog" class="local-models-catalog" aria-live="polite"></div>
-                  </section>
-                </article>
-                <article class="settings-card">
                   <h3 data-i18n="ui.settings.communication.title">N.E.K.O proactive communication</h3>
                   <label class="setting-toggle">
                     <input id="settingsCommunicationEnabled" type="checkbox" aria-describedby="settingsCommunicationHelp settingsCommunicationRuntime" />
@@ -669,29 +588,6 @@
                   <p id="settingsCommunicationRequiresEnabled" data-i18n="ui.settings.communication.requires_enabled" hidden>Enable N.E.K.O proactive communication first.</p>
                   <p id="settingsCommunicationRuntime" class="settings-status" aria-live="polite"></p>
                 </article>
-              <article class="settings-card">
-                <h3 data-i18n="ui.settings.dependencies.title">Dependencies</h3>
-                <p id="settingsDependencySummary" data-i18n="ui.settings.dependencies.summary">Check whether text recognition and screen capture are ready.</p>
-                <p id="settingsOcrChainStatus" class="dependency-chain-status" aria-live="polite"></p>
-                <div id="settingsDependencyList" class="dependency-list">
-                  <div class="dependency-row" data-dependency="rapidocr">
-                    <span data-i18n="ui.settings.dependencies.name_rapidocr">RapidOCR</span>
-                    <span class="dependency-row__role"></span>
-                    <strong class="dependency-row__status"></strong>
-                    <button class="button button-secondary dependency-row__action" type="button" data-dependency-action="rapidocr_models" hidden></button>
-                  </div>
-                  <div class="dependency-row" data-dependency="dxcam">
-                    <span data-i18n="ui.settings.dependencies.name_dxcam">Screen capture</span>
-                    <span class="dependency-row__role"></span>
-                    <strong class="dependency-row__status"></strong>
-                  </div>
-                </div>
-                <p id="settingsDependencyHelp" class="dependency-help" hidden></p>
-                <div id="settingsDependencyProgress" class="dependency-progress" hidden>
-                  <progress max="100" value="0"></progress>
-                  <span aria-live="polite"></span>
-                </div>
-              </article>
               </div>
               <div class="settings-actions">
                 <button id="settingsSaveBtn" class="button button-primary" type="submit" data-i18n="ui.button.save_settings">Save Settings</button>
@@ -751,11 +647,155 @@
                   <span id="settingsDataConfigStatus" class="settings-status" aria-live="polite"></span>
                 </div>
               </article>
+              <article class="settings-card">
+                <h3 data-i18n="ui.settings.cognitive.title">Cognitive engine</h3>
+                <label class="setting-field">
+                  <span data-i18n="ui.settings.cognitive.mode.label">Operating mode</span>
+                  <select id="settingsCognitiveMode" aria-describedby="settingsCognitiveHelp">
+                    <option value="off" data-i18n="ui.settings.cognitive.mode.off">Off</option>
+                    <option value="shadow" data-i18n="ui.settings.cognitive.mode.shadow">Shadow (observe only)</option>
+                    <option value="active" data-i18n="ui.settings.cognitive.mode.active">Active</option>
+                  </select>
+                </label>
+                <p id="settingsCognitiveHelp" data-i18n="ui.settings.cognitive.help">Shadow analyzes answers without changing questions. Active can influence judgments and the next question.</p>
+              </article>
             </div>
             <div class="settings-entry-row">
               <p id="settingsDataSummary" data-i18n="ui.settings.data.summary">Session history and exports are available in hosted panels.</p>
               <button class="button button-primary" type="button" data-open-surface="session-summary" data-i18n="ui.button.session_summary">Session Summary</button>
               <button class="button button-secondary" type="button" data-open-surface="note-exporter" data-i18n="ui.button.export_notes">Export Notes</button>
+            </div>
+          </div>
+
+          <div id="panel-runtime" class="settings-tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-runtime" data-settings-tab-panel="runtime" hidden>
+            <div class="settings-grid settings-runtime-grid">
+              <details class="settings-card settings-card--collapsible" open>
+                <summary class="settings-card__summary">
+                  <h3 data-i18n="ui.settings.ocr.title">OCR</h3>
+                  <span class="settings-card__summary-state" aria-hidden="true"></span>
+                </summary>
+                <div class="settings-card__content">
+                  <p id="settingsOcrSummary" data-i18n="ui.settings.ocr.summary">Waiting for dependency status.</p>
+                  <label class="setting-toggle">
+                    <input id="settingsOcrEnabled" type="checkbox" />
+                    <span data-i18n="ui.settings.ocr_enabled.label">Enable OCR</span>
+                  </label>
+                  <label class="setting-field">
+                    <span data-i18n="ui.settings.recognition_language.label">Recognition language</span>
+                    <select id="settingsOcrLanguages" aria-describedby="settingsRecognitionLanguageHelp">
+                      <option value="ch" data-i18n="ui.settings.recognition_language.ch">Chinese</option>
+                      <option value="japan" data-i18n="ui.settings.recognition_language.japan">Japanese</option>
+                      <option value="korean" data-i18n="ui.settings.recognition_language.korean">Korean</option>
+                      <option value="en" data-i18n="ui.settings.recognition_language.en">English</option>
+                    </select>
+                  </label>
+                  <p id="settingsRecognitionLanguageHelp" class="model-runtime__help" data-i18n="ui.settings.recognition_language.help">Choose the language used to read screenshots and document pages.</p>
+                  <label class="setting-field">
+                    <span data-i18n="ui.settings.ocr_question_persistence.label">Recognized question storage</span>
+                    <select id="settingsOcrQuestionPersistence">
+                      <option value="save_when_used" data-i18n="ui.settings.ocr_question_persistence.save_when_used">Save only when used</option>
+                      <option value="auto_save_questions" data-i18n="ui.settings.ocr_question_persistence.auto_save_questions">Automatically save recognized questions</option>
+                    </select>
+                  </label>
+                  <button id="clearOcrQuestionsBtn" class="button button-secondary" type="button" data-i18n="ui.button.clear_ocr_questions">Clear saved OCR questions</button>
+                </div>
+              </details>
+
+              <details class="settings-card settings-card--collapsible" open>
+                <summary class="settings-card__summary">
+                  <h3 data-i18n="ui.settings.llm.title">LLM</h3>
+                  <span class="settings-card__summary-state" aria-hidden="true"></span>
+                </summary>
+                <div class="settings-card__content">
+                  <p id="settingsLlmSummary" data-i18n="ui.settings.llm.summary">Uses the Agent and Vision model groups configured by N.E.K.O.</p>
+                  <div class="model-runtime-list" aria-live="polite">
+                    <section class="model-runtime" data-model-runtime="text">
+                      <span class="model-runtime__label" data-i18n="ui.settings.model_runtime.text">Text and document model</span>
+                      <strong class="model-runtime__model">-</strong>
+                      <span class="model-runtime__meta"></span>
+                      <span class="model-runtime__status"></span>
+                    </section>
+                    <section class="model-runtime" data-model-runtime="vision">
+                      <span class="model-runtime__label" data-i18n="ui.settings.model_runtime.vision">Image explanation model</span>
+                      <strong class="model-runtime__model">-</strong>
+                      <span class="model-runtime__meta"></span>
+                      <span class="model-runtime__status"></span>
+                    </section>
+                  </div>
+                  <p class="model-runtime__help" data-i18n="ui.settings.model_runtime.managed_by_neko">Models and credentials are managed in N.E.K.O. Study Companion does not store a separate copy. Long-document analysis may consume multiple free Agent calls.</p>
+                  <div class="model-runtime__actions">
+                    <button id="settingsModelRefreshBtn" class="button button-secondary" type="button" data-i18n="ui.button.refresh_model_status">Refresh model status</button>
+                    <a class="button button-secondary" href="/api_key" target="_blank" rel="noopener noreferrer" data-i18n="ui.button.open_model_settings">Open N.E.K.O model settings</a>
+                  </div>
+                  <label class="setting-field">
+                    <span data-i18n="ui.settings.llm_timeout.label">LLM timeout (seconds)</span>
+                    <input id="settingsLlmTimeout" type="number" min="1" max="3600" step="1" />
+                  </label>
+                  <label class="setting-field setting-field-inline">
+                    <input id="settingsLlmVisionEnabled" type="checkbox" aria-describedby="settingsLlmVisionHelp" />
+                    <span data-i18n="ui.settings.llm_vision_enabled.label">Enable image explanation</span>
+                  </label>
+                  <p id="settingsLlmVisionHelp" data-i18n="ui.settings.llm_vision_enabled.help">Allows pasted JPEG/PNG images to be used for explanation, question generation, and answer evaluation. Requires a vision-capable model.</p>
+                  <section class="local-models-setting" aria-labelledby="settingsLocalModelsTitle">
+                    <h4 id="settingsLocalModelsTitle" data-i18n="ui.settings.local_models.title">Local models (coming soon)</h4>
+                    <label class="setting-toggle">
+                      <input id="settingsLocalModelsEnabled" type="checkbox" disabled aria-describedby="settingsLocalModelsHelp settingsLocalModelsRuntime settingsLocalModelsNotInstalled" />
+                      <span data-i18n="ui.settings.local_models.enabled.label">Coming soon</span>
+                    </label>
+                    <p id="settingsLocalModelsHelp" data-i18n="ui.settings.local_models.enabled.help">Local model support is under development. Requests currently use the N.E.K.O API; no local model is downloaded or started.</p>
+                    <p id="settingsLocalModelsRuntime" class="settings-status" aria-live="polite" data-local-runtime-state="coming-soon" data-i18n="ui.settings.local_models.status.not_started">Coming soon</p>
+                    <p id="settingsLocalModelsNotInstalled" class="model-runtime__help" data-i18n="ui.settings.local_models.not_installed">Local model support is not available yet.</p>
+                  </section>
+                  <section class="local-models-assets" aria-labelledby="settingsLocalModelsAssetsTitle" hidden>
+                    <h4 id="settingsLocalModelsAssetsTitle" data-i18n="ui.settings.local_models.assets.title">Local model files</h4>
+                    <label class="setting-field">
+                      <span data-i18n="ui.settings.local_models.directory.label">Model directory</span>
+                      <input id="settingsLocalModelsDirectory" type="text" autocomplete="off" aria-describedby="settingsLocalModelsDirectoryHelp" />
+                    </label>
+                    <p id="settingsLocalModelsDirectoryHelp" class="model-runtime__help" data-i18n="ui.settings.local_models.directory.help">Leave empty to use the app default directory. Applying a directory does not download or start models.</p>
+                    <div class="local-models-assets__actions">
+                      <button id="settingsLocalModelsDirectoryApply" class="button button-secondary" type="button" data-i18n="ui.button.apply_local_model_directory">Apply directory</button>
+                      <button id="settingsLocalModelsAssetsRefresh" class="button button-secondary" type="button" data-i18n="ui.button.refresh_local_models">Refresh local model files</button>
+                    </div>
+                    <p id="settingsLocalModelsAssetsSummary" class="settings-status" aria-live="polite" data-i18n="ui.settings.local_models.assets.status.not_started">Local model assets are not started.</p>
+                    <p id="settingsLocalModelsAssetsDisk" class="model-runtime__help" aria-live="polite" data-i18n="ui.settings.local_models.assets.disk">Disk: — used · — free</p>
+                    <div id="settingsLocalModelsCatalog" class="local-models-catalog" aria-live="polite"></div>
+                  </section>
+                </div>
+              </details>
+
+              <details class="settings-card settings-card--collapsible" open>
+                <summary class="settings-card__summary">
+                  <h3 data-i18n="ui.settings.dependencies.title">Dependencies</h3>
+                  <span class="settings-card__summary-state" aria-hidden="true"></span>
+                </summary>
+                <div class="settings-card__content">
+                  <p id="settingsDependencySummary" data-i18n="ui.settings.dependencies.summary">Check whether text recognition and screen capture are ready.</p>
+                  <p id="settingsOcrChainStatus" class="dependency-chain-status" aria-live="polite"></p>
+                  <div id="settingsDependencyList" class="dependency-list">
+                  <div class="dependency-row" data-dependency="rapidocr">
+                    <span data-i18n="ui.settings.dependencies.name_rapidocr">RapidOCR</span>
+                    <span class="dependency-row__role"></span>
+                    <strong class="dependency-row__status"></strong>
+                    <button class="button button-secondary dependency-row__action" type="button" data-dependency-action="rapidocr_models" hidden></button>
+                  </div>
+                  <div class="dependency-row" data-dependency="dxcam">
+                    <span data-i18n="ui.settings.dependencies.name_dxcam">Screen capture</span>
+                    <span class="dependency-row__role"></span>
+                    <strong class="dependency-row__status"></strong>
+                  </div>
+                  </div>
+                  <p id="settingsDependencyHelp" class="dependency-help" hidden></p>
+                  <div id="settingsDependencyProgress" class="dependency-progress" hidden>
+                    <progress max="100" value="0"></progress>
+                    <span aria-live="polite"></span>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div class="settings-actions settings-runtime-actions">
+              <button id="settingsRuntimeSaveBtn" class="button button-primary" type="button" data-i18n="ui.button.save_settings">Save Settings</button>
+              <span id="settingsRuntimeConfigStatus" class="settings-status" aria-live="polite"></span>
             </div>
           </div>
               </div>
@@ -790,7 +830,7 @@
     <script src="./notebook-controller.js?v=study-notebook-migration-20260823"></script>
     <script src="./surface-panels.js?v=study-notebook-migration-20260823"></script>
     <script src="./study-ui-contracts.js?v=study-ui-contracts-pr1"></script>
-    <script src="./knowledge-map.js?v=study-knowledge-mastery-status-pr1-20260825"></script>
+    <script src="./knowledge-map.js?v=study-related-topics-20260903"></script>
     <script src="./scanned-pdf-ocr.js?v=study-scanned-pdf-hybrid-0.2.4"></script>
     <script src="./document-controller.js?v=study-scanned-pdf-hybrid-0.2.4"></script>
     <script src="./dependency-controller.js?v=study-rapidocr-only-0.2.1"></script>
@@ -799,6 +839,6 @@
     <script src="./model-runtime.js?v=study-api-runtime-20260902"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=study-scanned-pdf-hybrid-0.2.4"></script>
+    <script src="./main.js?v=study-feedback-i18n-20260903"></script>
   </body>
 </html>

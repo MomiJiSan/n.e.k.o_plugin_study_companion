@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-02T15:47:34.113103Z",
+  "generated_at": "2026-09-03T02:09:29.853154Z",
   "scope": {
     "topics": [
       "calculus.chain_rule",
@@ -428,7 +428,7 @@
   "targeted_tests": {
     "passed": true,
     "exit_code": 0,
-    "duration_seconds": 3.378,
+    "duration_seconds": 12.106,
     "files": [
       "tests/test_cognitive_extractor.py",
       "tests/test_cognitive_model_gateway.py",
@@ -442,7 +442,7 @@
       "tests/test_cognitive_shadow_validation.py"
     ],
     "summary": [
-      "140 passed in 2.68s"
+      "140 passed in 10.87s"
     ]
   },
   "engineering_checks": [
@@ -487,20 +487,20 @@
     "iterations_per_arm": 200,
     "warmup_per_arm": 20,
     "off": {
-      "p50_ms": 0.7369,
-      "p95_ms": 1.1187
+      "p50_ms": 3.9889,
+      "p95_ms": 4.9954
     },
     "on": {
-      "p50_ms": 0.8429,
-      "p95_ms": 1.2098
+      "p50_ms": 4.0025,
+      "p95_ms": 6.9775
     },
-    "p95_delta_ms": 0.0911,
+    "p95_delta_ms": 1.9821,
     "gate_ms": 5.0,
     "gate_passed": true,
     "notes": "Measures only the synchronous atomic enqueue path; no LLM call is in the answer transaction."
   },
   "configured_model_preliminary": {
-    "status": "EVALUATED_WITH_SAFE_FAILURES",
+    "status": "EVALUATED",
     "runtime": {
       "group": "agent",
       "model": "qwen3.7-plus-2026-05-26",
@@ -510,7 +510,7 @@
       "transport": "openai_compatible",
       "transport_supported": true,
       "vision_capability": "not_applicable",
-      "api_source": "neko_managed",
+      "api_source": "custom",
       "provider_code": "qwen",
       "is_free": null,
       "endpoint_hint": "dashscope.aliyuncs.com"
@@ -518,35 +518,33 @@
     "reason": "",
     "evaluation": {
       "sample_count": 22,
-      "exact_match_count": 13,
-      "exact_match_rate": 0.5909090909090909,
-      "expected_item_recall": 0.4375,
+      "exact_match_count": 22,
+      "exact_match_rate": 1.0,
+      "expected_item_recall": 1.0,
       "unexpected_item_rate": 0.0,
       "non_empty_span_rate": 1.0,
-      "failure_reasons": {
-        "invalid_model_output": 8
-      },
+      "failure_reasons": {},
       "hypothesis_metrics": {
         "omit_inner_derivative": {
           "expected": 5,
-          "predicted": 2,
-          "matched": 2,
+          "predicted": 5,
+          "matched": 5,
           "precision": 1.0,
-          "recall": 0.4
+          "recall": 1.0
         },
         "differentiate_inner_incorrectly": {
           "expected": 5,
-          "predicted": 1,
-          "matched": 1,
+          "predicted": 5,
+          "matched": 5,
           "precision": 1.0,
-          "recall": 0.2
+          "recall": 1.0
         },
         "confuse_product_and_chain": {
           "expected": 6,
-          "predicted": 4,
-          "matched": 4,
+          "predicted": 6,
+          "matched": 6,
           "precision": 1.0,
-          "recall": 0.6666666666666666
+          "recall": 1.0
         }
       },
       "adversarial": {
@@ -565,10 +563,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "omit-exp-affine",
@@ -579,10 +582,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "omit-log-affine",
@@ -593,10 +601,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "omit_inner_derivative",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "omit-polynomial-power",
@@ -645,10 +658,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "inner-exp-square",
@@ -678,10 +696,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "inner-root-cube",
@@ -692,10 +715,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "differentiate_inner_incorrectly",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "counter-inner",
@@ -706,10 +734,15 @@
               "counter"
             ]
           ],
-          "actual": [],
+          "actual": [
+            [
+              "differentiate_inner_incorrectly",
+              "counter"
+            ]
+          ],
           "status": "success",
           "failure_reason": "",
-          "exact_match": false
+          "exact_match": true
         },
         {
           "id": "confuse-sin-square-product",
@@ -758,10 +791,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "confuse-power-product",
@@ -772,10 +810,15 @@
               "support"
             ]
           ],
-          "actual": [],
-          "status": "failed",
-          "failure_reason": "invalid_model_output",
-          "exact_match": false
+          "actual": [
+            [
+              "confuse_product_and_chain",
+              "support"
+            ]
+          ],
+          "status": "success",
+          "failure_reason": "",
+          "exact_match": true
         },
         {
           "id": "counter-confusion",

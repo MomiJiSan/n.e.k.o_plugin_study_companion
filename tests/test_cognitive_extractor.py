@@ -134,9 +134,21 @@ async def test_extracts_valid_evidence_through_bounded_neutral_request() -> None
         "evidence_span",
     ]
     assert output_contract["no_other_fields"] is True  # type: ignore[index]
+    assert output_contract["unique_hypothesis_codes"] is True  # type: ignore[index]
+    extraction_rules = request.payload["extraction_rules"]  # type: ignore[assignment]
+    assert any("support/counter are exclusive" in rule for rule in extraction_rules)
     assert any(
-        "counter" in rule
-        for rule in request.payload["extraction_rules"]  # type: ignore[union-attr]
+        "Correct verdict" in rule
+        and "counter disproved codes" in rule
+        and "Wrong verdict" in rule
+        and "never counter" in rule
+        for rule in extraction_rules
+    )
+    assert any(
+        "attempted and wrong" in rule
+        and "differentiate_inner_incorrectly" in rule
+        and "correct factor plus another error => neither" in rule
+        for rule in extraction_rules
     )
     assert _count_tokens(__import__("json").dumps(
         request.payload,

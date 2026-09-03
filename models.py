@@ -671,6 +671,11 @@ class StudyConfig:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload.pop("_rapidocr_lang_type_diagnostic", None)
+        cognitive = payload.get("cognitive")
+        if isinstance(cognitive, dict):
+            supported_topics = cognitive.get("supported_topics")
+            if isinstance(supported_topics, tuple):
+                cognitive["supported_topics"] = list(supported_topics)
         return payload
 
     @staticmethod

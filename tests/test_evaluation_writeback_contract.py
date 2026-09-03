@@ -874,6 +874,90 @@ def test_successful_semantic_repair_finalizes_exactly_once(
     asyncio.run(_run_successful_repair_entry_test(monkeypatch))
 
 
+async def _run_image_only_answer_entry_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, _, _, Ok = _load_answer_entries(
+        monkeypatch, "_evaluation_entry_image_only_answer"
+    )
+    validated_image = "data:image/png;base64,validated"
+    entries._validate_optional_vision_image_payload = (
+        lambda *_args, **_kwargs: validated_image
+    )
+
+    class Agent:
+        calls = 0
+
+        async def answer_evaluate(self, **kwargs):
+            self.calls += 1
+            assert kwargs["answer"] == ""
+            assert kwargs["context"]["vision_image_base64"] == validated_image
+            return _EvaluationReply(
+                {
+                    "verdict": "correct",
+                    "score": 100,
+                    "final_answer_correct": True,
+                    "feedback": "The worked answer in the image is correct.",
+                }
+            )
+
+    class Subject(entries._TutorAnswerEntriesMixin):
+        _agent = Agent()
+        _lock = asyncio.Lock()
+        _state = SimpleNamespace(
+            current_question={
+                "question": "Convert 150 degrees to radians.",
+                "answer": "5π/6",
+                "question_id": "q-image",
+                "attempt_id": "a-image",
+            },
+            active_mode="companion",
+        )
+        finalized = 0
+        persisted = 0
+        logger = _Logger()
+
+        def _resolve_study_target_lanlan(self, _kwargs):
+            return None
+
+        def _resolve_current_run_id(self, _kwargs):
+            return "run"
+
+        async def _build_learning_context(self, _operation, *, input_text, extra):
+            return {**extra, "input_text": input_text}
+
+        async def _finalize_tutor_call(self, _operation, reply, **_kwargs):
+            self.finalized += 1
+            return dict(reply.payload)
+
+        async def _persist_state(self):
+            self.persisted += 1
+
+        async def _emit_answer_evaluated_event(self, **_kwargs):
+            return None
+
+    subject = Subject()
+    result = await subject.study_evaluate_answer(
+        answer="",
+        vision_image_base64=validated_image,
+        question_id="q-image",
+        attempt_id="a-image",
+    )
+
+    assert isinstance(result, Ok)
+    assert result.value["verdict"] == "correct"
+    assert result.value["score"] == 100
+    assert subject._agent.calls == 1
+    assert subject.finalized == 1
+    assert subject.persisted == 1
+
+
+def test_validated_image_only_answer_is_not_treated_as_empty_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asyncio.run(_run_image_only_answer_entry_test(monkeypatch))
+
+
 async def _run_deterministic_short_answer_entry_test(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

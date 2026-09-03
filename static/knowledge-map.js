@@ -398,11 +398,23 @@ function renderKnowledgeSubjectSelector(nodes = [], stage = knowledgeMapActiveSt
   root.appendChild(drawerElement('span', '', t('ui.knowledge.subject_label', 'Subject')));
   const actions = drawerElement('div', 'knowledge-stage-selector__actions');
   const counts = new Map();
+  const facetCounts = currentKnowledgeMapPayload()?.subject_counts;
+  const hasFacetCounts = Boolean(facetCounts && typeof facetCounts === 'object');
+  if (hasFacetCounts) {
+    Object.entries(facetCounts).forEach(([subject, count]) => {
+      const normalizedCount = Math.max(0, Number(count) || 0);
+      if (normalizedCount) counts.set(subject, normalizedCount);
+    });
+  }
   stageNodes.forEach((node) => {
     const subject = subjectValueFromNode(node);
-    counts.set(subject, (counts.get(subject) || 0) + 1);
+    if (!hasFacetCounts) {
+      counts.set(subject, (counts.get(subject) || 0) + 1);
+    } else if (!counts.has(subject)) {
+      counts.set(subject, 0);
+    }
   });
-  const knownSubjects = KNOWLEDGE_SUBJECT_OPTIONS.filter((subject) => counts.has(subject));
+  const knownSubjects = KNOWLEDGE_SUBJECT_OPTIONS.filter((subject) => (counts.get(subject) || 0) > 0);
   const dynamicSubjects = [...counts.keys()].filter((subject) => subject && !KNOWLEDGE_SUBJECT_OPTIONS.includes(subject));
   const subjects = ['all', ...knownSubjects, ...dynamicSubjects.sort((left, right) => (
     knowledgeSubjectLabel(left).localeCompare(knowledgeSubjectLabel(right))
@@ -411,7 +423,9 @@ function renderKnowledgeSubjectSelector(nodes = [], stage = knowledgeMapActiveSt
   subjects.forEach((subject) => {
     const label = knowledgeMapSubjectLabel(subject);
     const countKey = subject === UNCATEGORIZED_SUBJECT ? '' : subject;
-    const count = subject === 'all' ? stageNodes.length : (counts.get(countKey) || 0);
+    const count = subject === 'all'
+      ? [...counts.values()].reduce((total, value) => total + value, 0)
+      : (counts.get(countKey) || 0);
     const button = drawerElement('button', 'knowledge-stage-option', count ? `${label} ${count}` : label);
     button.type = 'button';
     button.dataset.subject = subject === UNCATEGORIZED_SUBJECT ? 'uncategorized' : subject;
@@ -421,7 +435,11 @@ function renderKnowledgeSubjectSelector(nodes = [], stage = knowledgeMapActiveSt
       knowledgeMapCourseFamily = '';
       knowledgeMapChapter = '';
       knowledgeMapUnit = '';
-      rerenderKnowledgeMap();
+      if (typeof reloadKnowledgeMapForStage === 'function') {
+        reloadKnowledgeMapForStage(stage);
+      } else {
+        rerenderKnowledgeMap();
+      }
     });
     actions.appendChild(button);
   });
@@ -782,11 +800,9 @@ function renderKnowledgeNodeDetailDialog(node = {}, edges = [], labelById = new 
 function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElement('div', 'knowledge-node-detail-mount')) {
   const root = drawerElement('div', 'knowledge-stage-groups');
   const labelById = new Map(nodes.map((node) => [String(node.id || node.topic_id || ''), knowledgeNodeLabel(node)]));
-  const groups = new Map();
-  nodes.forEach((node) => {
-    const stage = stageValueFromNode(node);
-    groups.set(stage, [...(groups.get(stage) || []), node]);
-  });
+  const scopeNodes = nodes.filter((node) => !isKnowledgeBoundaryNode(node));
+  const relatedNodes = nodes.filter((node) => isKnowledgeBoundaryNode(node));
+  const scopeIds = new Set(scopeNodes.map((node) => topicIdFromNode(node)));
   const valueLabel = (value, fallback) => {
     const text = String(value || '').trim();
     return text || fallback;
@@ -800,12 +816,19 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
     group.appendChild(drawerElement('summary', 'knowledge-group-summary', label));
     return group;
   };
+  const openNodeDetail = (item, node) => {
+    item.addEventListener('click', () => {
+      const close = () => {
+        detailMount.replaceChildren();
+        item.focus();
+      };
+      detailMount.replaceChildren(renderKnowledgeNodeDetailDialog(node, edges, labelById, close));
+    });
+  };
   const renderNodeButton = (node) => {
-    const boundary = isKnowledgeBoundaryNode(node);
-    const item = drawerElement('button', `knowledge-node${boundary ? ' knowledge-node--boundary' : ''}`);
+    const item = drawerElement('button', 'knowledge-node');
     item.type = 'button';
     item.dataset.mastery = masteryLevelForPanel(node);
-    if (boundary) item.dataset.boundary = 'true';
     const legacyMastery = node.mastery;
     const masteryText = typeof masteryDisplayForPanel === 'function'
       ? masteryDisplayForPanel(node)
@@ -817,65 +840,138 @@ function renderKnowledgeNodes(nodes = [], edges = [], detailMount = drawerElemen
         : '';
     const label = `${node.label || node.name || node.topic_name || node.topic_id || node.id || '-'}${masteryText}`;
     item.appendChild(drawerElement('span', 'knowledge-node__label', label));
-    if (boundary) item.appendChild(drawerElement('small', 'knowledge-node__boundary-label', t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')));
     const titleParts = [
       subjectValueFromNode(node) ? knowledgeSubjectLabel(subjectValueFromNode(node)) : '',
       valueLabel(node.chapter, ''),
       valueLabel(node.unit, ''),
     ].filter(Boolean);
-    if (boundary) titleParts.push(t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite'));
     item.title = titleParts.join(' / ');
-    if (boundary) item.setAttribute('aria-label', `${label}: ${t('ui.knowledge.boundary_prerequisite', 'Out-of-scope prerequisite')}`);
-    item.addEventListener('click', () => {
-      const close = () => {
-        detailMount.replaceChildren();
-        item.focus();
-      };
-      detailMount.replaceChildren(renderKnowledgeNodeDetailDialog(node, edges, labelById, close));
-    });
+    openNodeDetail(item, node);
     return item;
   };
-  const selectedStage = normalizeLearningStage(learningProfile.stage);
-  [...groups.entries()].sort(([stageA], [stageB]) => (
-    stageA === selectedStage ? -1 : stageB === selectedStage ? 1 : [...LEARNING_STAGE_OPTIONS, ''].indexOf(stageA) - [...LEARNING_STAGE_OPTIONS, ''].indexOf(stageB)
-  )).forEach(([stage, items]) => {
-    const section = collapsibleGroup('knowledge-stage-group', `${knowledgeStageLabel(stage)} / ${items.length}`, stage === selectedStage || groups.size === 1);
-    section.dataset.stage = stage || 'uncategorized';
-    if (stage === selectedStage) section.dataset.selected = 'true';
-    const subjectGroups = new Map();
-    items.forEach((node) => {
-      pushGrouped(subjectGroups, subjectValueFromNode(node), node);
+  const renderScopeTree = (treeNodes) => {
+    const tree = drawerElement('div', 'knowledge-scope-tree');
+    const groups = new Map();
+    treeNodes.forEach((node) => {
+      const stage = stageValueFromNode(node);
+      groups.set(stage, [...(groups.get(stage) || []), node]);
     });
-    [...subjectGroups.entries()].sort(([left], [right]) => knowledgeSubjectLabel(left).localeCompare(knowledgeSubjectLabel(right))).forEach(([subject, subjectItems]) => {
-      const subjectSection = collapsibleGroup('knowledge-subject-group', `${knowledgeSubjectLabel(subject)} / ${subjectItems.length}`, subjectGroups.size === 1);
-      const chapterGroups = new Map();
-      subjectItems.forEach((node) => {
-        pushGrouped(chapterGroups, valueLabel(node.chapter, t('ui.knowledge.chapter_uncategorized', 'Uncategorized chapter')), node);
+    const selectedStage = normalizeLearningStage(learningProfile.stage);
+    [...groups.entries()].sort(([stageA], [stageB]) => (
+      stageA === selectedStage ? -1 : stageB === selectedStage ? 1 : [...LEARNING_STAGE_OPTIONS, ''].indexOf(stageA) - [...LEARNING_STAGE_OPTIONS, ''].indexOf(stageB)
+    )).forEach(([stage, items]) => {
+      const section = collapsibleGroup('knowledge-stage-group', `${knowledgeStageLabel(stage)} / ${items.length}`, stage === selectedStage || groups.size === 1);
+      section.dataset.stage = stage || 'uncategorized';
+      if (stage === selectedStage) section.dataset.selected = 'true';
+      const subjectGroups = new Map();
+      items.forEach((node) => {
+        pushGrouped(subjectGroups, subjectValueFromNode(node), node);
       });
-      [...chapterGroups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([chapter, chapterItems]) => {
-        const chapterSection = collapsibleGroup('knowledge-chapter-group', `${chapter} / ${chapterItems.length}`, chapterGroups.size === 1 && chapterItems.length <= 12);
-        const unitGroups = new Map();
-        chapterItems.forEach((node) => {
-          pushGrouped(unitGroups, valueLabel(node.unit, chapter), node);
+      [...subjectGroups.entries()].sort(([left], [right]) => knowledgeSubjectLabel(left).localeCompare(knowledgeSubjectLabel(right))).forEach(([subject, subjectItems]) => {
+        const subjectSection = collapsibleGroup('knowledge-subject-group', `${knowledgeSubjectLabel(subject)} / ${subjectItems.length}`, subjectGroups.size === 1);
+        const chapterGroups = new Map();
+        subjectItems.forEach((node) => {
+          pushGrouped(chapterGroups, valueLabel(node.chapter, t('ui.knowledge.chapter_uncategorized', 'Uncategorized chapter')), node);
         });
-        [...unitGroups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([unit, unitItems]) => {
-          const unitSection = collapsibleGroup('knowledge-unit-group', `${unit} / ${unitItems.length}`, unitGroups.size === 1 && unitItems.length <= 8);
-          const list = drawerElement('div', 'study-panel__actions');
-          unitItems.slice(0, 24).forEach((node) => {
-            list.appendChild(renderNodeButton(node));
+        [...chapterGroups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([chapter, chapterItems]) => {
+          const chapterSection = collapsibleGroup('knowledge-chapter-group', `${chapter} / ${chapterItems.length}`, chapterGroups.size === 1 && chapterItems.length <= 12);
+          const unitGroups = new Map();
+          chapterItems.forEach((node) => {
+            pushGrouped(unitGroups, valueLabel(node.unit, chapter), node);
           });
-          if (unitItems.length > 24) {
-            list.appendChild(drawerElement('span', 'knowledge-edge-more', tf('ui.knowledge.edge_more', '+ {count} more', { count: unitItems.length - 24 })));
-          }
-          unitSection.appendChild(list);
-          chapterSection.appendChild(unitSection);
+          [...unitGroups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([unit, unitItems]) => {
+            const unitSection = collapsibleGroup('knowledge-unit-group', `${unit} / ${unitItems.length}`, unitGroups.size === 1 && unitItems.length <= 8);
+            const list = drawerElement('div', 'study-panel__actions');
+            unitItems.slice(0, 24).forEach((node) => {
+              list.appendChild(renderNodeButton(node));
+            });
+            if (unitItems.length > 24) {
+              list.appendChild(drawerElement('span', 'knowledge-edge-more', tf('ui.knowledge.edge_more', '+ {count} more', { count: unitItems.length - 24 })));
+            }
+            unitSection.appendChild(list);
+            chapterSection.appendChild(unitSection);
+          });
+          subjectSection.appendChild(chapterSection);
         });
-        subjectSection.appendChild(chapterSection);
+        section.appendChild(subjectSection);
       });
-      section.appendChild(subjectSection);
+      tree.appendChild(section);
     });
-    root.appendChild(section);
-  });
+    return tree;
+  };
+
+  const scopeSection = drawerElement('section', 'knowledge-topic-section knowledge-topic-section--scope');
+  const scopeHeader = drawerElement('header', 'knowledge-topic-section__header');
+  scopeHeader.appendChild(drawerElement('strong', '', t('ui.knowledge.scope_topics', 'Topics in current scope')));
+  scopeHeader.appendChild(drawerElement('span', 'knowledge-topic-section__count', String(scopeNodes.length)));
+  scopeSection.appendChild(scopeHeader);
+  scopeSection.appendChild(drawerElement('p', 'knowledge-topic-section__hint', t(
+    'ui.knowledge.scope_topics_description',
+    'Practice uses only the topics in this section.',
+  )));
+  if (scopeNodes.length) scopeSection.appendChild(renderScopeTree(scopeNodes));
+  root.appendChild(scopeSection);
+
+  if (relatedNodes.length) {
+    const relatedSection = drawerElement('details', 'knowledge-related-section');
+    const relatedSummary = drawerElement('summary', 'knowledge-related-section__summary');
+    relatedSummary.appendChild(drawerElement('strong', '', t('ui.knowledge.related_topics', 'Related topics')));
+    relatedSummary.appendChild(drawerElement('span', 'knowledge-topic-section__count', String(relatedNodes.length)));
+    relatedSection.appendChild(relatedSummary);
+    relatedSection.appendChild(drawerElement('p', 'knowledge-topic-section__hint', t(
+      'ui.knowledge.related_topics_description',
+      'These topics explain prerequisites, applications, confusable ideas, and extensions. They are not included in the current practice scope.',
+    )));
+    const relatedList = drawerElement('div', 'knowledge-related-list');
+    relatedNodes.slice(0, 24).forEach((node) => {
+      const nodeId = topicIdFromNode(node);
+      const connections = edges.filter((edge) => (
+        (String(edge.from || '') === nodeId && scopeIds.has(String(edge.to || '')))
+        || (String(edge.to || '') === nodeId && scopeIds.has(String(edge.from || '')))
+      ));
+      const primary = connections[0] || null;
+      const card = drawerElement('button', 'knowledge-related-card');
+      card.type = 'button';
+      card.dataset.boundary = 'true';
+      card.dataset.relation = String(primary?.relation || 'related').trim().toLowerCase();
+      const top = drawerElement('span', 'knowledge-related-card__top');
+      const path = [
+        knowledgeStageLabel(stageValueFromNode(node)),
+        knowledgeSubjectLabel(subjectValueFromNode(node)),
+        valueLabel(node.chapter, ''),
+        valueLabel(node.unit, ''),
+      ].filter(Boolean).join(' / ');
+      top.appendChild(drawerElement('small', 'knowledge-related-card__path', path));
+      top.appendChild(drawerElement('span', 'knowledge-related-card__relation', knowledgeRelationLabel(primary?.relation)));
+      card.appendChild(top);
+      card.appendChild(drawerElement('strong', 'knowledge-related-card__title', knowledgeNodeLabel(node)));
+      if (primary) {
+        const source = labelById.get(String(primary.from || '')) || String(primary.from || '') || '-';
+        const target = labelById.get(String(primary.to || '')) || String(primary.to || '') || '-';
+        card.appendChild(drawerElement('span', 'knowledge-related-card__direction', `${source} → ${target}`));
+        const reason = knowledgeEdgeReason(primary, source, target);
+        if (reason) card.appendChild(drawerElement('small', 'knowledge-related-card__reason', reason));
+      }
+      if (connections.length > 1) {
+        card.appendChild(drawerElement('small', 'knowledge-related-card__more', tf(
+          'ui.knowledge.related_more_connections',
+          '+ {count} more connections',
+          { count: connections.length - 1 },
+        )));
+      }
+      openNodeDetail(card, node);
+      relatedList.appendChild(card);
+    });
+    if (relatedNodes.length > 24) {
+      relatedList.appendChild(drawerElement('span', 'knowledge-edge-more', tf(
+        'ui.knowledge.edge_more',
+        '+ {count} more',
+        { count: relatedNodes.length - 24 },
+      )));
+    }
+    relatedSection.appendChild(relatedList);
+    root.appendChild(relatedSection);
+  }
   return root;
 }
 function knowledgeNodeLabel(node) {
