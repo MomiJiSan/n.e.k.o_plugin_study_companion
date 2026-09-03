@@ -20,6 +20,7 @@ from .adaptive_learning.cognitive_contracts import (
     CognitiveModelResponse,
 )
 from .adaptive_learning.cognitive_extractor import CognitiveExtractor
+from .adaptive_learning.cognitive_versions import get_cognitive_version_set
 from .study_model_gateway import StudyModelGateway
 
 _SYSTEM_INSTRUCTION = (
@@ -103,12 +104,18 @@ def build_cognitive_extractor(
         getattr(config, "model_version", DEFAULT_COGNITIVE_MODEL_VERSION)
         or DEFAULT_COGNITIVE_MODEL_VERSION
     ).strip()
+    versions = get_cognitive_version_set(
+        getattr(config, "version_set", "cognitive-v1")
+    )
+    if versions is None or versions.projection_version != model_version:
+        raise ValueError("unsupported cognitive version set")
     kwargs = {"catalog": catalog} if catalog is not None else {}
     return CognitiveExtractor(
         gateway=StudyCognitiveModelGateway(logger=logger),
         count_tokens=_count_tokens,
         truncate_to_tokens=_truncate_to_tokens,
         model_version=model_version,
+        extractor_version=versions.extractor_version,
         **kwargs,
     )
 

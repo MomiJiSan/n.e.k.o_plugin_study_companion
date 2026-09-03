@@ -7,6 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, TypedDict, cast
 
+from .adaptive_learning.cognitive_versions import (
+    DEFAULT_COGNITIVE_VERSION_SET,
+    LEGACY_COGNITIVE_VERSION_SET,
+    get_cognitive_version_set,
+)
+
 from .constants import (
     MODE_COMPANION,
 )
@@ -447,8 +453,13 @@ class CognitiveConfig:
     read_mode: CognitiveReadMode = "off"
     intent_policy: CognitiveIntentPolicyMode = "off"
     ui_enabled: bool = False
+    retention_enabled: bool = False
     knowledge_graph_enabled: bool = True
-    model_version: str = COGNITIVE_V1_MODEL_VERSION
+    version_set: str = DEFAULT_COGNITIVE_VERSION_SET
+    # Deprecated compatibility input/output. New code selects the projection
+    # version through ``version_set``; old config files containing only
+    # ``model_version = cognitive-v1`` continue to open their old projection.
+    model_version: str = ""
     supported_topics: tuple[str, ...] = COGNITIVE_V1_SUPPORTED_TOPICS
 
     def __post_init__(self) -> None:
@@ -464,15 +475,40 @@ class CognitiveConfig:
             intent_policy if intent_policy in {"off", "shadow", "on"} else "off",
         )
         self.ui_enabled = self.ui_enabled if isinstance(self.ui_enabled, bool) else False
+        self.retention_enabled = (
+            self.retention_enabled
+            if isinstance(self.retention_enabled, bool)
+            else False
+        )
         self.knowledge_graph_enabled = (
             self.knowledge_graph_enabled
             if isinstance(self.knowledge_graph_enabled, bool)
             else False
         )
-        model_version = str(self.model_version or "").strip()
-        self.model_version = (
-            model_version if model_version == COGNITIVE_V1_MODEL_VERSION else COGNITIVE_V1_MODEL_VERSION
-        )
+        requested_set = str(self.version_set or "").strip()
+        legacy_model_version = str(self.model_version or "").strip()
+        requested_versions = get_cognitive_version_set(requested_set)
+        if (
+            legacy_model_version == COGNITIVE_V1_MODEL_VERSION
+            and requested_set == DEFAULT_COGNITIVE_VERSION_SET
+        ):
+            requested_set = LEGACY_COGNITIVE_VERSION_SET
+        elif legacy_model_version and (
+            requested_versions is None
+            or legacy_model_version != requested_versions.projection_version
+        ):
+            requested_set = ""
+        versions = get_cognitive_version_set(requested_set)
+        self.version_set = requested_set
+        self.model_version = versions.projection_version if versions else ""
+        if versions is None:
+            # Unknown component combinations are unusable. Keep the raw name
+            # visible for diagnostics, but switch every behaviour off.
+            self.projection_enabled = False
+            self.read_mode = "off"
+            self.intent_policy = "off"
+            self.ui_enabled = False
+            self.retention_enabled = False
         if not isinstance(self.supported_topics, (list, tuple)):
             self.supported_topics = ()
         else:
@@ -494,13 +530,22 @@ def build_cognitive_config(raw: Mapping[str, Any]) -> CognitiveConfig:
 
     section = raw.get("cognitive")
     cognitive = section if isinstance(section, Mapping) else {}
+    has_version_set = "version_set" in cognitive
+    legacy_model = cognitive.get("model_version", "")
     return CognitiveConfig(
         projection_enabled=cognitive.get("projection_enabled", False),
         read_mode=cognitive.get("read_mode", "off"),
         intent_policy=cognitive.get("intent_policy", "off"),
         ui_enabled=cognitive.get("ui_enabled", False),
+        retention_enabled=cognitive.get("retention_enabled", False),
         knowledge_graph_enabled=cognitive.get("knowledge_graph_enabled", True),
-        model_version=cognitive.get("model_version", COGNITIVE_V1_MODEL_VERSION),
+        version_set=cognitive.get(
+            "version_set",
+            LEGACY_COGNITIVE_VERSION_SET
+            if legacy_model
+            else DEFAULT_COGNITIVE_VERSION_SET,
+        ),
+        model_version="" if has_version_set else legacy_model,
         supported_topics=cognitive.get("supported_topics", COGNITIVE_V1_SUPPORTED_TOPICS),
     )
 

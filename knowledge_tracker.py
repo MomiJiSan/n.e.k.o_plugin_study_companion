@@ -27,6 +27,7 @@ from .adaptive_learning.cognitive_state import (
     CognitiveStateReader,
     LearnerCognitiveStateView,
 )
+from .adaptive_learning.cognitive_versions import get_cognitive_version_set
 from .adaptive_learning.contracts import QuestionPlan
 from .adaptive_learning.learner_state import LearnerStateReader
 from .adaptive_learning.mastery_projection import MasteryV2Projector
@@ -659,6 +660,19 @@ class KnowledgeTracker:
             )
             or DEFAULT_COGNITIVE_MODEL_VERSION
         ).strip()
+        cognitive_version_set = get_cognitive_version_set(
+            _cognitive_config_value(cognitive_config, "version_set", "cognitive-v1")
+        )
+        if (
+            cognitive_version_set is None
+            or cognitive_model_version != cognitive_version_set.projection_version
+        ):
+            self._cognitive_projection_enabled = False
+        cognitive_extractor_version = (
+            cognitive_version_set.extractor_version
+            if cognitive_version_set is not None
+            else ""
+        )
         requested_read_mode = str(
             _cognitive_config_value(cognitive_config, "read_mode", "off") or "off"
         ).strip().lower()
@@ -682,7 +696,17 @@ class KnowledgeTracker:
         else:
             effective_intent_mode = requested_intent_mode
         self._cognitive_model_version = cognitive_model_version
+        self._cognitive_extractor_version = cognitive_extractor_version
         self._cognitive_intent_mode = effective_intent_mode
+        self._cognitive_retention_enabled = bool(
+            self._cognitive_projection_enabled
+            and self._cognitive_read_mode == "active"
+            and effective_intent_mode == "on"
+            and _cognitive_config_value(
+                cognitive_config, "retention_enabled", False
+            )
+            is True
+        )
         self._cognitive_state_reader = (
             CognitiveStateReader(store, model_version=cognitive_model_version)
             if self._cognitive_projection_enabled
@@ -1249,7 +1273,7 @@ class KnowledgeTracker:
                 enqueue_cognitive_projection=(
                     cognitive_eligible and self._cognitive_topic_enabled(topic_id)
                 ),
-                cognitive_extractor_version=DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
+                cognitive_extractor_version=self._cognitive_extractor_version,
                 cognitive_model_version=self._cognitive_model_version,
                 cognitive_intervention_event=cognitive_attempt_event,
             )

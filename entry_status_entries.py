@@ -174,6 +174,18 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         next_cognitive["ui_enabled"] = _coerce_bool(
             cognitive.get("ui_enabled"), current.cognitive.ui_enabled
         )
+    if "retention_enabled" in cognitive:
+        next_cognitive["retention_enabled"] = _coerce_bool(
+            cognitive.get("retention_enabled"),
+            current.cognitive.retention_enabled,
+        )
+    if "version_set" in cognitive:
+        next_cognitive["version_set"] = str(
+            cognitive.get("version_set") or ""
+        ).strip()
+        # ``model_version`` is a derived compatibility field and must not
+        # override an explicitly selected version set during reconstruction.
+        next_cognitive["model_version"] = ""
     if "knowledge_graph_enabled" in cognitive:
         next_cognitive["knowledge_graph_enabled"] = _coerce_bool(
             cognitive.get("knowledge_graph_enabled"),
