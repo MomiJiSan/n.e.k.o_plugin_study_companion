@@ -1167,6 +1167,20 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       t(key, fallback),
     )
   );
+  const practiceScopeDisplayPath = (scope?: PracticeScope | null) => {
+    const path = Array.isArray(scope?.display_path)
+      ? scope.display_path.map((part) => String(part || '').trim()).filter(Boolean)
+      : [];
+    const stage = String(scope?.stage || '').trim();
+    const subject = String(scope?.subject || '').trim();
+    if (path.length && stage) {
+      path[0] = t(`ui.profile.stage.${stage}`, path[0] || stage.replaceAll('_', ' '));
+    }
+    if (path.length > 1 && subject) {
+      path[1] = t(`ui.knowledge.subject.${subject}`, path[1] || subject.replaceAll('_', ' '));
+    }
+    return path.join(' / ');
+  };
   const [status, setStatus] = useState<StudyStatus>({});
   const [modelRuntime, setModelRuntime] = useState<Record<string, StudyModelRuntime>>({});
   const [modelRuntimeLoading, setModelRuntimeLoading] = useState(false);
@@ -3122,6 +3136,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
 
   const stateValue = status.status || 'unknown';
   const stateLabel = t(`status.state.${stateValue}`, stateValue);
+  const activePracticeScopePath = practiceScopeDisplayPath(activePracticeScope);
   const explainLabel = interactionBusy ? t('ui.button.loading', 'Loading...') : t('ui.button.explain', 'Explain');
   const screenType = status.screen_classification?.screen_type || 'idle';
   const evaluation = status.last_answer_evaluation;
@@ -3256,8 +3271,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       <section className="study-panel__state">
         <div>
           <span>{t('ui.practice.scope_label', 'Practice scope')}</span>
-          <strong>{activePracticeScope?.display_path?.length
-            ? activePracticeScope.display_path.join(' / ')
+          <strong>{activePracticeScopePath
+            ? activePracticeScopePath
             : t('ui.practice.scope_automatic', 'Automatic selection')}</strong>
         </div>
         <div>

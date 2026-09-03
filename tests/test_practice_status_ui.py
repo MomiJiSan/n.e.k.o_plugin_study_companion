@@ -40,6 +40,29 @@ def test_both_practice_uis_guard_review_state_by_scope_key() -> None:
     assert "activePracticeScopeRef.current = scope" in hosted
 
 
+def test_both_practice_uis_localize_canonical_scope_dimensions() -> None:
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
+
+    for source in (hosted, static):
+        assert "function practiceScopeDisplayPath" in source or "const practiceScopeDisplayPath" in source
+        assert "ui.profile.stage.${stage}" in source or "learningStageLabel(stage)" in source
+        assert "ui.knowledge.subject.${subject}" in source or "knowledgeSubjectLabel(subject)" in source
+    assert "activePracticeScope.display_path.join(' / ')" not in hosted
+
+
+def test_status_repairs_legacy_question_topic_ids_with_canonical_names() -> None:
+    plugin = (ROOT / "__init__.py").read_text(encoding="utf-8")
+    status_payload = plugin[
+        plugin.index("    def _status_payload"):
+        plugin.index("    def _habit_status_payload")
+    ]
+
+    assert 'current_question.get("selected_topic_id")' in status_payload
+    assert "self._store.get_topic(topic_id)" in status_payload
+    assert 'current_question["selected_topic_name"] = canonical_name' in status_payload
+
+
 def test_hosted_retryable_evaluation_keeps_answer_image() -> None:
     hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
     assert "shouldClearAnswerImage = !isRetryablePracticeError(error)" in hosted
