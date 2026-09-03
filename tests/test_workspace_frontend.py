@@ -218,7 +218,8 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     ):
         assert f'id="{setting_id}"' in runtime_panel
         assert f'id="{setting_id}"' not in study_panel
-    assert runtime_panel.count('class="settings-card settings-card--collapsible" open') == 4
+    assert runtime_panel.count('class="settings-card settings-card--collapsible"') == 4
+    assert 'class="settings-card settings-card--collapsible" open' not in runtime_panel
     assert 'id="settingsRuntimeSaveBtn"' in runtime_panel
 
     assert ".advanced-settings { position: fixed; inset: 0;" in style
