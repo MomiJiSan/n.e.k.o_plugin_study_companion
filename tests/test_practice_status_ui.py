@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from test_coverage_lifecycle_runtime import _load_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
