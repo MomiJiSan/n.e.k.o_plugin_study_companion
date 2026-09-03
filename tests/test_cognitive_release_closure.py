@@ -10,7 +10,9 @@ from types import ModuleType
 
 import pytest
 
+# isort: off
 from adaptive_learning.cognitive_projection import CognitiveProjector
+# isort: on
 
 ROOT = Path(__file__).resolve().parents[1]
 TOPIC = "calculus.chain_rule"

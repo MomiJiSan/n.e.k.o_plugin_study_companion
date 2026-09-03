@@ -7,10 +7,12 @@ from types import ModuleType
 
 import pytest
 
+# isort: off
 from adaptive_learning.cognitive_versions import (
     DEFAULT_COGNITIVE_VERSION_SET,
     get_cognitive_version_set,
 )
+# isort: on
 
 ROOT = Path(__file__).resolve().parents[1]
 

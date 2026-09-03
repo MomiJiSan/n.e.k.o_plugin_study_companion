@@ -5,10 +5,12 @@ from typing import Any
 
 import pytest
 
+# isort: off
 from adaptive_learning.cognitive_projection import (
     CognitiveProjector,
     project_cognitive_fact_timeline,
 )
+# isort: on
 
 TOPIC = "calculus.chain_rule"
 CODE = "omit_inner_derivative"
