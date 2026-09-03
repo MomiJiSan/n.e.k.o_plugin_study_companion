@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from '@neko/plugin-ui';
 import type { PluginSurfaceProps } from '@neko/plugin-ui';
 import { callPlugin as callHostedPlugin, ensureBrandCSS } from './study_surface_utils';
+import { practiceScopeDisplayPath as formatPracticeScopeDisplayPath } from './practice_scope_display';
 import {
   estimateDocumentChunkCount,
   estimatedDocumentAnalysisMode,
@@ -1184,18 +1185,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     )
   );
   const practiceScopeDisplayPath = (scope?: PracticeScope | null) => {
-    const path = Array.isArray(scope?.display_path)
-      ? scope.display_path.map((part) => String(part || '').trim()).filter(Boolean)
-      : [];
-    const stage = String(scope?.stage || '').trim();
-    const subject = String(scope?.subject || '').trim();
-    if (path.length && stage) {
-      path[0] = t(`ui.profile.stage.${stage}`, stage.replaceAll('_', ' '));
-    }
-    if (path.length > 1 && subject) {
-      path[1] = t(`ui.knowledge.subject.${subject}`, subject.replaceAll('_', ' '));
-    }
-    return path.join(' / ');
+    return formatPracticeScopeDisplayPath(scope, t);
   };
   const [status, setStatus] = useState<StudyStatus>({});
   const [modelRuntime, setModelRuntime] = useState<Record<string, StudyModelRuntime>>({});

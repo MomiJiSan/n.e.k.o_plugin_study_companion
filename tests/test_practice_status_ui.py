@@ -15,7 +15,11 @@ def _render_hosted_practice_scope_path(
     translations: dict[str, str],
 ) -> str:
     completed = subprocess.run(
-        ["node", str(ROOT / "tests" / "render_study_panel_scope.cjs")],
+        [
+            "node",
+            "--experimental-strip-types",
+            str(ROOT / "tests" / "render_study_panel_scope.cjs"),
+        ],
         cwd=ROOT,
         input=json.dumps(
             {
