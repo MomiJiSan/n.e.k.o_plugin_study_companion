@@ -8,9 +8,14 @@ never roll back an answer that was already committed.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .adaptive_learning.cognitive_contracts import DEFAULT_COGNITIVE_MODEL_VERSION
+from .adaptive_learning.cognitive_versions import (
+    get_cognitive_version_set,
+    supported_cognitive_version_sets,
+)
+from .store_cognitive_retention import apply_cognitive_obligation_control
 from .store_common import Any, sqlite3, uuid
 
 _QUEUE_STATUSES = frozenset({"pending", "processing", "done", "failed"})
@@ -30,6 +35,23 @@ _CONTROL_ACTIONS = frozenset({"dismiss", "suppress", "restore", "delete"})
 _SUPPRESSING_ACTIONS = frozenset({"dismiss", "suppress", "delete"})
 _PROJECTION_LEASE_SECONDS = 300
 _PROJECTION_RETRY_DELAY_SECONDS = 300
+
+
+def _supported_projection_versions() -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            version_set.projection_version
+            for name in supported_cognitive_version_sets()
+            if (version_set := get_cognitive_version_set(name)) is not None
+        )
+    )
+
+
+def _require_supported_projection_version(value: object) -> str:
+    version = _required_text(value, "model_version")
+    if version not in _supported_projection_versions():
+        raise ValueError("unsupported cognitive projection version")
+    return version
 
 
 def _required_text(value: object, field: str) -> str:
@@ -95,6 +117,7 @@ def _evidence_from_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "question_id": str(row["question_id"] or ""),
         "session_id": str(row["session_id"] or ""),
         "diagnostic_validation_id": str(row["diagnostic_validation_id"] or ""),
+        "root_fact_seq": int(row["root_fact_seq"] or 0),
         "created_at": str(row["created_at"] or ""),
     }
 
@@ -129,6 +152,7 @@ def _control_from_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "action": str(row["action"]),
         "reason": str(row["reason"] or ""),
         "expires_at": str(row["expires_at"] or ""),
+        "root_fact_seq": int(row["root_fact_seq"] or 0),
         "created_at": str(row["created_at"] or ""),
     }
 
@@ -340,8 +364,8 @@ def _write_evidence(conn: sqlite3.Connection, item: dict[str, Any]) -> bool:
             evidence_id, attempt_id, topic_id, hypothesis_code, direction,
             strength, extractor_confidence, diagnosticity, source_kind,
             evidence_span, extractor_version, evidence_family_id, question_id,
-            session_id, diagnostic_validation_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            session_id, diagnostic_validation_id, root_fact_seq, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                   COALESCE(NULLIF(?, ''), datetime('now')))
         ON CONFLICT(attempt_id, hypothesis_code, extractor_version) DO NOTHING
         """,
@@ -361,6 +385,7 @@ def _write_evidence(conn: sqlite3.Connection, item: dict[str, Any]) -> bool:
             item["question_id"],
             item["session_id"],
             item["diagnostic_validation_id"],
+            item["root_fact_seq"],
             item["created_at"],
         ),
     )
@@ -368,6 +393,7 @@ def _write_evidence(conn: sqlite3.Connection, item: dict[str, Any]) -> bool:
 
 
 def _write_snapshot(conn: sqlite3.Connection, item: dict[str, Any]) -> None:
+    _require_supported_projection_version(item["model_version"])
     conn.execute(
         """
         INSERT INTO cognitive_hypothesis_snapshots (
@@ -410,6 +436,7 @@ def _write_current(
     *,
     projected_generation: int,
 ) -> None:
+    _require_supported_projection_version(item["model_version"])
     conn.execute(
         """
         INSERT INTO cognitive_hypothesis_current (
@@ -515,7 +542,7 @@ def _mark_topic_dirty(
     model_version: str,
 ) -> int:
     topic_key = _required_text(topic_id, "topic_id")
-    model_key = _required_text(model_version, "model_version")
+    model_key = _require_supported_projection_version(model_version)
     conn.execute(
         """
         INSERT INTO cognitive_topic_projection_queue (
@@ -913,7 +940,7 @@ def complete_cognitive_projection(
                 params.append(version_key)
             queue_row = conn.execute(
                 f"""
-                SELECT p.extractor_version, a.topic_id
+                SELECT p.extractor_version, a.topic_id, a.root_fact_seq
                 FROM cognitive_extraction_queue p
                 JOIN attempts a ON a.attempt_id = p.attempt_id
                 WHERE p.attempt_id = ? AND p.status = 'processing'
@@ -928,12 +955,18 @@ def complete_cognitive_projection(
             topic_id = str(queue_row["topic_id"] or "").strip()
             if not topic_id:
                 raise ValueError("cognitive projection attempt is not bound to a topic")
+            root_fact_seq = int(queue_row["root_fact_seq"] or 0)
+            if root_fact_seq <= 0:
+                raise ValueError("cognitive projection attempt has no root fact sequence")
             normalized_evidence = [
-                _normalize_evidence(
-                    dict(item),
-                    attempt_id=attempt_key,
-                    extractor_version=extractor_version,
-                )
+                {
+                    **_normalize_evidence(
+                        dict(item),
+                        attempt_id=attempt_key,
+                        extractor_version=extractor_version,
+                    ),
+                    "root_fact_seq": root_fact_seq,
+                }
                 for item in evidence
             ]
             if len({item["hypothesis_code"] for item in normalized_evidence}) != len(
@@ -951,6 +984,7 @@ def complete_cognitive_projection(
                     conn,
                     topic_id=item["topic_id"],
                     hypothesis_code=item["hypothesis_code"],
+                    root_fact_seq=root_fact_seq,
                 )
             ]
             normalized_snapshots = [
@@ -968,6 +1002,7 @@ def complete_cognitive_projection(
                     conn,
                     topic_id=item["topic_id"],
                     hypothesis_code=item["hypothesis_code"],
+                    root_fact_seq=root_fact_seq,
                 )
             ]
             if any(
@@ -1023,20 +1058,19 @@ def _has_delete_tombstone(
     *,
     topic_id: str,
     hypothesis_code: str,
+    root_fact_seq: int,
 ) -> bool:
-    """Fence late extraction so a user deletion remains a real deletion."""
+    """Fence source facts at or before the permanent deletion cutoff."""
 
     row = conn.execute(
         """
-        SELECT action
-        FROM cognitive_user_controls
+        SELECT delete_cutoff_seq
+        FROM cognitive_delete_cutoffs
         WHERE topic_id = ? AND hypothesis_code = ?
-        ORDER BY created_at DESC, rowid DESC
-        LIMIT 1
         """,
         (topic_id, hypothesis_code),
     ).fetchone()
-    return row is not None and str(row["action"] or "").strip() == "delete"
+    return row is not None and root_fact_seq <= int(row["delete_cutoff_seq"])
 
 
 def mark_cognitive_projection_failed(
@@ -1182,22 +1216,31 @@ def claim_cognitive_topic_projections(
         conn = self._require_conn()
         conn.execute("BEGIN IMMEDIATE")
         try:
+            supported_versions = _supported_projection_versions()
+            supported_placeholders = ", ".join("?" for _ in supported_versions)
             conn.execute(
-                """
+                f"""
                 UPDATE cognitive_topic_projection_queue
                 SET status = 'failed', retry_count = retry_count + 1,
                     last_error = 'topic projection lease expired',
                     lease_token = ''
                 WHERE status = 'processing'
                   AND updated_at <= datetime('now', ?)
+                  AND model_version IN ({supported_placeholders})
                 """,
-                (f"-{_PROJECTION_LEASE_SECONDS} seconds",),
+                (f"-{_PROJECTION_LEASE_SECONDS} seconds", *supported_versions),
             )
             model_key = str(model_version or "").strip()
-            version_clause = "AND model_version = ?" if model_key else ""
+            allowed_versions = (
+                (_require_supported_projection_version(model_key),)
+                if model_key
+                else supported_versions
+            )
+            version_clause = "AND model_version IN (" + ", ".join(
+                "?" for _ in allowed_versions
+            ) + ")"
             params: list[Any] = [f"-{_PROJECTION_RETRY_DELAY_SECONDS} seconds"]
-            if model_key:
-                params.append(model_key)
+            params.extend(allowed_versions)
             params.append(max(1, int(limit)))
             rows = conn.execute(
                 f"""
@@ -1263,7 +1306,7 @@ def complete_cognitive_topic_projection(
     """Replace history/current and acknowledge exactly the claimed generation."""
 
     topic_key = _required_text(topic_id, "topic_id")
-    model_key = _required_text(model_version, "model_version")
+    model_key = _require_supported_projection_version(model_version)
     lease_key = _required_text(lease_token, "lease_token")
     generation = _non_negative_int(claimed_generation, "claimed_generation")
     normalized = [
@@ -1402,16 +1445,19 @@ def list_cognitive_evidence(
     through_key = str(through_attempt_id or "").strip()
     if through_key:
         through_row = self._require_read_conn().execute(
-            "SELECT submitted_at FROM attempts WHERE attempt_id = ?",
+            "SELECT root_fact_seq FROM attempts WHERE attempt_id = ?",
             (through_key,),
         ).fetchone()
         if through_row is None:
             return []
-        submitted_at = str(through_row["submitted_at"])
-        clauses.append(
-            "(a.submitted_at < ? OR (a.submitted_at = ? AND a.attempt_id <= ?))"
-        )
-        params.extend((submitted_at, submitted_at, through_key))
+        through_seq = int(through_row["root_fact_seq"] or 0)
+        if through_seq <= 0:
+            return []
+        clauses.append("ce.root_fact_seq <= ?")
+        params.append(through_seq)
+    clauses.append(
+        "ce.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)"
+    )
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     limit_sql = ""
     if limit is not None:
@@ -1422,13 +1468,237 @@ def list_cognitive_evidence(
         SELECT ce.*
         FROM cognitive_evidence ce
         JOIN attempts a ON a.attempt_id = ce.attempt_id
+        LEFT JOIN cognitive_delete_cutoffs cutoffs
+          ON cutoffs.topic_id = ce.topic_id
+         AND cutoffs.hypothesis_code = ce.hypothesis_code
         {where}
-        ORDER BY a.submitted_at, a.attempt_id, ce.evidence_id
+        ORDER BY ce.root_fact_seq, ce.evidence_id
         {limit_sql}
         """,
         params,
     ).fetchall()
     return [item for item in (_evidence_from_row(row) for row in rows) if item]
+
+
+def list_cognitive_fact_timeline(
+    self,
+    *,
+    topic_id: str,
+    hypothesis_code: str | None = None,
+    extractor_version: str | None = None,
+    model_version: str | None = None,
+    limit: int = 10_000,
+) -> list[dict[str, Any]]:
+    """Return immutable cognitive facts in their source-causal order.
+
+    Evidence and its evaluated outcome share the originating attempt root.  A
+    stable per-kind order keeps that atomic package deterministic: evidence is
+    visible to the reducer before the outcome consumes it.
+    """
+
+    topic_key = _required_text(topic_id, "topic_id")
+    code_key = str(hypothesis_code or "").strip()
+    extractor_key = str(extractor_version or "").strip()
+    model_key = str(model_version or "").strip()
+    evidence_rows = list_cognitive_evidence(
+        self,
+        topic_id=topic_key,
+        hypothesis_code=code_key or None,
+        extractor_version=extractor_key or None,
+    )
+    event_clauses = [
+        "events.topic_id = ?",
+        "events.root_fact_seq > 0",
+        "events.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)",
+    ]
+    event_params: list[Any] = [topic_key]
+    if code_key:
+        event_clauses.append("events.hypothesis_code = ?")
+        event_params.append(code_key)
+    if model_key:
+        event_clauses.append("events.hypothesis_model_version = ?")
+        event_params.append(model_key)
+    event_rows = self._require_read_conn().execute(
+        f"""
+        SELECT events.*, attempts.session_id AS attempt_session_id
+        FROM cognitive_intervention_events events
+        LEFT JOIN attempts ON attempts.attempt_id = events.attempt_id
+        LEFT JOIN cognitive_delete_cutoffs cutoffs
+          ON cutoffs.topic_id = events.topic_id
+         AND cutoffs.hypothesis_code = events.hypothesis_code
+        WHERE {' AND '.join(event_clauses)}
+        ORDER BY events.root_fact_seq, events.event_seq
+        """,
+        event_params,
+    ).fetchall()
+    retention_clauses = [
+        "obligations.topic_id = ?",
+        "attempts.root_fact_seq > 0",
+        "attempts.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)",
+        "source_attempts.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)",
+        "satisfactions.disposition IN ("
+        "'resolved', 'relapse', 'reschedule', 'ordinary_evidence'"
+        ")",
+    ]
+    retention_params: list[Any] = [topic_key]
+    if code_key:
+        retention_clauses.append("obligations.hypothesis_code = ?")
+        retention_params.append(code_key)
+    if model_key:
+        retention_clauses.append("episodes.model_version = ?")
+        retention_params.append(model_key)
+    satisfaction_rows = self._require_read_conn().execute(
+        f"""
+        SELECT satisfactions.*, obligations.hypothesis_id,
+               obligations.topic_id, obligations.hypothesis_code,
+               episodes.model_version, attempts.root_fact_seq,
+               attempts.session_id AS attempt_session_id
+        FROM cognitive_obligation_satisfactions satisfactions
+        JOIN cognitive_learning_obligations obligations
+          ON obligations.obligation_id = satisfactions.obligation_id
+        JOIN cognitive_monitoring_episodes episodes
+          ON episodes.episode_id = satisfactions.episode_id
+        JOIN attempts ON attempts.attempt_id = satisfactions.attempt_id
+        JOIN attempts source_attempts
+          ON source_attempts.attempt_id = episodes.source_attempt_id
+        LEFT JOIN cognitive_delete_cutoffs cutoffs
+          ON cutoffs.topic_id = obligations.topic_id
+         AND cutoffs.hypothesis_code = obligations.hypothesis_code
+        WHERE {' AND '.join(retention_clauses)}
+        ORDER BY attempts.root_fact_seq, satisfactions.satisfaction_id
+        """,
+        retention_params,
+    ).fetchall()
+    episode_clauses = [
+        "episodes.topic_id = ?",
+        "facts.root_fact_seq > 0",
+        "source_attempts.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)",
+    ]
+    episode_params: list[Any] = [topic_key]
+    if code_key:
+        episode_clauses.append("episodes.hypothesis_code = ?")
+        episode_params.append(code_key)
+    if model_key:
+        episode_clauses.append("episodes.model_version = ?")
+        episode_params.append(model_key)
+    episode_rows = self._require_read_conn().execute(
+        f"""
+        SELECT facts.*, episodes.hypothesis_id, episodes.topic_id,
+               episodes.hypothesis_code, episodes.model_version,
+               episodes.source_attempt_id
+        FROM cognitive_monitoring_episode_facts facts
+        JOIN cognitive_monitoring_episodes episodes
+          ON episodes.episode_id = facts.episode_id
+        JOIN attempts source_attempts
+          ON source_attempts.attempt_id = episodes.source_attempt_id
+        LEFT JOIN cognitive_delete_cutoffs cutoffs
+          ON cutoffs.topic_id = episodes.topic_id
+         AND cutoffs.hypothesis_code = episodes.hypothesis_code
+        WHERE {' AND '.join(episode_clauses)}
+        ORDER BY facts.root_fact_seq, facts.fact_id
+        """,
+        episode_params,
+    ).fetchall()
+    facts = [
+        {
+            "fact_kind": "evidence",
+            "root_fact_seq": int(item["root_fact_seq"]),
+            "fact_order": 0,
+            "payload": item,
+        }
+        for item in evidence_rows
+        if int(item.get("root_fact_seq") or 0) > 0
+    ]
+    for row in event_rows:
+        event = {
+            "event_seq": int(row["event_seq"]),
+            "event_id": str(row["event_id"]),
+            "event_type": str(row["event_type"]),
+            "decision_id": str(row["decision_id"]),
+            "hypothesis_id": str(row["hypothesis_id"]),
+            "topic_id": str(row["topic_id"]),
+            "hypothesis_code": str(row["hypothesis_code"]),
+            "model_version": str(row["hypothesis_model_version"]),
+            "learning_intent": str(row["learning_intent"]),
+            "repair_strategy": str(row["repair_strategy"]),
+            "question_id": str(row["question_id"]),
+            "attempt_id": str(row["attempt_id"]),
+            "session_id": str(row["attempt_session_id"] or ""),
+            "diagnostic_validation_id": str(row["diagnostic_validation_id"]),
+            "evaluation_verdict": str(row["evaluation_verdict"]),
+            "abandonment_reason": str(row["abandonment_reason"]),
+            "created_at": str(row["occurred_at"]),
+            "root_fact_seq": int(row["root_fact_seq"] or 0),
+        }
+        facts.append(
+            {
+                "fact_kind": "intervention",
+                "root_fact_seq": event["root_fact_seq"],
+                "fact_order": 1,
+                "payload": event,
+            }
+        )
+    for row in satisfaction_rows:
+        satisfaction = {
+            "satisfaction_id": str(row["satisfaction_id"]),
+            "obligation_id": str(row["obligation_id"]),
+            "episode_id": str(row["episode_id"]),
+            "claim_id": str(row["claim_id"]),
+            "attempt_id": str(row["attempt_id"]),
+            "hypothesis_id": str(row["hypothesis_id"]),
+            "topic_id": str(row["topic_id"]),
+            "hypothesis_code": str(row["hypothesis_code"]),
+            "model_version": str(row["model_version"]),
+            "disposition": str(row["disposition"]),
+            "metadata_json": str(row["metadata_json"]),
+            "session_id": str(row["attempt_session_id"] or ""),
+            "created_at": str(row["occurred_at"]),
+            "root_fact_seq": int(row["root_fact_seq"] or 0),
+        }
+        facts.append(
+            {
+                "fact_kind": "obligation_satisfaction",
+                "root_fact_seq": satisfaction["root_fact_seq"],
+                "fact_order": 2,
+                "payload": satisfaction,
+            }
+        )
+    for row in episode_rows:
+        episode_fact = {
+            "fact_id": str(row["fact_id"]),
+            "episode_id": str(row["episode_id"]),
+            "event_type": str(row["fact_type"]),
+            "hypothesis_id": str(row["hypothesis_id"]),
+            "topic_id": str(row["topic_id"]),
+            "hypothesis_code": str(row["hypothesis_code"]),
+            "model_version": str(row["model_version"]),
+            "source_attempt_id": str(row["source_attempt_id"]),
+            "created_at": str(row["occurred_at"]),
+            "root_fact_seq": int(row["root_fact_seq"] or 0),
+        }
+        facts.append(
+            {
+                "fact_kind": "episode",
+                "root_fact_seq": episode_fact["root_fact_seq"],
+                "fact_order": 2,
+                "payload": episode_fact,
+            }
+        )
+    facts.sort(
+        key=lambda item: (
+            int(item["root_fact_seq"]),
+            int(item["fact_order"]),
+            int(item["payload"].get("event_seq") or 0),
+            str(
+                item["payload"].get("evidence_id")
+                or item["payload"].get("event_id")
+                or item["payload"].get("satisfaction_id")
+                or item["payload"].get("fact_id")
+                or ""
+            ),
+        )
+    )
+    return facts[: max(1, int(limit))]
 
 
 def upsert_cognitive_hypothesis_snapshot(
@@ -1472,7 +1742,7 @@ def replace_cognitive_hypothesis_snapshots(
 ) -> list[dict[str, Any]]:
     """Atomically replace one topic/model projection during a full rebuild."""
     topic_key = _required_text(topic_id, "topic_id")
-    model_key = _required_text(model_version, "model_version")
+    model_key = _require_supported_projection_version(model_version)
     normalized = [
         _normalize_snapshot(dict(item), default_model_version=model_key)
         for item in snapshots
@@ -1556,7 +1826,7 @@ def list_cognitive_hypothesis_snapshots(
         FROM cognitive_hypothesis_snapshots chs
         JOIN attempts a ON a.attempt_id = chs.source_attempt_id
         {where}
-        ORDER BY a.submitted_at DESC, a.attempt_id DESC, chs.snapshot_id DESC
+        ORDER BY a.root_fact_seq DESC, chs.snapshot_id DESC
         """,
         params,
     ).fetchall()
@@ -1583,6 +1853,7 @@ def list_cognitive_hypothesis_current(
     hypothesis_code: str | None = None,
     model_version: str | None = None,
     limit: int = 100,
+    as_of: str | datetime | None = None,
 ) -> list[dict[str, Any]]:
     clauses: list[str] = []
     params: list[Any] = []
@@ -1606,7 +1877,43 @@ def list_cognitive_hypothesis_current(
         """,
         params,
     ).fetchall()
-    return [item for item in (_current_from_row(row) for row in rows) if item]
+    items = [item for item in (_current_from_row(row) for row in rows) if item]
+    point = datetime.now(timezone.utc) if as_of is None else _parse_datetime(as_of)
+    for item in items:
+        # Projection rows never own user control.  Derive the compatibility
+        # status from reducer fields, then overlay only the latest control at
+        # read time so an expired suppress resumes without another rebuild.
+        item["user_override"] = ""
+        item["status"] = _compat_status_from_reducer_fields(item)
+        controls = list_cognitive_user_controls(
+            self,
+            topic_id=item["topic_id"],
+            hypothesis_code=item["hypothesis_code"],
+            limit=1,
+        )
+        if not controls or not _control_is_active(controls[0], point):
+            continue
+        override = {
+            "dismiss": "dismissed",
+            "suppress": "suppressed",
+            "delete": "deleted",
+        }.get(str(controls[0].get("action") or ""), "")
+        if override:
+            item["user_override"] = override
+            item["status"] = "dismissed"
+    return items
+
+
+def _compat_status_from_reducer_fields(item: dict[str, Any]) -> str:
+    stage = str(item.get("intervention_stage") or "idle").strip()
+    if stage in {"remediating", "provisionally_resolved", "monitored", "resolved"}:
+        return stage
+    evidence_status = str(item.get("evidence_status") or "hypothesized").strip()
+    return (
+        evidence_status
+        if evidence_status in {"hypothesized", "supported", "contradicted"}
+        else "hypothesized"
+    )
 
 
 def record_cognitive_user_control(
@@ -1626,8 +1933,14 @@ def record_cognitive_user_control(
         raise ValueError(f"unsupported cognitive user control action: {action_key}")
     control_key = _required_text(control_id or uuid.uuid4(), "control_id")
     expiry = _iso_datetime(expires_at, "expires_at")
+    if action_key == "suppress" and not expiry:
+        raise ValueError("suppress controls require expires_at")
     if action_key != "suppress" and expiry:
         raise ValueError("expires_at is only valid for suppress controls")
+    if action_key == "suppress":
+        parsed_expiry = _parse_datetime(expiry)
+        if parsed_expiry > datetime.now(timezone.utc) + timedelta(hours=24):
+            raise ValueError("suppress controls must expire within 24 hours")
     with self._lock:
         conn = self._require_conn()
         conn.execute("BEGIN IMMEDIATE")
@@ -1649,6 +1962,7 @@ def record_cognitive_user_control(
                 str(row["model_version"] or "").strip()
                 for row in model_rows
                 if str(row["model_version"] or "").strip()
+                in _supported_projection_versions()
             } or {DEFAULT_COGNITIVE_MODEL_VERSION}
             conn.execute(
                 """
@@ -1697,6 +2011,13 @@ def record_cognitive_user_control(
                     """,
                     (topic_key, code_key),
                 )
+            apply_cognitive_obligation_control(
+                self,
+                conn,
+                topic_id=topic_key,
+                hypothesis_code=code_key,
+                action=action_key,
+            )
             for version in model_versions:
                 _mark_topic_dirty(
                     conn,
@@ -1740,7 +2061,7 @@ def list_cognitive_user_controls(
         f"""
         SELECT * FROM cognitive_user_controls
         {where}
-        ORDER BY created_at DESC, rowid DESC
+        ORDER BY root_fact_seq DESC, rowid DESC
         LIMIT ?
         """,
         params,
@@ -1789,4 +2110,4 @@ def _control_is_active(item: dict[str, Any], point: datetime) -> bool:
     if item["action"] != "suppress":
         return True
     expiry = str(item.get("expires_at") or "").strip()
-    return not expiry or _parse_datetime(expiry) > point
+    return bool(expiry) and _parse_datetime(expiry) > point

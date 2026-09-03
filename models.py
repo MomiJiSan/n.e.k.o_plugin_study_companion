@@ -12,7 +12,6 @@ from .adaptive_learning.cognitive_versions import (
     LEGACY_COGNITIVE_VERSION_SET,
     get_cognitive_version_set,
 )
-
 from .constants import (
     MODE_COMPANION,
 )
@@ -72,6 +71,18 @@ PRIVATE_CURRENT_QUESTION_FIELDS = frozenset(
         "diagnostic_validation_id",
         "cognitive_blueprint_id",
         "cognitive_question_family_id",
+        "cognitive_strategy",
+        "obligation_refs",
+        "cognitive_episode_id",
+        "cognitive_obligation_id",
+        "cognitive_claim_id",
+        "cognitive_claim_token",
+        "cognitive_claim_worker_id",
+        "cognitive_claim_lease_expires_at",
+        "retention_blueprint_version",
+        "retention_validator_version",
+        "cognitive_independence_group",
+        "cognitive_transfer_question_family_id",
         "competing_hypothesis_codes",
         "diagnostic_signature",
     }

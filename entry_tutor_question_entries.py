@@ -6,8 +6,11 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from functools import wraps
 from types import SimpleNamespace
+from typing import cast
 
 from .adaptive_learning import (
+    CognitivePolicyDecision,
+    LearningActionCandidate,
     PracticeSelection,
     QuestionGenerationFailure,
     QuestionGenerationResult,
@@ -27,8 +30,25 @@ from .adaptive_learning.cognitive_intervention import (
     hypothesis_ref_from_payload,
     hypothesis_ref_payload,
 )
+from .adaptive_learning.cognitive_retention import (
+    RETENTION_BLUEPRINT_VERSION,
+    RETENTION_COGNITIVE_STRATEGY,
+    RETENTION_VALIDATOR_VERSION,
+    PreparedRetentionQuestion,
+    RetentionActionProposal,
+    prepare_retention_question,
+    retention_question_payload,
+    validate_retention_question_payload,
+)
 from .adaptive_learning.learner_state import tracker_list_mastery
-from .adaptive_learning.planner import build_question_plan
+from .adaptive_learning.planner import (
+    apply_readiness_policy,
+    build_question_plan,
+    candidate_topic_ids,
+    merge_learning_action_candidates,
+    select_scope_fallback_topic,
+    selection_reason_payload,
+)
 from .adaptive_learning.question_application import QuestionApplicationService
 from .adaptive_learning.question_factory import (
     QuestionFactory,
@@ -56,7 +76,6 @@ from .llm_prompts import ensure_targeted_prompt_context_fits
 from .models import public_current_question_payload
 from .practice_scope import (
     filter_question_params_to_scope,
-    ordered_scope_topics,
     practice_scope_matches_topic,
 )
 from .question_type_mapping import (
@@ -206,6 +225,56 @@ async def _record_cognitive_abandonment_best_effort(
         except Exception:
             pass
     return succeeded
+
+
+def _retention_claim_fields(value: dict[str, Any] | None) -> dict[str, str]:
+    payload = dict(value or {})
+    binding = payload.get("target_binding")
+    binding = dict(binding) if isinstance(binding, dict) else {}
+
+    def field(name: str) -> str:
+        return str(payload.get(name) or binding.get(name) or "").strip()
+
+    return {
+        name: field(name)
+        for name in (
+            "cognitive_episode_id",
+            "cognitive_obligation_id",
+            "cognitive_claim_id",
+            "cognitive_claim_token",
+            "cognitive_claim_worker_id",
+            "cognitive_claim_lease_expires_at",
+        )
+    }
+
+
+async def _release_retention_claim_best_effort(
+    owner: Any,
+    value: dict[str, Any] | None,
+) -> bool:
+    fields = _retention_claim_fields(value)
+    obligation_id = fields["cognitive_obligation_id"]
+    claim_token = fields["cognitive_claim_token"]
+    worker_id = fields["cognitive_claim_worker_id"]
+    if not all((obligation_id, claim_token, worker_id)):
+        return True
+    release = getattr(
+        getattr(owner, "_store", None),
+        "release_cognitive_obligation_claim",
+        None,
+    )
+    if not callable(release):
+        return False
+    try:
+        await asyncio.to_thread(
+            release,
+            obligation_id=obligation_id,
+            claim_token=claim_token,
+            worker_id=worker_id,
+        )
+    except Exception:
+        return False
+    return True
 
 
 def _cognitive_question_fields(targeted_context: dict[str, Any] | None, *, topic_id: str) -> dict[str, Any]:
@@ -739,117 +808,87 @@ class _TutorQuestionEntriesMixin:
 
     def _selection_from_question_params(self, params: dict[str, Any]) -> dict[str, Any]:
         params = dict(params or {})
-        target_topic = dict(params.get("target_topic") or {})
-        target_topic_id = str(params.get("target_topic_id") or "").strip()
         weak_topics = list(params.get("weak_topics") or [])
         due_reviews = list(params.get("due_reviews") or [])
-        retry = dict(params.get("retry_wrong_question") or {})
-        candidate_evidence = list(params.get("candidate_evidence") or [])
-
-        reason = "no_data"
-        selected_topic_id = target_topic_id
-        selected_topic_name = _topic_name(target_topic, selected_topic_id)
-        reason_payload: dict[str, Any] = {}
-
-        if retry:
-            selected_topic_id = str(retry.get("topic_id") or selected_topic_id).strip()
-            retry_topic = self._knowledge_tracker.store.get_topic(selected_topic_id)
-            selected_topic_name = _topic_name(retry_topic, selected_topic_id)
-            reason = "retry"
-            reason_payload = {"wrong_question": _safe_wrong_question_summary(retry)}
-        elif due_reviews:
-            first_due = dict(due_reviews[0] or {})
-            due_topic = dict(first_due.get("topic") or {})
-            selected_topic_id = str(first_due.get("topic_id") or due_topic.get("id") or selected_topic_id).strip()
-            selected_topic_name = _topic_name(due_topic, selected_topic_id)
-            reason = "due_review"
-            reason_payload = {"due_review": first_due}
-        elif weak_topics:
-            first_weak = dict(weak_topics[0] or {})
-            selected_topic_id = str(first_weak.get("topic_id") or first_weak.get("id") or selected_topic_id).strip()
-            weak_topic = self._knowledge_tracker.store.get_topic(selected_topic_id)
-            selected_topic_name = _topic_name(
-                weak_topic,
-                str(
-                    first_weak.get("topic_name")
-                    or first_weak.get("name")
-                    or first_weak.get("topic")
-                    or selected_topic_id
-                ),
-            )
-            reason = "weak_topic"
-            reason_payload = {"weak_topic": first_weak}
-        elif params.get("blocked_diagnostic"):
-            diagnostic = dict(params.get("blocked_diagnostic") or {})
-            selected_topic_id = str(diagnostic.get("target_topic_id") or selected_topic_id).strip()
-            diagnostic_topic = self._knowledge_tracker.store.get_topic(selected_topic_id)
-            selected_topic_name = _topic_name(diagnostic_topic, selected_topic_id)
-            reason = "blocked_diagnostic"
-            reason_payload = {"blocked_diagnostic": diagnostic}
-        elif candidate_evidence:
-            first_candidate = dict(candidate_evidence[0] or {})
-            candidate_payload = dict(first_candidate.get("payload") or {})
-            candidate_summary = dict(first_candidate.get("payload_summary") or {})
-            selected_topic_id = str(
-                candidate_payload.get("topic_id")
-                or candidate_summary.get("topic_id")
-                or first_candidate.get("topic_id")
-                or selected_topic_id
-            ).strip()
-            selected_topic_name = str(
-                candidate_payload.get("name")
-                or candidate_summary.get("name")
-                or first_candidate.get("name")
-                or selected_topic_id
-            ).strip()
-            reason = "recommended"
-            reason_payload = {"candidate": first_candidate}
-        elif selected_topic_id:
-            reason = "recommended"
-            reason_payload = {"target_topic": target_topic}
-
-        if not selected_topic_id and not selected_topic_name:
-            reason = "no_data"
-
-        # The planner is being introduced behind a conservative adapter: it
-        # may confirm the server-owned topic choice only when it produces the
-        # exact legacy result.  Public targeted-context fields, reason
-        # payloads, difficulty coercion, and the no-data path deliberately
-        # remain owned by this compatibility block until the full planner
-        # migration is complete.
-        planner_catalog = (
-            {
-                selected_topic_id: {
-                    "id": selected_topic_id,
-                    "name": selected_topic_name or selected_topic_id,
-                }
-            }
-            if selected_topic_id
-            else {}
+        planner_catalog: dict[str, dict[str, Any]] = {}
+        tracker = getattr(self, "_knowledge_tracker", None)
+        store = getattr(tracker, "store", None)
+        retention_proposals: tuple[RetentionActionProposal, ...] = ()
+        propose_retention = getattr(
+            tracker,
+            "propose_cognitive_retention_actions",
+            None,
         )
+        if callable(propose_retention):
+            try:
+                proposed = propose_retention()
+                retention_proposals = tuple(
+                    item
+                    for item in (
+                        proposed if isinstance(proposed, (list, tuple)) else ()
+                    )
+                    if isinstance(item, RetentionActionProposal)
+                )
+            except Exception:
+                retention_proposals = ()
+        get_topic = getattr(store, "get_topic", None)
+        if callable(get_topic):
+            topic_ids = (
+                *candidate_topic_ids(params),
+                *(item.candidate.topic_id for item in retention_proposals),
+            )
+            for topic_id in dict.fromkeys(topic_ids):
+                topic = get_topic(topic_id)
+                if isinstance(topic, dict) and topic:
+                    planner_catalog[topic_id] = dict(topic)
         try:
             question_plan = build_question_plan(
                 params,
                 plan_id="targeted-selection-adapter",
                 topics_by_id=planner_catalog,
             )
+            if question_plan is not None and retention_proposals:
+                question_plan = merge_learning_action_candidates(
+                    question_plan,
+                    (item.candidate for item in retention_proposals),
+                    topics_by_id=planner_catalog,
+                    cognitive_strategy=RETENTION_COGNITIVE_STRATEGY,
+                )
         except Exception:
-            # A new internal adapter must never change the established public
-            # selection behavior when it cannot interpret legacy input.
+            # Planner failure must not invent a target or bypass its ownership.
             question_plan = None
-        public_reason = (
-            "retry"
-            if question_plan is not None and question_plan.selection.reason == "wrong_retry"
-            else (question_plan.selection.reason if question_plan is not None else "")
+        selected_topic_id = question_plan.target_topic.id if question_plan is not None else ""
+        selected_topic_name = question_plan.target_topic.name if question_plan is not None else ""
+        reason = question_plan.selection.reason if question_plan is not None else "no_data"
+        public_reason = "retry" if reason == "wrong_retry" else reason
+        reason_payload = (
+            selection_reason_payload(question_plan.selection, params)
+            if question_plan is not None
+            else {}
         )
-        if question_plan is not None and public_reason == reason and question_plan.target_topic.id == selected_topic_id:
-            selected_topic_id = question_plan.target_topic.id
+        if "wrong_question" in reason_payload:
+            reason_payload["wrong_question"] = _safe_wrong_question_summary(
+                dict(reason_payload["wrong_question"] or {})
+            )
         return {
             "selected_topic_id": selected_topic_id,
             "selected_topic_name": selected_topic_name or selected_topic_id,
-            "selection_reason": reason,
+            "selection_reason": public_reason,
             "selection_reason_payload": reason_payload,
-            "difficulty": params.get("suggested_difficulty") or 3,
+            "difficulty": question_plan.difficulty if question_plan is not None else 3,
+            "learning_intent": (
+                question_plan.learning_intent if question_plan is not None else "practice"
+            ),
+            "obligation_refs": (
+                list(question_plan.obligation_refs)
+                if question_plan is not None
+                else []
+            ),
+            "cognitive_strategy": (
+                question_plan.cognitive_strategy
+                if question_plan is not None
+                else ""
+            ),
             "weak_topics": weak_topics,
             "due_reviews": due_reviews,
             "mastery_overview": [],
@@ -882,12 +921,6 @@ class _TutorQuestionEntriesMixin:
             for item in mastery_overview
             if str(item.get("topic_id") or "") in eligible
         }
-        ordered_topics = ordered_scope_topics(topics, attempted_topic_ids=set(mastery_by_topic))
-        if not ordered_topics:
-            raise SdkError(
-                "practice scope no longer contains any topics",
-                code="PRACTICE_SCOPE_INVALIDATED",
-            )
         readiness_reader = getattr(
             getattr(self._knowledge_tracker, "graph", None),
             "readiness_in_scope",
@@ -906,24 +939,20 @@ class _TutorQuestionEntriesMixin:
         )
         ready_topic_ids: set[str] = set()
         blockers_by_topic: dict[str, list[dict[str, Any]]] = {}
-        selectable_topics = ordered_topics
         if readiness_enabled:
             ready_topic_ids, blockers_by_topic = readiness_reader(eligible)
-            ready_topics = [topic for topic in ordered_topics if str(topic.get("id") or "") in ready_topic_ids]
-            if ready_topics:
-                selectable_topics = ready_topics
-        unattempted = [topic for topic in selectable_topics if str(topic.get("id") or "") not in mastery_by_topic]
-        if unattempted:
-            fallback_topic = unattempted[0]
-        else:
-            fallback_topic = min(
-                selectable_topics,
-                key=lambda topic: (
-                    float(mastery_by_topic.get(str(topic.get("id") or ""), {}).get("mastery") or 0.0),
-                    str(topic.get("id") or ""),
-                ),
+        fallback_topic = select_scope_fallback_topic(
+            topics,
+            mastery_by_topic,
+            ready_topic_ids=(ready_topic_ids if readiness_enabled else None),
+            explicit_topic_id=(scope.topic_id if scope.mode == "explicit_topic" else ""),
+        )
+        if fallback_topic is None:
+            raise SdkError(
+                "practice scope no longer contains any topics",
+                code="PRACTICE_SCOPE_INVALIDATED",
             )
-        target_topic_id = scope.topic_id or str(fallback_topic.get("id") or "")
+        target_topic_id = fallback_topic.id
         topics_by_id = {str(topic.get("id") or ""): dict(topic) for topic in topics if str(topic.get("id") or "")}
         params = self._knowledge_tracker.preview_next_question_params(
             target_topic_id,
@@ -949,22 +978,13 @@ class _TutorQuestionEntriesMixin:
             params["weak_topics"] = []
             params["candidate_evidence"] = []
         elif readiness_enabled:
-            params["candidate_evidence"] = [
-                item
-                for item in params.get("candidate_evidence") or []
-                if _candidate_evidence_topic_id(item) in ready_topic_ids
-            ]
-            if (
-                not ready_topic_ids
-                and not params.get("retry_wrong_question")
-                and not params.get("due_reviews")
-                and not params.get("weak_topics")
-            ):
-                params["blocked_diagnostic"] = {
-                    "target_topic_id": target_topic_id,
-                    "blockers": blockers_by_topic.get(target_topic_id, []),
-                    "scope_topic_ids": sorted(eligible),
-                }
+            params = apply_readiness_policy(
+                params,
+                ready_topic_ids=ready_topic_ids,
+                blockers_by_topic=blockers_by_topic,
+                fallback_topic_id=target_topic_id,
+                eligible_topic_ids=eligible,
+            )
         if not params.get("target_topic_id"):
             params["target_topic_id"] = target_topic_id
             params["target_topic"] = self._knowledge_tracker.store.get_topic(target_topic_id) or {}
@@ -1156,6 +1176,19 @@ class _TutorQuestionEntriesMixin:
             previous_binding.get("cognitive_hypothesis_target"),
             topic_id=previous_topic,
         )
+        previous_retention_release_failed = False
+        if (
+            not previous_question.get("attempt_evaluated")
+            and _retention_claim_fields(previous_question)[
+                "cognitive_obligation_id"
+            ]
+        ):
+            previous_retention_release_failed = not (
+                await _release_retention_claim_best_effort(
+                    self,
+                    previous_question,
+                )
+            )
         if previous_hypothesis is not None and not previous_question.get("attempt_evaluated"):
             try:
                 abandoned = await self._abandon_current_cognitive_intervention(
@@ -1252,8 +1285,20 @@ class _TutorQuestionEntriesMixin:
         selection_reason = str((targeted_context or {}).get("selection_reason") or "recommended")
         if selection_reason == "retry":
             selection_reason = "wrong_retry"
-        if selection_reason not in {"wrong_retry", "due_review", "weak_topic", "recommended", "default"}:
+        if selection_reason not in {
+            "wrong_retry",
+            "due_review",
+            "weak_topic",
+            "blocked_diagnostic",
+            "recommended",
+            "default",
+        }:
             selection_reason = "recommended"
+        planner_learning_intent = (
+            "readiness_probe"
+            if selection_reason == "blocked_diagnostic"
+            else "practice"
+        )
         planned_difficulty = (
             dict((targeted_context or {}).get("question_params") or {}).get("planned_difficulty")
             if targeted_context
@@ -1321,13 +1366,111 @@ class _TutorQuestionEntriesMixin:
             target_binding=plan_target_binding,
             scope_key=str((targeted_context or {}).get("scope_key") or ""),
             scope_revision=int((targeted_context or {}).get("scope_revision") or 0),
+            learning_intent=planner_learning_intent,
         )
         plan = original_plan
+        prepared_retention: PreparedRetentionQuestion | None = None
         prepared_cognitive: PreparedCognitiveIntervention | None = None
         cognitive_validation = None
         repair_question_family_id = ""
-        cognitive_fallback = bool((targeted_context or {}).get("_cognitive_fallback"))
-        if targeted_context and not cognitive_fallback:
+        cognitive_fallback = bool(
+            (targeted_context or {}).get("_cognitive_fallback")
+            or previous_retention_release_failed
+        )
+        retention_fallback = bool(
+            (targeted_context or {}).get("_retention_fallback")
+            or previous_retention_release_failed
+        )
+        expected_obligation_refs = tuple(
+            str(item or "").strip()
+            for item in ((targeted_context or {}).get("obligation_refs") or ())
+            if str(item or "").strip()
+        )
+        if targeted_context and not cognitive_fallback and not retention_fallback:
+            propose_retention = getattr(
+                getattr(self, "_knowledge_tracker", None),
+                "propose_cognitive_retention_actions",
+                None,
+            )
+            claim_obligations = getattr(
+                getattr(self, "_store", None),
+                "claim_cognitive_obligations",
+                None,
+            )
+            if callable(propose_retention) and callable(claim_obligations):
+                try:
+                    raw_proposals = propose_retention()
+                    retention_proposals = tuple(
+                        item
+                        for item in (
+                            raw_proposals
+                            if isinstance(raw_proposals, (list, tuple))
+                            else ()
+                        )
+                        if isinstance(item, RetentionActionProposal)
+                        and item.candidate.topic_id == selected_topic_id
+                        and (
+                            not expected_obligation_refs
+                            or item.obligation_id in expected_obligation_refs
+                        )
+                    )
+                    retention_plan = merge_learning_action_candidates(
+                        original_plan,
+                        (item.candidate for item in retention_proposals),
+                        cognitive_strategy=RETENTION_COGNITIVE_STRATEGY,
+                    )
+                    if (
+                        retention_plan.learning_intent == "retention_check"
+                        and len(retention_plan.obligation_refs) == 1
+                    ):
+                        obligation_id = retention_plan.obligation_refs[0]
+                        selected_proposal = next(
+                            (
+                                item
+                                for item in retention_proposals
+                                if item.obligation_id == obligation_id
+                            ),
+                            None,
+                        )
+                        if selected_proposal is not None:
+                            worker_id = f"question-generation:{uuid.uuid4().hex}"
+                            raw_claims = await asyncio.to_thread(
+                                claim_obligations,
+                                worker_id=worker_id,
+                                lease_seconds=300,
+                                limit=1,
+                                obligation_types=("retention",),
+                                obligation_ids=(obligation_id,),
+                            )
+                            claims = raw_claims if isinstance(raw_claims, list) else []
+                            claim = claims[0] if len(claims) == 1 else None
+                            if isinstance(claim, dict):
+                                prepared_retention = prepare_retention_question(
+                                    retention_plan,
+                                    selected_proposal,
+                                    claim,
+                                )
+                                if prepared_retention is None:
+                                    await _release_retention_claim_best_effort(
+                                        self,
+                                        {
+                                            "cognitive_obligation_id": obligation_id,
+                                            "cognitive_claim_token": claim.get("claim_token"),
+                                            "cognitive_claim_worker_id": worker_id,
+                                        },
+                                    )
+                                else:
+                                    plan = retention_plan
+                except Exception:
+                    prepared_retention = None
+                    plan = original_plan
+            if expected_obligation_refs and prepared_retention is None:
+                cognitive_fallback = True
+        if (
+            targeted_context
+            and not cognitive_fallback
+            and prepared_retention is None
+        ):
             propose = getattr(
                 getattr(self, "_knowledge_tracker", None),
                 "propose_cognitive_intent",
@@ -1335,7 +1478,59 @@ class _TutorQuestionEntriesMixin:
             )
             if callable(propose):
                 try:
-                    decision = await asyncio.to_thread(propose, original_plan)
+                    decision = cast(
+                        CognitivePolicyDecision,
+                        await asyncio.to_thread(propose, original_plan),
+                    )
+                    action_candidate = getattr(decision, "action_candidate", None)
+                    if (
+                        action_candidate is None
+                        and decision.proposed_plan is not None
+                        and decision.selected_hypothesis is not None
+                    ):
+                        # Compatibility adapter for pre-PR3 policy providers:
+                        # the Planner still re-validates and owns acceptance.
+                        action_candidate = LearningActionCandidate(
+                            source="legacy_cognitive_policy",
+                            topic_id=decision.selected_hypothesis.topic_id,
+                            intent=decision.proposed_intent,
+                            urgency=float(decision.selected_hypothesis.probability),
+                            expected_learning_gain=0.5,
+                            information_gain=0.5,
+                            evidence_refs=tuple(
+                                value
+                                for value in (
+                                    decision.selected_hypothesis.source_snapshot_id,
+                                    decision.selected_hypothesis.source_attempt_id,
+                                )
+                                if value
+                            ),
+                            satisfies=(
+                                f"cognitive_hypothesis:{decision.selected_hypothesis.hypothesis_id}",
+                            ),
+                        )
+                    planner_proposal = merge_learning_action_candidates(
+                        original_plan,
+                        (action_candidate,) if action_candidate is not None else (),
+                        hypothesis_target=decision.selected_hypothesis,
+                        repair_strategy=decision.repair_strategy,
+                    )
+                    planner_accepted = planner_proposal is not original_plan
+                    decision = replace(
+                        decision,
+                        proposed_plan=(planner_proposal if planner_accepted else None),
+                        effective_plan=(
+                            planner_proposal
+                            if planner_accepted and decision.applied
+                            else original_plan
+                        ),
+                        applied=bool(planner_accepted and decision.applied),
+                        fallback_reason=(
+                            decision.fallback_reason
+                            if planner_accepted or decision.fallback_reason
+                            else "planner_rejected_candidate"
+                        ),
+                    )
                     candidate = prepare_cognitive_intervention(decision)
                     if candidate is not None:
                         record_event = getattr(
@@ -1401,6 +1596,29 @@ class _TutorQuestionEntriesMixin:
                         None,
                         topic_id=selected_topic_id,
                     )
+        if prepared_retention is not None:
+            retention_proposal = prepared_retention.proposal
+            retention_blueprint = retention_proposal.blueprint
+            cognitive_fields = {
+                "learning_intent": "retention_check",
+                "hypothesis_target": None,
+                "repair_strategy": "",
+                "cognitive_decision_id": "",
+                "cognitive_validator_version": RETENTION_VALIDATOR_VERSION,
+                "diagnostic_validation_id": "",
+                "cognitive_blueprint_id": retention_blueprint.blueprint_id,
+                "cognitive_question_family_id": retention_blueprint.question_family_id,
+                "cognitive_episode_id": retention_proposal.episode_id,
+                "cognitive_obligation_id": retention_proposal.obligation_id,
+                "cognitive_claim_id": prepared_retention.claim_id,
+                "cognitive_claim_token": prepared_retention.claim_token,
+                "cognitive_claim_worker_id": prepared_retention.worker_id,
+                "cognitive_claim_lease_expires_at": prepared_retention.lease_expires_at,
+                "cognitive_independence_group": retention_blueprint.independence_group,
+                "cognitive_transfer_question_family_id": retention_proposal.transfer_question_family_id,
+                "retention_blueprint_version": RETENTION_BLUEPRINT_VERSION,
+                "retention_validator_version": RETENTION_VALIDATOR_VERSION,
+            }
 
         async def generate_candidate(
             request: QuestionGenerationRequest,
@@ -1408,7 +1626,20 @@ class _TutorQuestionEntriesMixin:
             generation_context = dict(request.context)
             if validation_failure:
                 generation_context["generation_feedback"] = validation_failure
-            if prepared_cognitive is not None:
+            if prepared_retention is not None:
+                reviewed_payload = retention_question_payload(
+                    prepared_retention,
+                    topic_id=selected_topic_id,
+                )
+                reviewed_payload["question_id"] = f"q_{uuid.uuid4().hex}"
+                reviewed_payload["attempt_id"] = f"a_{uuid.uuid4().hex}"
+                candidate_reply = TutorReply(
+                    operation=LLM_OPERATION_QUESTION_GENERATE,
+                    input_text=source_text,
+                    reply=str(reviewed_payload["question"]),
+                    payload=reviewed_payload,
+                )
+            elif prepared_cognitive is not None:
                 reviewed_payload = reviewed_question_payload(prepared_cognitive)
                 reviewed_payload["question_id"] = f"q_{uuid.uuid4().hex}"
                 reviewed_payload["attempt_id"] = f"a_{uuid.uuid4().hex}"
@@ -1426,7 +1657,11 @@ class _TutorQuestionEntriesMixin:
                 )
             candidate_payload = dict(candidate_reply.payload or {})
             repair_codes: tuple[str, ...] = ()
-            if targeted_context and prepared_cognitive is None:
+            if (
+                targeted_context
+                and prepared_cognitive is None
+                and prepared_retention is None
+            ):
                 candidate_payload = enforce_mapped_question_type(candidate_payload, question_type_mapping)
                 candidate_payload["target_topic_id"] = selected_topic_id
                 candidate_payload, repair_codes = canonicalize_targeted_question(
@@ -1481,6 +1716,8 @@ class _TutorQuestionEntriesMixin:
                     learning_intent=plan.learning_intent,
                     hypothesis_target=plan.hypothesis_target,
                     repair_strategy=plan.repair_strategy,
+                    obligation_refs=plan.obligation_refs,
+                    cognitive_strategy=plan.cognitive_strategy,
                     cognitive_decision_id=cognitive_fields["cognitive_decision_id"],
                     cognitive_validator_version=cognitive_fields["cognitive_validator_version"],
                     diagnostic_validation_id=cognitive_fields["diagnostic_validation_id"],
@@ -1508,6 +1745,21 @@ class _TutorQuestionEntriesMixin:
             if not structural.valid:
                 validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
                 return QuestionValidationResult(valid=False, errors=tuple(structural.errors), raw_result=structural)
+            if prepared_retention is not None:
+                retention_errors = validate_retention_question_payload(
+                    prepared_retention,
+                    candidate_payload,
+                    topic_id=selected_topic_id,
+                )
+                if retention_errors:
+                    validation_failure = "Retention validation failed: " + ", ".join(
+                        retention_errors
+                    )
+                    return QuestionValidationResult(
+                        valid=False,
+                        errors=retention_errors,
+                    )
+                return QuestionValidationResult(valid=True)
             if prepared_cognitive is not None:
                 cognitive_validation = validate_reviewed_question(
                     prepared_cognitive,
@@ -1556,6 +1808,26 @@ class _TutorQuestionEntriesMixin:
                 )
             )
         except QuestionGenerationFailure as exc:
+            if prepared_retention is not None and targeted_context:
+                await _release_retention_claim_best_effort(
+                    self,
+                    cognitive_fields,
+                )
+                fallback_context = {
+                    **targeted_context,
+                    "_retention_fallback": True,
+                    "obligation_refs": [],
+                    "cognitive_strategy": "",
+                }
+                return await self._generate_question_payload_impl(
+                    source_text=source_text,
+                    topic=topic,
+                    source=source,
+                    source_question_id=source_question_id,
+                    vision_image_payload=vision_image_payload,
+                    targeted_context=fallback_context,
+                    language=language,
+                )
             if prepared_cognitive is not None and targeted_context:
                 record_event = getattr(
                     getattr(self, "_store", None),
@@ -1618,12 +1890,25 @@ class _TutorQuestionEntriesMixin:
             cognitive_fields["diagnostic_validation_id"] = cognitive_validation.validation_id
         reply = question_instance.generator_metadata.get("reply")
         if not isinstance(reply, TutorReply):
+            if prepared_retention is not None:
+                await _release_retention_claim_best_effort(
+                    self,
+                    cognitive_fields,
+                )
             raise SdkError("generated question is missing its internal reply")
         if targeted_context:
-            await asyncio.to_thread(
-                self._validate_learning_plan_selection_context,
-                targeted_context,
-            )
+            try:
+                await asyncio.to_thread(
+                    self._validate_learning_plan_selection_context,
+                    targeted_context,
+                )
+            except BaseException:
+                if prepared_retention is not None:
+                    await _release_retention_claim_best_effort(
+                        self,
+                        cognitive_fields,
+                    )
+                raise
             async with self._lock:
                 active_revision = int(getattr(self._state, "practice_scope_revision", 0) or 0)
                 active_scope = self._resolve_active_practice_scope()
@@ -1632,6 +1917,11 @@ class _TutorQuestionEntriesMixin:
                 int(targeted_context.get("scope_revision") or 0) != active_revision
                 or str(targeted_context.get("scope_key") or "").strip() != active_scope_key
             ):
+                if prepared_retention is not None:
+                    await _release_retention_claim_best_effort(
+                        self,
+                        cognitive_fields,
+                    )
                 raise SdkError(
                     "practice scope changed during question generation",
                     code="SELECTION_SCOPE_CHANGED",
@@ -1703,6 +1993,27 @@ class _TutorQuestionEntriesMixin:
                         "cognitive_question_family_id": cognitive_fields["cognitive_question_family_id"],
                     }
                 )
+            if prepared_retention is not None:
+                target_binding.update(
+                    {
+                        "plan_id": question_instance.plan_id,
+                        "selection_reason": plan.selection.reason,
+                        "cognitive_learning_intent": "retention_check",
+                        "cognitive_strategy": plan.cognitive_strategy,
+                        "obligation_refs": list(plan.obligation_refs),
+                        **cognitive_fields,
+                    }
+                )
+            retention_private = (
+                {
+                    "learning_intent": "retention_check",
+                    "cognitive_strategy": plan.cognitive_strategy,
+                    "obligation_refs": list(plan.obligation_refs),
+                    **cognitive_fields,
+                }
+                if prepared_retention is not None
+                else {}
+            )
             private_payload = _question_private_payload(
                 dict(reply.payload or {}),
                 {
@@ -1722,6 +2033,7 @@ class _TutorQuestionEntriesMixin:
                     "learning_plan_id": targeted_context.get("learning_plan_id") or "",
                     "learning_plan_revision": targeted_context.get("learning_plan_revision") or 0,
                     "plan_progress": targeted_context.get("plan_progress") or {},
+                    **retention_private,
                 },
             )
             reply = TutorReply(
@@ -1780,6 +2092,11 @@ class _TutorQuestionEntriesMixin:
                     public_payload=public_payload,
                 )
         except BaseException:
+            if prepared_retention is not None:
+                await _release_retention_claim_best_effort(
+                    self,
+                    cognitive_fields,
+                )
             if committed_cognitive_event is not None:
                 await _record_cognitive_abandonment_best_effort(
                     self,

@@ -370,6 +370,18 @@ def insert_cognitive_intervention_event(
             if abandoned is not None:
                 raise ValueError("cannot commit an attempt for an abandoned intervention")
         if item["event_type"] == "intervention_abandoned":
+            terminal_attempt = conn.execute(
+                """
+                SELECT 1 FROM cognitive_intervention_events
+                WHERE event_type = 'attempt_committed'
+                  AND decision_id = ?
+                  AND (? = '' OR question_id = ?)
+                LIMIT 1
+                """,
+                (item["decision_id"], item["question_id"], item["question_id"]),
+            ).fetchone()
+            if terminal_attempt is not None:
+                raise ValueError("attempt_committed is terminal and cannot be abandoned")
             predecessor_type = (
                 "question_committed" if item["question_id"] else "intent_proposed"
             )

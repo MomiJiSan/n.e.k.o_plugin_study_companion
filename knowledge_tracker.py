@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -14,7 +15,6 @@ from .adaptive_learning.cognitive_catalog import (
     build_knowledge_graph_cognitive_catalog,
 )
 from .adaptive_learning.cognitive_contracts import (
-    DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
     DEFAULT_COGNITIVE_MODEL_VERSION,
 )
 from .adaptive_learning.cognitive_extractor import CognitiveExtractor
@@ -23,11 +23,18 @@ from .adaptive_learning.cognitive_policy import (
     CognitivePolicyDecision,
 )
 from .adaptive_learning.cognitive_projection import CognitiveProjector
+from .adaptive_learning.cognitive_retention import (
+    RetentionActionProposal,
+    build_retention_action_proposal,
+)
 from .adaptive_learning.cognitive_state import (
     CognitiveStateReader,
     LearnerCognitiveStateView,
 )
-from .adaptive_learning.cognitive_versions import get_cognitive_version_set
+from .adaptive_learning.cognitive_versions import (
+    DEFAULT_COGNITIVE_VERSION_SET,
+    get_cognitive_version_set,
+)
 from .adaptive_learning.contracts import QuestionPlan
 from .adaptive_learning.learner_state import LearnerStateReader
 from .adaptive_learning.mastery_projection import MasteryV2Projector
@@ -821,11 +828,40 @@ class KnowledgeTracker:
             "completed": 0,
             "failed": 0,
             "failures": [],
+            "rebuilt": 0,
+            "skipped": 0,
             "batches": 0,
             "has_more": False,
         }
+        process_outbox = getattr(self.store, "process_cognitive_outbox", None)
+
+        async def drain_outbox() -> dict[str, Any]:
+            if not callable(process_outbox):
+                return {}
+            try:
+                result = await asyncio.to_thread(
+                    process_outbox,
+                    limit=batch_size,
+                    include_retention=self._cognitive_retention_enabled,
+                )
+            except Exception:
+                # Cognitive retry work is optional and never blocks the
+                # projection loop or ordinary answer persistence.
+                return {}
+            return dict(result) if isinstance(result, dict) else {}
+
         for _ in range(100):
+            await drain_outbox()
             result = (await projector.process_pending(limit=batch_size)).to_dict()
+            post_drain = await drain_outbox()
+            if int(post_drain.get("completed") or post_drain.get("changed") or 0) > 0:
+                rebuild = (
+                    await projector.process_dirty_topics(limit=batch_size)
+                ).to_dict()
+                totals["rebuilt"] += int(rebuild.get("rebuilt") or 0)
+                totals["skipped"] += int(rebuild.get("skipped") or 0)
+                totals["failed"] += int(rebuild.get("failed") or 0)
+                totals["failures"].extend(rebuild.get("failures") or [])
             totals["batches"] += 1
             for key in ("claimed", "completed", "failed"):
                 totals[key] += int(result.get(key) or 0)
@@ -907,6 +943,102 @@ class KnowledgeTracker:
                     reason="read_failed",
                 ),
             )
+
+    def propose_cognitive_retention_actions(
+        self,
+        *,
+        as_of: datetime | None = None,
+    ) -> tuple[RetentionActionProposal, ...]:
+        """Offer current open retention facts without claiming them.
+
+        The Coach remains the sole selector.  A claim is intentionally absent
+        here and must be acquired only for the obligation referenced by the
+        accepted plan.
+        """
+
+        if not self._cognitive_retention_enabled:
+            return ()
+        list_obligations = getattr(
+            self.store,
+            "list_cognitive_learning_obligations",
+            None,
+        )
+        list_episodes = getattr(
+            self.store,
+            "list_cognitive_monitoring_episodes",
+            None,
+        )
+        projection_state = getattr(
+            self.store,
+            "get_cognitive_topic_projection_state",
+            None,
+        )
+        if (
+            not callable(list_obligations)
+            or not callable(list_episodes)
+            or not callable(projection_state)
+        ):
+            return ()
+        try:
+            obligations = list_obligations(statuses=("pending",))
+            episodes = list_episodes(statuses=("open",))
+        except Exception:
+            return ()
+        if not isinstance(obligations, list) or not isinstance(episodes, list):
+            return ()
+        episodes_by_id = {
+            str(item.get("episode_id") or "").strip(): item
+            for item in episodes
+            if isinstance(item, dict)
+            and str(item.get("episode_id") or "").strip()
+        }
+        episode_counts: dict[str, int] = {}
+        for item in obligations:
+            if not isinstance(item, dict):
+                continue
+            episode_id = str(item.get("episode_id") or "").strip()
+            if episode_id:
+                episode_counts[episode_id] = episode_counts.get(episode_id, 0) + 1
+        proposals: list[RetentionActionProposal] = []
+        for obligation in obligations:
+            if not isinstance(obligation, dict):
+                continue
+            episode_id = str(obligation.get("episode_id") or "").strip()
+            episode = episodes_by_id.get(episode_id)
+            if episode is None or episode_counts.get(episode_id) != 1:
+                continue
+            topic_id = str(obligation.get("topic_id") or "").strip()
+            if not self._cognitive_topic_enabled(topic_id):
+                continue
+            try:
+                queue = projection_state(
+                    topic_id=topic_id,
+                    model_version=self._cognitive_model_version,
+                )
+            except Exception:
+                continue
+            current = bool(
+                isinstance(queue, dict)
+                and str(queue.get("status") or "") == "done"
+                and int(queue.get("requested_generation") or 0)
+                == int(queue.get("projected_generation") or 0)
+            )
+            proposal = build_retention_action_proposal(
+                obligation,
+                episode,
+                version_set=DEFAULT_COGNITIVE_VERSION_SET,
+                projection_current=current,
+                as_of=as_of,
+            )
+            if proposal is not None:
+                proposals.append(proposal)
+        proposals.sort(
+            key=lambda item: (
+                item.candidate.due_by,
+                item.obligation_id,
+            )
+        )
+        return tuple(proposals)
 
     def _build_cognitive_attempt_event(
         self,
@@ -1014,6 +1146,8 @@ class KnowledgeTracker:
                 "abandonment_reason": "",
             }
         )
+        if self._cognitive_retention_enabled and intent == "transfer_check":
+            event["retention_episode_requested"] = True
         event.pop("event_seq", None)
         return event
 
