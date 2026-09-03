@@ -452,7 +452,7 @@ def test_static_assets_cache_bust_mastery_status_changes() -> None:
     assert "./knowledge-map.js?v=study-related-topics-20260903" in index
     assert "./style.css?v=study-practice-answer-flow-20260903" in index
     assert "./local-models-controller.js" not in index
-    assert "./main.js?v=study-feedback-i18n-20260903" in index
+    assert "./main.js?v=cognitive-runtime-controls-20260903" in index
 
 
 def test_generated_questions_use_math_rendering_in_static_and_hosted_ui() -> None:

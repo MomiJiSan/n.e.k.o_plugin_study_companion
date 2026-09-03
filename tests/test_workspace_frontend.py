@@ -210,10 +210,15 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     assert index.index('data-settings-tab="data"') < index.index('data-settings-tab="runtime"')
     runtime_panel = index[index.index('id="panel-runtime"') :]
     study_panel = index[index.index('id="panel-study"') : index.index('id="panel-knowledge"')]
-    for setting_id in ("settingsOcrSummary", "settingsLlmSummary", "settingsDependencySummary"):
+    for setting_id in (
+        "settingsOcrSummary",
+        "settingsLlmSummary",
+        "settingsCognitiveRuntimeSummary",
+        "settingsDependencySummary",
+    ):
         assert f'id="{setting_id}"' in runtime_panel
         assert f'id="{setting_id}"' not in study_panel
-    assert runtime_panel.count('class="settings-card settings-card--collapsible" open') == 3
+    assert runtime_panel.count('class="settings-card settings-card--collapsible" open') == 4
     assert 'id="settingsRuntimeSaveBtn"' in runtime_panel
 
     assert ".advanced-settings { position: fixed; inset: 0;" in style

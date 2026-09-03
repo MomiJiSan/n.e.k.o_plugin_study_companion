@@ -179,6 +179,8 @@ const settingsRuntimeSaveBtn = $id('settingsRuntimeSaveBtn');
 const settingsRuntimeConfigStatus = $id('settingsRuntimeConfigStatus');
 const settingsDocExportEnabled = $id('settingsDocExportEnabled');
 const settingsCognitiveMode = $id('settingsCognitiveMode');
+const settingsCognitiveEnabled = $id('settingsCognitiveEnabled');
+const settingsCognitiveRuntimeStatus = $id('settingsCognitiveRuntimeStatus');
 const settingsDefaultMode = $id('settingsDefaultMode');
 const settingsLearningProfileSummary = $id('settingsLearningProfileSummary');
 const settingsLearningStage = $id('settingsLearningStage');
@@ -2527,12 +2529,38 @@ function syncCommunicationControls(saving = false) {
   if (settingsCommunicationRequiresEnabled) settingsCommunicationRequiresEnabled.hidden = enabled;
 }
 
+function syncCognitiveControls(source = 'mode', saving = false) {
+  let mode = ['off', 'shadow', 'active'].includes(settingsCognitiveMode?.value)
+    ? settingsCognitiveMode.value
+    : 'off';
+  if (source === 'toggle') {
+    mode = settingsCognitiveEnabled?.checked === true
+      ? (mode === 'off' ? 'shadow' : mode)
+      : 'off';
+    if (settingsCognitiveMode) settingsCognitiveMode.value = mode;
+  } else if (settingsCognitiveEnabled) {
+    settingsCognitiveEnabled.checked = mode !== 'off';
+  }
+  if (settingsCognitiveMode) settingsCognitiveMode.disabled = saving;
+  if (settingsCognitiveEnabled) settingsCognitiveEnabled.disabled = saving;
+  if (settingsCognitiveRuntimeStatus) {
+    const key = ['shadow', 'active'].includes(mode) ? mode : 'off';
+    const fallback = {
+      off: 'Off: answer evidence is not analyzed.',
+      shadow: 'Shadow: analyzes answers without changing the question flow.',
+      active: 'Active: analyzes answers and can influence the next question.',
+    }[key];
+    settingsCognitiveRuntimeStatus.textContent = t(`ui.settings.cognitive.status.${key}`, fallback);
+    settingsCognitiveRuntimeStatus.dataset.cognitiveMode = key;
+  }
+}
+
 function syncSettingsSavingControls(saving = false) {
   if (settingsSaveBtn) settingsSaveBtn.disabled = saving;
   if (settingsDataSaveBtn) settingsDataSaveBtn.disabled = saving;
   if (settingsRuntimeSaveBtn) settingsRuntimeSaveBtn.disabled = saving;
   if (settingsDocExportEnabled) settingsDocExportEnabled.disabled = saving;
-  if (settingsCognitiveMode) settingsCognitiveMode.disabled = saving;
+  syncCognitiveControls('mode', saving);
   if (settingsLocalModelsEnabled) settingsLocalModelsEnabled.disabled = true;
   syncCommunicationControls(saving);
 }
@@ -2623,6 +2651,7 @@ function applySettingsConfig(config) {
         ? 'active'
         : 'shadow';
   }
+  syncCognitiveControls();
   syncCommunicationControls();
   renderCommunicationRuntime();
   renderLocalModelsRuntime();
@@ -3470,6 +3499,16 @@ async function bootstrap() {
   if (settingsRuntimeSaveBtn) {
     settingsRuntimeSaveBtn.addEventListener('click', () => {
       saveSettingsConfig(settingsRuntimeConfigStatus);
+    });
+  }
+  if (settingsCognitiveMode) {
+    settingsCognitiveMode.addEventListener('change', () => {
+      syncCognitiveControls('mode');
+    });
+  }
+  if (settingsCognitiveEnabled) {
+    settingsCognitiveEnabled.addEventListener('change', () => {
+      syncCognitiveControls('toggle');
     });
   }
   if (settingsCommunicationEnabled) {
