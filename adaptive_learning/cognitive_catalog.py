@@ -7,9 +7,10 @@ strategy, or change the protected mathematical and diagnostic signatures.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from .contracts import LearningIntent, RepairStrategy
 
@@ -226,6 +227,146 @@ class CognitiveCatalog:
         )
 
 
+KNOWLEDGE_GRAPH_HYPOTHESES = (
+    CognitiveHypothesisSpec(
+        topic_id="__knowledge_graph__",
+        code="concept_misunderstanding",
+        description=(
+            "The learner applies an incorrect definition, rule, or conceptual "
+            "relationship for the target knowledge-graph topic. Compare the "
+            "answer with topic_context.typical_misconceptions when available."
+        ),
+    ),
+    CognitiveHypothesisSpec(
+        topic_id="__knowledge_graph__",
+        code="prerequisite_gap",
+        description=(
+            "The error is better explained by a missing or confused prerequisite "
+            "listed in topic_context.prerequisites than by the target concept itself."
+        ),
+    ),
+    CognitiveHypothesisSpec(
+        topic_id="__knowledge_graph__",
+        code="procedure_or_representation_error",
+        description=(
+            "The learner appears to understand the target concept but makes a "
+            "procedural, conversion, simplification, notation, or representation error."
+        ),
+    ),
+)
+
+
+class KnowledgeGraphCognitiveCatalog(CognitiveCatalog):
+    """Extend the reviewed catalog only to topics verified by the graph store.
+
+    Graph topics receive three conservative shadow-only mechanisms.  Reviewed
+    topic-specific hypotheses and intervention blueprints remain authoritative,
+    so this adapter cannot activate generic teaching interventions.
+    """
+
+    def __init__(
+        self,
+        base_catalog: CognitiveCatalog,
+        topic_provider: Callable[[str], Mapping[str, Any] | None],
+    ) -> None:
+        self._base_catalog = base_catalog
+        self._topic_provider = topic_provider
+        self._generic_by_code = MappingProxyType(
+            {item.code: item for item in KNOWLEDGE_GRAPH_HYPOTHESES}
+        )
+
+    def canonical_topic_id(self, topic_id: str) -> str | None:
+        normalized = str(topic_id or "").strip()
+        canonical = self._base_catalog.canonical_topic_id(normalized)
+        if canonical is not None:
+            return canonical
+        if not normalized:
+            return None
+        try:
+            topic = self._topic_provider(normalized)
+        except Exception:
+            return None
+        if not isinstance(topic, Mapping):
+            return None
+        return normalized if str(topic.get("id") or "").strip() == normalized else None
+
+    def supports_topic(self, topic_id: str) -> bool:
+        return self.canonical_topic_id(topic_id) is not None
+
+    def is_graph_topic(self, topic_id: str) -> bool:
+        normalized = str(topic_id or "").strip()
+        if not normalized:
+            return False
+        try:
+            topic = self._topic_provider(normalized)
+        except Exception:
+            return False
+        return bool(
+            isinstance(topic, Mapping)
+            and str(topic.get("id") or "").strip() == normalized
+        )
+
+    def allowed_codes(self, topic_id: str) -> tuple[str, ...]:
+        if self._base_catalog.supports_topic(topic_id):
+            return self._base_catalog.allowed_codes(topic_id)
+        return tuple(self._generic_by_code) if self.supports_topic(topic_id) else ()
+
+    def get(
+        self, topic_id: str, hypothesis_code: str
+    ) -> CognitiveHypothesisSpec | None:
+        reviewed = self._base_catalog.get(topic_id, hypothesis_code)
+        if reviewed is not None:
+            return reviewed
+        canonical = self.canonical_topic_id(topic_id)
+        generic = self._generic_by_code.get(str(hypothesis_code or "").strip())
+        if canonical is None or generic is None:
+            return None
+        return replace(generic, topic_id=canonical)
+
+    def hypotheses(
+        self, topic_id: str, allowed_codes: tuple[str, ...] | None = None
+    ) -> tuple[CognitiveHypothesisSpec, ...]:
+        if self._base_catalog.supports_topic(topic_id):
+            return self._base_catalog.hypotheses(topic_id, allowed_codes)
+        canonical = self.canonical_topic_id(topic_id)
+        if canonical is None:
+            return ()
+        codes = tuple(self._generic_by_code) if allowed_codes is None else allowed_codes
+        return tuple(
+            replace(self._generic_by_code[code], topic_id=canonical)
+            for code in codes
+            if code in self._generic_by_code
+        )
+
+    def is_active(self, topic_id: str, hypothesis_code: str) -> bool:
+        return self._base_catalog.is_active(topic_id, hypothesis_code)
+
+    def active_codes(self, topic_id: str) -> tuple[str, ...]:
+        return self._base_catalog.active_codes(topic_id)
+
+    def get_blueprint(self, blueprint_id: str) -> CognitiveQuestionBlueprint | None:
+        return self._base_catalog.get_blueprint(blueprint_id)
+
+    def blueprints(
+        self,
+        topic_id: str,
+        *,
+        hypothesis_code: str = "",
+        learning_intent: LearningIntent | None = None,
+    ) -> tuple[CognitiveQuestionBlueprint, ...]:
+        return self._base_catalog.blueprints(
+            topic_id,
+            hypothesis_code=hypothesis_code,
+            learning_intent=learning_intent,
+        )
+
+
+def build_knowledge_graph_cognitive_catalog(
+    topic_provider: Callable[[str], Mapping[str, Any] | None],
+) -> KnowledgeGraphCognitiveCatalog:
+    return KnowledgeGraphCognitiveCatalog(COGNITIVE_CATALOG_V1, topic_provider)
+
+
 CHAIN_RULE_HYPOTHESES = (
     CognitiveHypothesisSpec(
         topic_id=CHAIN_RULE_TOPIC_ID,
@@ -379,4 +520,7 @@ __all__ = [
     "CognitiveHypothesisSpec",
     "CognitiveQuestionBlueprint",
     "HypothesisAvailability",
+    "KNOWLEDGE_GRAPH_HYPOTHESES",
+    "KnowledgeGraphCognitiveCatalog",
+    "build_knowledge_graph_cognitive_catalog",
 ]

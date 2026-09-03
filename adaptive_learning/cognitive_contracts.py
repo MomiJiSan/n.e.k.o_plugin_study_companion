@@ -31,6 +31,7 @@ class CognitiveExtractionInput:
     expected_answer: str
     learner_answer: str
     evaluation: Mapping[str, Any] = field(default_factory=dict)
+    topic_context: Mapping[str, Any] = field(default_factory=dict)
     allowed_hypotheses: tuple[str, ...] = ()
 
 

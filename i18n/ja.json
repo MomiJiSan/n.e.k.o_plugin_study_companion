@@ -1044,5 +1044,8 @@
     "ui.cognitive.hypothesis.omit_inner_derivative": "内側の導関数を省略している",
     "ui.cognitive.hypothesis.differentiate_inner_incorrectly": "内側の関数を誤って微分している",
     "ui.cognitive.hypothesis.confuse_product_and_chain": "積の法則と連鎖律を混同している",
+    "ui.cognitive.hypothesis.concept_misunderstanding": "概念の理解違い",
+    "ui.cognitive.hypothesis.prerequisite_gap": "前提知識の不足",
+    "ui.cognitive.hypothesis.procedure_or_representation_error": "手順・変換・表現上の誤り",
     "ui.cognitive.hypothesis.unknown": "繰り返し現れるエラーパターン"
 }

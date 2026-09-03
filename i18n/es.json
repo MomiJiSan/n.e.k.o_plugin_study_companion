@@ -1044,5 +1044,8 @@
     "ui.cognitive.hypothesis.omit_inner_derivative": "omitir la derivada interna",
     "ui.cognitive.hypothesis.differentiate_inner_incorrectly": "derivar incorrectamente la función interna",
     "ui.cognitive.hypothesis.confuse_product_and_chain": "confundir las reglas del producto y de la cadena",
+    "ui.cognitive.hypothesis.concept_misunderstanding": "una comprensión conceptual incorrecta",
+    "ui.cognitive.hypothesis.prerequisite_gap": "una carencia de conocimientos previos",
+    "ui.cognitive.hypothesis.procedure_or_representation_error": "un error de procedimiento, conversión o representación",
     "ui.cognitive.hypothesis.unknown": "un patrón de error recurrente"
 }

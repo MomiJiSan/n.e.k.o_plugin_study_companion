@@ -142,6 +142,7 @@ def test_cognitive_config_defaults_are_fully_disabled(
         "read_mode": "off",
         "intent_policy": "off",
         "ui_enabled": False,
+        "knowledge_graph_enabled": True,
         "model_version": "cognitive-v1",
         "supported_topics": ("calculus.chain_rule", "college_chain_rule"),
     }
@@ -176,6 +177,7 @@ def test_cognitive_config_is_strict_versioned_and_topic_bounded(
                 "read_mode": "future",
                 "intent_policy": "enabled",
                 "ui_enabled": 1,
+                "knowledge_graph_enabled": "true",
                 "model_version": "unversioned",
                 "supported_topics": "calculus.chain_rule",
             }
@@ -187,6 +189,7 @@ def test_cognitive_config_is_strict_versioned_and_topic_bounded(
         "read_mode": "shadow",
         "intent_policy": "shadow",
         "ui_enabled": True,
+        "knowledge_graph_enabled": True,
         "model_version": "cognitive-v1",
         "supported_topics": ("calculus.chain_rule", "college_chain_rule"),
     }
@@ -195,6 +198,7 @@ def test_cognitive_config_is_strict_versioned_and_topic_bounded(
         "read_mode": "off",
         "intent_policy": "off",
         "ui_enabled": False,
+        "knowledge_graph_enabled": False,
         "model_version": "cognitive-v1",
         "supported_topics": (),
     }

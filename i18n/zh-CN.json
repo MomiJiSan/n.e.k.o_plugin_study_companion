@@ -709,8 +709,8 @@
     "ui.settings.cognitive.mode.off":  "关闭",
     "ui.settings.cognitive.mode.shadow":  "Shadow（仅观察）",
     "ui.settings.cognitive.mode.active":  "Active（主动参与）",
-    "ui.settings.cognitive.help":  "Shadow 只分析答案，不改变出题；Active 可以参与学习判断和下一题选择。",
-    "ui.settings.cognitive.runtime.summary":  "判断用户答案是否正确，更新知识掌握证据，并可帮助选择下一题。",
+    "ui.settings.cognitive.help":  "Shadow 只分析答案，不改变出题；Active 可以参与学习判断和下一题选择。分析会读取当前知识图谱中的知识点、前置知识和常见误区。",
+    "ui.settings.cognitive.runtime.summary":  "结合知识图谱分析答案错因，更新知识掌握证据，并可帮助选择下一题。",
     "ui.settings.cognitive.enabled.label":  "开启认知引擎",
     "ui.settings.cognitive.enabled.help":  "开启后，Shadow 会观察并记录答案证据，但不改变出题流程；Active 还可以参与答案判断和下一题选择。具体模式可在“数据”设置中选择。",
     "ui.settings.cognitive.status.off":  "已关闭：不分析答案证据。",
@@ -1044,5 +1044,8 @@
     "ui.cognitive.hypothesis.omit_inner_derivative": "遗漏内层导数",
     "ui.cognitive.hypothesis.differentiate_inner_incorrectly": "内层函数求导错误",
     "ui.cognitive.hypothesis.confuse_product_and_chain": "混淆乘积法则与链式法则",
+    "ui.cognitive.hypothesis.concept_misunderstanding": "概念理解错误",
+    "ui.cognitive.hypothesis.prerequisite_gap": "前置知识缺口",
+    "ui.cognitive.hypothesis.procedure_or_representation_error": "步骤、转换或表达错误",
     "ui.cognitive.hypothesis.unknown": "重复出现的错误模式"
 }

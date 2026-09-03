@@ -77,6 +77,7 @@ projection_enabled = false
 read_mode = "off" # off / shadow / active
 intent_policy = "off" # off / shadow / on
 ui_enabled = false
+knowledge_graph_enabled = true
 model_version = "cognitive-v1"
 supported_topics = ["calculus.chain_rule", "college_chain_rule"]
 

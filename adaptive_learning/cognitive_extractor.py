@@ -146,6 +146,21 @@ class CognitiveExtractor:
             for field in _EVALUATION_PROMPT_FIELDS
             if field in extraction_input.evaluation
         }
+        topic_context = _safe_prompt_value(extraction_input.topic_context)
+        if "omit_inner_derivative" in allowed:
+            extraction_rules = [
+                "One item per allowed code; support/counter are exclusive.",
+                "Correct verdict: counter disproved codes, never support. Wrong verdict: support shown mechanisms, never counter.",
+                "Inner factor absent => omit; attempted and wrong => differentiate_inner_incorrectly; correct factor plus another error => neither.",
+                "Product-rule structure on a composition => confuse_product_and_chain; otherwise return [] if insufficient.",
+            ]
+        else:
+            extraction_rules = [
+                "One item per allowed code; support/counter are exclusive.",
+                "Correct verdict: counter disproved codes, never support. Wrong verdict: support shown mechanisms, never counter.",
+                "Use topic_context only to interpret the concept and reviewed graph relationships; it is not answer evidence.",
+                "Return [] unless the learner answer distinguishes an allowed mechanism.",
+            ]
         raw_fields = {
             "question": str(extraction_input.question or ""),
             "expected_answer": str(extraction_input.expected_answer or ""),
@@ -153,7 +168,7 @@ class CognitiveExtractor:
         }
 
         def candidate(per_field_limit: int) -> dict[str, Any]:
-            return {
+            payload = {
                 "topic_id": extraction_input.topic_id.strip(),
                 "question": self._truncate(raw_fields["question"], per_field_limit),
                 "expected_answer": self._truncate(
@@ -168,12 +183,7 @@ class CognitiveExtractor:
                     truncate=self._truncate,
                 ),
                 "allowed_hypotheses": hypotheses,
-                "extraction_rules": [
-                    "One item per allowed code; support/counter are exclusive.",
-                    "Correct verdict: counter disproved codes, never support. Wrong verdict: support shown mechanisms, never counter.",
-                    "Inner factor absent => omit; attempted and wrong => differentiate_inner_incorrectly; correct factor plus another error => neither.",
-                    "Product-rule structure on a composition => confuse_product_and_chain; otherwise return [] if insufficient.",
-                ],
+                "extraction_rules": extraction_rules,
                 "output_contract": {
                     "top_level": "object with only an evidence array",
                     "max_evidence": 3,
@@ -192,6 +202,13 @@ class CognitiveExtractor:
                     "evidence_span": "non-empty learner_answer excerpt",
                 },
             }
+            if topic_context:
+                payload["topic_context"] = _truncate_prompt_value(
+                    topic_context,
+                    per_string_limit=per_field_limit,
+                    truncate=self._truncate,
+                )
+            return payload
 
         # Binary-search the largest equal share for each learner-controlled
         # field.  The complete serialized payload is checked on every pass.

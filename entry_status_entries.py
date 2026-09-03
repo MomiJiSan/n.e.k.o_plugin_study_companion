@@ -14,6 +14,10 @@ from .entry_common import (
 
 
 def _settings_config_payload(config: StudyConfig) -> dict:
+    cognitive = config.cognitive.to_dict()
+    supported_topics = cognitive.get("supported_topics")
+    if isinstance(supported_topics, tuple):
+        cognitive["supported_topics"] = list(supported_topics)
     return {
         "study": {
             "default_mode": config.default_mode,
@@ -36,7 +40,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
         "knowledge_retrieval": {
             "relationship_v2_enabled": config.knowledge_relation_retrieval_v2_enabled,
         },
-        "cognitive": config.cognitive.to_dict(),
+        "cognitive": cognitive,
         "communication": config.communication.to_dict(),
         "doc_export": config.doc_export.to_dict(),
     }
@@ -170,6 +174,11 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         next_cognitive["ui_enabled"] = _coerce_bool(
             cognitive.get("ui_enabled"), current.cognitive.ui_enabled
         )
+    if "knowledge_graph_enabled" in cognitive:
+        next_cognitive["knowledge_graph_enabled"] = _coerce_bool(
+            cognitive.get("knowledge_graph_enabled"),
+            current.cognitive.knowledge_graph_enabled,
+        )
     next_values["cognitive"] = next_cognitive
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
@@ -269,6 +278,11 @@ class _StatusEntriesMixin:
         if callable(summary_provider):
             replacement.set_memory_deck_summary_provider(summary_provider)
         self._knowledge_tracker = replacement
+        wake_projection = getattr(self, "_request_cognitive_projection", None)
+        if bool(
+            getattr(replacement, "cognitive_projection_enabled", False)
+        ) and callable(wake_projection):
+            wake_projection()
 
     def _apply_runtime_settings_config(self, config: StudyConfig) -> None:
         previous_config = self._cfg

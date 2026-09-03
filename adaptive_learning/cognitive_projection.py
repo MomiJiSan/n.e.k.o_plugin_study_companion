@@ -1146,6 +1146,9 @@ def _extraction_input(
     evaluation = projection_input.get("evaluation")
     if not isinstance(evaluation, Mapping):
         raise TypeError("cognitive projection evaluation must be a mapping")
+    topic_context = projection_input.get("topic_context")
+    if not isinstance(topic_context, Mapping):
+        topic_context = {}
     question_text = (
         str(projection_input.get("question_text") or "").strip()
         or _first_text(
@@ -1171,6 +1174,7 @@ def _extraction_input(
         expected_answer=expected_answer,
         learner_answer=str(projection_input.get("learner_answer") or ""),
         evaluation=evaluation,
+        topic_context=topic_context,
         allowed_hypotheses=allowed_hypotheses,
     )
 
