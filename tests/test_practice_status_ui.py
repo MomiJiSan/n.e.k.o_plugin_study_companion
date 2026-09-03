@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from test_coverage_lifecycle_runtime import _load_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +15,11 @@ def _render_hosted_practice_scope_path(
     translations: dict[str, str],
 ) -> str:
     completed = subprocess.run(
-        ["node", str(ROOT / "tests" / "render_study_panel_scope.cjs")],
+        [
+            "node",
+            "--experimental-strip-types",
+            str(ROOT / "tests" / "render_study_panel_scope.cjs"),
+        ],
         cwd=ROOT,
         input=json.dumps(
             {
