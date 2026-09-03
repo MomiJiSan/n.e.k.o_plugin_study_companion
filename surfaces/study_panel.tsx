@@ -1174,10 +1174,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     const stage = String(scope?.stage || '').trim();
     const subject = String(scope?.subject || '').trim();
     if (path.length && stage) {
-      path[0] = t(`ui.profile.stage.${stage}`, path[0] || stage.replaceAll('_', ' '));
+      path[0] = t(`ui.profile.stage.${stage}`, stage.replaceAll('_', ' '));
     }
     if (path.length > 1 && subject) {
-      path[1] = t(`ui.knowledge.subject.${subject}`, path[1] || subject.replaceAll('_', ' '));
+      path[1] = t(`ui.knowledge.subject.${subject}`, subject.replaceAll('_', ' '));
     }
     return path.join(' / ');
   };

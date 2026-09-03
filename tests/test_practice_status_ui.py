@@ -1,9 +1,39 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from test_coverage_lifecycle_runtime import _load_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _render_hosted_practice_scope_path(
+    translations: dict[str, str],
+) -> str:
+    completed = subprocess.run(
+        ["node", str(ROOT / "tests" / "render_study_panel_scope.cjs")],
+        cwd=ROOT,
+        input=json.dumps(
+            {
+                "scope": {
+                    "stage": "senior_high",
+                    "subject": "math",
+                    "display_path": ["senior_high", "math", "Trigonometry"],
+                },
+                "translations": translations,
+            }
+        ),
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+        text=True,
+    )
+    return str(json.loads(completed.stdout)["path"])
 
 
 def test_hosted_and_static_practice_status_contracts_match() -> None:
@@ -41,26 +71,61 @@ def test_both_practice_uis_guard_review_state_by_scope_key() -> None:
 
 
 def test_both_practice_uis_localize_canonical_scope_dimensions() -> None:
-    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
     static = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")
 
-    for source in (hosted, static):
-        assert "function practiceScopeDisplayPath" in source or "const practiceScopeDisplayPath" in source
-        assert "ui.profile.stage.${stage}" in source or "learningStageLabel(stage)" in source
-        assert "ui.knowledge.subject.${subject}" in source or "knowledgeSubjectLabel(subject)" in source
-    assert "activePracticeScope.display_path.join(' / ')" not in hosted
+    assert "function practiceScopeDisplayPath" in static
+    assert "learningStageLabel(stage)" in static
+    assert "knowledgeSubjectLabel(subject)" in static
+    assert _render_hosted_practice_scope_path(
+        {
+            "ui.profile.stage.senior_high": "高中",
+            "ui.knowledge.subject.math": "数学",
+        }
+    ) == "高中 / 数学 / Trigonometry"
+    assert _render_hosted_practice_scope_path({}) == "senior high / math / Trigonometry"
 
 
-def test_status_repairs_legacy_question_topic_ids_with_canonical_names() -> None:
-    plugin = (ROOT / "__init__.py").read_text(encoding="utf-8")
-    status_payload = plugin[
-        plugin.index("    def _status_payload"):
-        plugin.index("    def _habit_status_payload")
-    ]
+def test_status_repairs_legacy_question_topic_ids_with_canonical_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = _load_runtime(monkeypatch)
+    topic_lookups: list[str] = []
+    owner = object.__new__(plugin.StudyCompanionPlugin)
+    owner._cfg = SimpleNamespace()
+    owner._state = SimpleNamespace()
+    owner._today = lambda: "2026-09-03"
+    owner._habit_status_payload = lambda _today: {}
+    owner._store = SimpleNamespace(
+        list_interactions=lambda limit: [],
+        anonymous_knowledge_stats_summary=lambda: {},
+        get_topic=lambda topic_id: (
+            topic_lookups.append(topic_id)
+            or {"id": topic_id, "name": "任意角与弧度制"}
+        ),
+    )
+    owner._knowledge_tracker = SimpleNamespace(
+        get_status_summary=lambda limit: {},
+        quality=SimpleNamespace(status_summary=lambda limit: {}),
+        get_review_queue=lambda limit: [],
+        get_weak_topics=lambda limit: [],
+        list_mastery_overview=lambda limit: [],
+    )
+    owner._memory_deck_store = SimpleNamespace(status_summary=lambda limit: {})
+    monkeypatch.setattr(
+        plugin,
+        "build_status_payload",
+        lambda **_kwargs: {
+            "current_question": {
+                "selected_topic_id": "senior_trig_angle_system",
+                "selected_topic_name": "senior_trig_angle_system",
+            }
+        },
+    )
 
-    assert 'current_question.get("selected_topic_id")' in status_payload
-    assert "self._store.get_topic(topic_id)" in status_payload
-    assert 'current_question["selected_topic_name"] = canonical_name' in status_payload
+    payload = owner._status_payload()
+
+    assert topic_lookups == ["senior_trig_angle_system"]
+    assert payload["current_question"]["selected_topic_name"] == "任意角与弧度制"
 
 
 def test_hosted_retryable_evaluation_keeps_answer_image() -> None:
