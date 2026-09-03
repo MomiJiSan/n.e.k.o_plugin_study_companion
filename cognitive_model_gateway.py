@@ -28,7 +28,20 @@ _SYSTEM_INSTRUCTION = (
     "object matching every required field in the supplied output contract, "
     "with no additional fields, prose, or code fence. Strength and "
     "extractor_confidence must each be JSON numbers from 0 through 1. The "
-    "top level must be {\"evidence\": [...]}, never a bare array."
+    "top level must be {\"evidence\": [...]}, never a bare array. Return at "
+    "most one item per hypothesis_code: support and counter are mutually "
+    "exclusive for one hypothesis in one attempt. First branch on "
+    "evaluation.verdict. If correct, return counter for each allowed "
+    "hypothesis directly disproved by learner_answer and never return support. "
+    "If wrong, never return counter; return support only for a mechanism "
+    "exhibited by learner_answer. The expected answer and "
+    "evaluator feedback are comparison context, never counter evidence or an "
+    "evidence_span. Every evidence_span "
+    "must quote or point to the learner answer. If the learner attempts any "
+    "non-constant inner-derivative factor but its coefficient, power, or value "
+    "is wrong, use differentiate_inner_incorrectly and never "
+    "omit_inner_derivative. A correct inner factor with only a sign, outer-"
+    "derivative, or algebra error is not differentiate_inner_incorrectly."
 )
 
 

@@ -169,15 +169,15 @@ class CognitiveExtractor:
                 ),
                 "allowed_hypotheses": hypotheses,
                 "extraction_rules": [
-                    "Ground every item in the learner answer/evaluation and use only allowed codes.",
-                    "Return support for an exhibited mechanism and counter when a correct answer directly disproves it.",
-                    "No inner factor means omission; an attempted wrong factor is not omission.",
-                    "Return [] when evidence is insufficient; never infer traits or learning style.",
-                    "Every evidence_span must identify the relevant answer location.",
+                    "One item per allowed code; support/counter are exclusive.",
+                    "Correct verdict: counter disproved codes, never support. Wrong verdict: support shown mechanisms, never counter.",
+                    "Inner factor absent => omit; attempted and wrong => differentiate_inner_incorrectly; correct factor plus another error => neither.",
+                    "Product-rule structure on a composition => confuse_product_and_chain; otherwise return [] if insufficient.",
                 ],
                 "output_contract": {
                     "top_level": "object with only an evidence array",
                     "max_evidence": 3,
+                    "unique_hypothesis_codes": True,
                     "directions": ["support", "counter"],
                     "empty_evidence_allowed": True,
                     "required_item_fields": [
@@ -189,7 +189,7 @@ class CognitiveExtractor:
                     ],
                     "no_other_fields": True,
                     "strength_and_confidence": "JSON numbers in [0,1]",
-                    "evidence_span": "non-empty answer location/excerpt",
+                    "evidence_span": "non-empty learner_answer excerpt",
                 },
             }
 

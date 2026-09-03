@@ -62,6 +62,44 @@ def test_exact_short_answer_returns_a_valid_private_answer_free_decision() -> No
     assert "accepted_answers" not in serialized
 
 
+def test_exact_declared_math_answer_normalizes_unicode_pi_and_math_wrappers() -> None:
+    request = AssessmentRequest(
+        question="Convert 120 degrees to radians.",
+        answer="$2π / 3$",
+        expected_answer=r"\frac{2\pi}{3}",
+        context={
+            "question_type": "math_exact",
+            "accepted_answers": [r"2\pi/3", r"\frac{2\pi}{3}"],
+        },
+    )
+
+    decision = asyncio.run(
+        _engine(flags={"exact_short_answer_enabled": True}).try_assess(request)
+    )
+
+    assert decision is not None
+    assert decision.evaluator_type == "exact_short_answer"
+    assert decision.as_payload()["verdict"] == "correct"
+
+
+def test_exact_declared_math_answer_does_not_guess_on_a_non_match() -> None:
+    request = AssessmentRequest(
+        question="Convert 120 degrees to radians.",
+        answer=r"3\pi/2",
+        expected_answer=r"\frac{2\pi}{3}",
+        context={
+            "question_type": "math_exact",
+            "accepted_answers": [r"2\pi/3", r"\frac{2\pi}{3}"],
+        },
+    )
+
+    decision = asyncio.run(
+        _engine(flags={"exact_short_answer_enabled": True}).try_assess(request)
+    )
+
+    assert decision is None
+
+
 def test_short_answer_miss_falls_through_unless_question_is_explicitly_closed_world() -> None:
     base = AssessmentRequest(
         question="Name the capital.",

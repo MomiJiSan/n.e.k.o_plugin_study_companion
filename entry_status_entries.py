@@ -36,6 +36,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
         "knowledge_retrieval": {
             "relationship_v2_enabled": config.knowledge_relation_retrieval_v2_enabled,
         },
+        "cognitive": config.cognitive.to_dict(),
         "communication": config.communication.to_dict(),
         "doc_export": config.doc_export.to_dict(),
     }
@@ -107,6 +108,9 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
         if isinstance(raw.get("communication"), dict)
         else {}
     )
+    cognitive = (
+        raw.get("cognitive") if isinstance(raw.get("cognitive"), dict) else {}
+    )
     doc_export = (
         raw.get("doc_export") if isinstance(raw.get("doc_export"), dict) else {}
     )
@@ -150,6 +154,23 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
             knowledge_retrieval.get("relationship_v2_enabled"),
             current.knowledge_relation_retrieval_v2_enabled,
         )
+    next_cognitive = dict(next_values.get("cognitive") or {})
+    if "projection_enabled" in cognitive:
+        next_cognitive["projection_enabled"] = _coerce_bool(
+            cognitive.get("projection_enabled"),
+            current.cognitive.projection_enabled,
+        )
+    if "read_mode" in cognitive:
+        next_cognitive["read_mode"] = str(cognitive.get("read_mode") or "").strip()
+    if "intent_policy" in cognitive:
+        next_cognitive["intent_policy"] = str(
+            cognitive.get("intent_policy") or ""
+        ).strip()
+    if "ui_enabled" in cognitive:
+        next_cognitive["ui_enabled"] = _coerce_bool(
+            cognitive.get("ui_enabled"), current.cognitive.ui_enabled
+        )
+    next_values["cognitive"] = next_cognitive
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
         next_communication["enabled"] = _coerce_bool(
@@ -225,8 +246,34 @@ class _StatusEntriesMixin:
         await self._cancel_review_due_task()
         await self._close_communication_runtime(event_bus)
 
+    def _replace_knowledge_tracker_for_config(
+        self,
+        previous_config: StudyConfig,
+        config: StudyConfig,
+    ) -> None:
+        if previous_config.cognitive == config.cognitive:
+            return
+        current_tracker = getattr(self, "_knowledge_tracker", None)
+        store = getattr(self, "_store", None)
+        if current_tracker is None or store is None:
+            return
+        replacement = type(current_tracker)(
+            store,
+            retention_target=config.fsrs_retention_target,
+            logger=self.logger,
+            mastery_config=config.mastery,
+            cognitive_config=config.cognitive,
+        )
+        deck_store = getattr(self, "_memory_deck_store", None)
+        summary_provider = getattr(deck_store, "status_summary", None)
+        if callable(summary_provider):
+            replacement.set_memory_deck_summary_provider(summary_provider)
+        self._knowledge_tracker = replacement
+
     def _apply_runtime_settings_config(self, config: StudyConfig) -> None:
+        previous_config = self._cfg
         self._cfg = config
+        self._replace_knowledge_tracker_for_config(previous_config, config)
         if self._ocr_pipeline is not None:
             self._ocr_pipeline.update_config(config)
         if self._agent is not None:
@@ -249,7 +296,9 @@ class _StatusEntriesMixin:
             sync_doc_export_entry()
 
     def _restore_runtime_settings_config(self, config: StudyConfig) -> None:
+        previous_config = self._cfg
         self._cfg = config
+        self._replace_knowledge_tracker_for_config(previous_config, config)
         restore_steps: list[tuple[str, object]] = []
         sync_doc_export_entry = getattr(self, "_sync_doc_export_entry", None)
         if callable(sync_doc_export_entry):

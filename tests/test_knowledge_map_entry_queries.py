@@ -106,6 +106,31 @@ class _Tracker:
         return []
 
 
+class _FacetedStore(_Store):
+    def query_knowledge_map_page(self, **kwargs):
+        page = super().query_knowledge_map_page(**kwargs)
+        return {**page, "subject_counts": {"math": 240, "physics": 180}}
+
+
+def test_knowledge_map_v2_exposes_stage_wide_subject_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = _load_entries(monkeypatch)
+
+    class Harness(entries._KnowledgeEntriesMixin):
+        _store = _FacetedStore()
+        _knowledge_tracker = _Tracker()
+
+    payload = asyncio.run(
+        Harness().study_query_knowledge_map(
+            scope={"stage": "senior_high", "subject": "math"},
+            page_size=100,
+        )
+    )
+
+    assert payload["subject_counts"] == {"math": 240, "physics": 180}
+
+
 def test_knowledge_map_reads_mastery_and_active_wrong_questions_by_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

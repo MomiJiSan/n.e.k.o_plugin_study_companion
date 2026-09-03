@@ -389,3 +389,25 @@ def test_map_page_uses_sql_keyset_scope_and_one_hop_boundary(
         assert base_page["boundary"]["truncated"] is False
     finally:
         store.close()
+
+
+def test_map_page_reports_stage_wide_subject_counts_for_a_subject_page(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store, _edges_module = _load_store(monkeypatch, "_knowledge_edges_subject_facets")
+    store = _store(tmp_path, Store)
+    try:
+        store.upsert_topic({"id": "math-1", "name": "Math 1", "subject": "math", "stage": "senior_high"})
+        store.upsert_topic({"id": "math-2", "name": "Math 2", "subject": "math", "stage": "senior_high"})
+        store.upsert_topic({"id": "physics-1", "name": "Physics 1", "subject": "physics", "stage": "senior_high"})
+        store.upsert_topic({"id": "college-1", "name": "College 1", "subject": "math", "stage": "college"})
+        store.rebuild_knowledge_edge_projection()
+
+        page = store.query_knowledge_map_page(
+            stage="senior_high", subject="physics", page_size=100
+        )
+
+        assert page["scope_total_count"] == 1
+        assert page["subject_counts"] == {"math": 2, "physics": 1}
+    finally:
+        store.close()

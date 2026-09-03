@@ -1,12 +1,12 @@
 # Cognitive Evidence Engine Shadow 放行报告
 
-生成时间：2026-09-02T15:47:34.113103Z
+生成时间：2026-09-03T02:09:29.853154Z
 
 ## 结论
 
 - 工程模拟门禁：**PASS**。
 - Read Only / Personal Beta / Active Local：**均未放行**。本报告没有把合成样本冒充真实用户数据。
-- 真实配置模型：**EVALUATED_WITH_SAFE_FAILURES；13/22 样本完全匹配，期望证据召回率 43.8%，意外证据率 0.0%**。
+- 真实配置模型：**EVALUATED；22/22 样本完全匹配，期望证据召回率 100.0%，意外证据率 0.0%**。
 - 本轮只运行认知引擎定向测试，未运行全量测试。
 
 ## 样本与提取边界
@@ -18,13 +18,13 @@
 
 真实配置模型分 hypothesis 初评：
 
-- `omit_inner_derivative`：precision 100.0%, recall 40.0%
-- `differentiate_inner_incorrectly`：precision 100.0%, recall 20.0%
-- `confuse_product_and_chain`：precision 100.0%, recall 66.7%
+- `omit_inner_derivative`：precision 100.0%, recall 100.0%
+- `differentiate_inner_incorrectly`：precision 100.0%, recall 100.0%
+- `confuse_product_and_chain`：precision 100.0%, recall 100.0%
 
 ## 工程验证
 
-定向测试结果：PASS，耗时 3.378 秒。
+定向测试结果：PASS，耗时 12.106 秒。
 
 - PASS: 乱序、并发、lease 接管、版本重跑、全量重建一致性（test_cognitive_shadow_validation.py, test_cognitive_projection.py, test_cognitive_store.py, test_cognitive_v2_projection_store.py）
 - PASS: 同题重试与同模板变体去重（test_cognitive_projection.py）
@@ -35,9 +35,9 @@
 
 - 环境：合成本地 SQLite（临时、provisional）。
 - 每组 200 次，预热 20 次。
-- 关闭入队：p50 0.7369 ms，p95 1.1187 ms。
-- 开启原子入队：p50 0.8429 ms，p95 1.2098 ms。
-- p95 增量：0.0911 ms；≤5 ms 门槛：PASS。
+- 关闭入队：p50 3.9889 ms，p95 4.9954 ms。
+- 开启原子入队：p50 4.0025 ms，p95 6.9775 ms。
+- p95 增量：1.9821 ms；≤5 ms 门槛：PASS。
 
 这里只测答题事务里的原子入队，不包含异步 LLM 提取。
 

@@ -88,6 +88,15 @@ async def test_bridge_sends_only_system_instruction_and_structured_payload(
         "role": "system",
         "content": gateway_module.module._SYSTEM_INSTRUCTION,
     }
+    instruction = call["messages"][0]["content"]
+    assert "at most one item per hypothesis_code" in instruction
+    assert "support and counter are mutually exclusive" in instruction
+    assert "First branch on evaluation.verdict" in instruction
+    assert "If correct, return counter" in instruction
+    assert "If wrong, never return counter" in instruction
+    assert "never omit_inner_derivative" in instruction
+    assert "only a sign" in instruction
+    assert "is not differentiate_inner_incorrectly" in instruction
     assert call["messages"][1]["role"] == "user"
     assert json.loads(call["messages"][1]["content"]) == request.payload
     assert "```" not in call["messages"][1]["content"]

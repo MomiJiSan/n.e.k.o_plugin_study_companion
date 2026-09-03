@@ -178,6 +178,9 @@ type AdaptiveNextStep = {
 
 type PracticeFeedback = {
   feedback?: string;
+  covered_points?: string[];
+  missing_points?: string[];
+  reference_answer?: string;
   next_action?: string;
   summary?: string;
   reply?: string;
@@ -843,6 +846,19 @@ function MathReply({ text, label }: { text: string; label: string }) {
   );
 }
 
+function normalizeFeedbackDisplayText(value: unknown) {
+  return String(value || '')
+    .replace(/(?:&#x20;|&#32;|&nbsp;)/gi, ' ')
+    .trimEnd();
+}
+
+function hasUsableSelectionContext(nextStep?: AdaptiveNextStep | null) {
+  const contextId = String(nextStep?.selection_context_id || '').trim();
+  if (!contextId) return false;
+  const expiresAt = Number(nextStep?.expires_at || 0);
+  return expiresAt <= 0 || (Number.isFinite(expiresAt) && expiresAt > Date.now() / 1000);
+}
+
 function timeoutForEntry(entryId: string) {
   return ENTRY_TIMEOUT_MS[entryId] || 60000;
 }
@@ -1396,6 +1412,15 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         verdict: typeof evaluation.verdict === 'string' ? evaluation.verdict : undefined,
         score: typeof evaluation.score === 'number' ? evaluation.score : undefined,
         feedback: typeof evaluation.feedback === 'string' ? evaluation.feedback : undefined,
+        covered_points: Array.isArray(evaluation.covered_points)
+          ? evaluation.covered_points.map(String)
+          : undefined,
+        missing_points: Array.isArray(evaluation.missing_points)
+          ? evaluation.missing_points.map(String)
+          : undefined,
+        reference_answer: typeof evaluation.reference_answer === 'string'
+          ? evaluation.reference_answer
+          : undefined,
         next_action: typeof evaluation.next_action === 'string' ? evaluation.next_action : undefined,
         attempt_status: typeof evaluation.attempt_status === 'string' ? evaluation.attempt_status : undefined,
         scope_status: typeof evaluation.scope_status === 'string' ? evaluation.scope_status : undefined,
@@ -1487,6 +1512,21 @@ export default function StudyPanel(props: PluginSurfaceProps) {
     };
     const message = messages[String(status || '').trim().toLowerCase()];
     return message ? t(message[0], message[1]) : '';
+  }
+
+  function localizedEvaluationNextAction(value: unknown, status: unknown) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const locale = String(props.locale || 'en').toLowerCase();
+    if (locale.startsWith('en') || !/^[\x00-\x7F]*$/.test(text)) return text;
+    const messages: Record<string, [string, string]> = {
+      correct: ['ui.practice.next_action.correct', 'Proceed to the next question.'],
+      partial: ['ui.practice.next_action.partial', 'Complete the missing step, then check the answer again.'],
+      dont_know: ['ui.practice.next_action.dont_know', 'Review the hint, then try the answer again.'],
+      wrong: ['ui.practice.next_action.wrong', 'Review the misconception, then try a simpler question.'],
+    };
+    const message = messages[String(status || '').trim().toLowerCase()];
+    return message ? t(message[0], message[1]) : text;
   }
 
   function selectionReasonLabel(reason: unknown) {
@@ -2780,7 +2820,8 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       if (controller.signal.aborted) {
         return;
       }
-      let context: QuestionContext | null = preferredNextStep?.selection_context_id
+      const usePreferredContext = hasUsableSelectionContext(preferredNextStep);
+      let context: QuestionContext | null = usePreferredContext
         ? {
           selection_context_id: preferredNextStep.selection_context_id,
           selected_topic_id: preferredNextStep.topic_id,
@@ -2817,7 +2858,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       try {
         data = await requestQuestion(context.selection_context_id);
       } catch (error) {
-        if (!preferredNextStep?.selection_context_id || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
+        if (!usePreferredContext || pluginErrorCode(error) !== 'SELECTION_CONTEXT_EXPIRED') {
           throw error;
         }
         context = await loadQuestionContext(controller.signal);
@@ -2944,7 +2985,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
           ? t('ui.practice.mastery.mastered', 'This knowledge point is now mastered.')
           : '',
         data.feedback || data.reply || '',
-        data.next_action ? `${t('ui.practice.next_action', 'Next')}: ${data.next_action}` : '',
+        data.next_action
+          ? `${t('ui.practice.next_action', 'Next')}: ${localizedEvaluationNextAction(data.next_action, data.attempt_status || data.verdict)}`
+          : '',
       ].filter(Boolean);
       setReply(replyParts.join('\n\n') || data.summary || '');
       setCanEvaluateCurrentQuestion(false);
@@ -2967,11 +3010,12 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   }
 
   async function continueAdaptiveLoop() {
-    if (nextStep?.action === 'summarize_plan') {
+    const canUsePreview = nextStep?.status === 'ready' && nextStep.available_now === true;
+    if (canUsePreview && nextStep?.action === 'summarize_plan') {
       await summarizeSession();
       return;
     }
-    await generateQuestion(nextStep);
+    await generateQuestion(canUsePreview ? nextStep : null);
   }
 
   async function summarizeSession() {
@@ -3666,7 +3710,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         {explainLabel}
       </button>
       <div className="study-panel__reply-label">{t('ui.label.question', 'Question')}</div>
-      <pre>{question}</pre>
+      <MathReply text={question} label={t('ui.label.question', 'Question')} />
       <textarea
         aria-label={t('ui.label.answer', 'Answer')}
         value={answer}
@@ -3704,6 +3748,32 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       </div>
       {practiceFeedback ? (
         <section className="study-panel__state" aria-live="polite" aria-label={t('ui.practice.feedback_title', 'Feedback')}>
+          <div
+            className="practice-verdict"
+            data-status={String(practiceFeedback.attempt_status || practiceFeedback.verdict || 'unknown').toLowerCase()}
+            role="status"
+          >
+            {practiceAttemptMessage(practiceFeedback.attempt_status || practiceFeedback.verdict)
+              || t('ui.practice.attempt.unknown', 'Answer evaluated.')}
+          </div>
+          <MathReply
+            text={normalizeFeedbackDisplayText([
+              practiceFeedback.feedback || practiceFeedback.reply || '',
+              practiceFeedback.covered_points?.length
+                ? `${t('ui.practice.covered_points', 'Covered')}: ${practiceFeedback.covered_points.join(', ')}`
+                : '',
+              practiceFeedback.missing_points?.length
+                ? `${t('ui.practice.missing_points', 'Missing')}: ${practiceFeedback.missing_points.join(', ')}`
+                : '',
+              practiceFeedback.reference_answer
+                ? `${t('ui.practice.reference_answer', 'Reference')}: ${practiceFeedback.reference_answer}`
+                : '',
+              practiceFeedback.next_action
+                ? `${t('ui.practice.next_action', 'Next')}: ${localizedEvaluationNextAction(practiceFeedback.next_action, practiceFeedback.attempt_status || practiceFeedback.verdict)}`
+                : '',
+            ].filter(Boolean).join('\n'))}
+            label={t('ui.practice.feedback_title', 'Feedback')}
+          />
           <div>
             <span>{t('ui.practice.mastery_label', 'Mastery')}</span>
             <strong>{practiceFeedback.learning_update?.mastery_before != null
@@ -3749,15 +3819,15 @@ export default function StudyPanel(props: PluginSurfaceProps) {
               <strong>{t('ui.practice.next_step.temporarily_unavailable', 'Next-step preview is temporarily unavailable')}</strong>
             </div>
           ) : null}
-          {nextStep?.status === 'ready' && nextStep.available_now ? (
-            <div className="study-panel__actions">
-              <button type="button" disabled={interactionBusy} onClick={() => void continueAdaptiveLoop()}>
-                {nextStep.action === 'summarize_plan'
-                  ? t('ui.button.view_plan_summary', 'View plan summary')
-                  : t('ui.button.continue_next_question', 'Continue to next question')}
-              </button>
-            </div>
-          ) : null}
+          <div className="study-panel__actions">
+            <button type="button" disabled={interactionBusy} onClick={() => void continueAdaptiveLoop()}>
+              {nextStep?.status === 'ready'
+                && nextStep.available_now === true
+                && nextStep.action === 'summarize_plan'
+                ? t('ui.button.view_plan_summary', 'View plan summary')
+                : t('ui.button.continue_next_question', 'Continue to next question')}
+            </button>
+          </div>
         </section>
       ) : null}
       {practiceFeedback && cognitiveTarget ? (

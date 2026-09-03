@@ -630,6 +630,13 @@ class _TutorAnswerEntriesMixin:
         else:
             resolved_expected = supplied_expected
         answer_text = str(answer or "").strip()
+        # A validated image is a real learner response even when the text box
+        # is empty.  Keep the persisted/model-facing text unchanged; this
+        # marker is used only by the semantic consistency contract so an
+        # image answer is not forced into the ``dont_know`` verdict.
+        evaluation_learner_answer = answer_text or (
+            "[validated image answer]" if vision_image_payload else ""
+        )
         question_payload = dict(current_question) if using_current_question else {}
         question_payload.update(
             {
@@ -769,7 +776,7 @@ class _TutorAnswerEntriesMixin:
                     context=tutor_context,
                 )
             evaluation_validation = validate_evaluation(
-                dict(reply.payload or {}), learner_answer=answer_text
+                dict(reply.payload or {}), learner_answer=evaluation_learner_answer
             )
             if not reply.degraded and not evaluation_validation.valid:
                 repair_context = {
@@ -787,7 +794,8 @@ class _TutorAnswerEntriesMixin:
                     context=repair_context,
                 )
                 repaired_validation = validate_evaluation(
-                    dict(repaired_reply.payload or {}), learner_answer=answer_text
+                    dict(repaired_reply.payload or {}),
+                    learner_answer=evaluation_learner_answer,
                 )
                 if not repaired_reply.degraded and repaired_validation.valid:
                     reply = repaired_reply

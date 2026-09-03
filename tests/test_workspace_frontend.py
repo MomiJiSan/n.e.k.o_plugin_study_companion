@@ -206,12 +206,22 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     assert 'class="settings-drawer__panel"' in index
     assert 'class="settings-drawer__layout"' in index
     assert 'class="settings-drawer__content"' in index
-    assert index.count('data-settings-tab=') == 5
+    assert index.count('data-settings-tab=') == 6
+    assert index.index('data-settings-tab="data"') < index.index('data-settings-tab="runtime"')
+    runtime_panel = index[index.index('id="panel-runtime"') :]
+    study_panel = index[index.index('id="panel-study"') : index.index('id="panel-knowledge"')]
+    for setting_id in ("settingsOcrSummary", "settingsLlmSummary", "settingsDependencySummary"):
+        assert f'id="{setting_id}"' in runtime_panel
+        assert f'id="{setting_id}"' not in study_panel
+    assert runtime_panel.count('class="settings-card settings-card--collapsible" open') == 3
+    assert 'id="settingsRuntimeSaveBtn"' in runtime_panel
 
     assert ".advanced-settings { position: fixed; inset: 0;" in style
     assert ".settings-drawer__panel { display: grid; grid-template-rows: auto minmax(0, 1fr);" in style
     assert "grid-template-rows: auto minmax(0, 1fr)" in style
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in style
+    assert "grid-template-columns: repeat(6, minmax(0, 1fr))" in style
+    assert ".settings-runtime-grid { grid-template-columns: minmax(0, 1fr);" in style
+    assert ".settings-card__summary-state::before { content: \"+\";" in style
     assert ".settings-drawer__content { min-width: 0; overflow: auto;" in style
     assert ".settings-form > .settings-actions { position: sticky;" in style
     assert ".advanced-settings { padding: 0;" in workspace
@@ -223,6 +233,7 @@ def test_advanced_settings_is_an_accessible_responsive_drawer() -> None:
     assert "event.target === advancedSettings" in main
     assert "handleAdvancedSettingsKeydown" in main
     assert "advancedToggleBtn?.focus?.()" in main
+    assert "saveSettingsConfig(settingsRuntimeConfigStatus)" in main
 
     save_settings = main[
         main.index("async function saveSettingsConfig") : main.index("async function createRun")

@@ -209,6 +209,10 @@ def test_study_config_cognitive_round_trip_preserves_existing_defaults(
 
     reloaded = models.build_config(payload)
 
+    assert payload["cognitive"]["supported_topics"] == [
+        "calculus.chain_rule",
+        "college_chain_rule",
+    ]
     assert reloaded.cognitive.to_dict() == baseline.cognitive.to_dict()
     assert reloaded.mode == baseline.mode
     assert reloaded.mastery.to_dict() == baseline.mastery.to_dict()

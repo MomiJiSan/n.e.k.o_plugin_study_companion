@@ -53,6 +53,7 @@ class _KnowledgeEntriesMixin:
             "schema_version",
             "scope_total_count",
             "scope_returned_count",
+            "subject_counts",
             "has_more",
             "next_cursor",
             "nodes",
@@ -129,6 +130,10 @@ class _KnowledgeEntriesMixin:
                 payload["omitted_edge_count"] = max(
                     0, int(page.get("omitted_edge_count") or 0)
                 )
+            payload["subject_counts"] = {
+                str(subject or ""): max(0, int(count or 0))
+                for subject, count in dict(page.get("subject_counts") or {}).items()
+            }
             return Ok(payload)
         except Exception as exc:
             return _entry_exception_error(
