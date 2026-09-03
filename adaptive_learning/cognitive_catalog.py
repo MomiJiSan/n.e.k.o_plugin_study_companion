@@ -314,9 +314,8 @@ class KnowledgeGraphCognitiveCatalog(CognitiveCatalog):
     def get(
         self, topic_id: str, hypothesis_code: str
     ) -> CognitiveHypothesisSpec | None:
-        reviewed = self._base_catalog.get(topic_id, hypothesis_code)
-        if reviewed is not None:
-            return reviewed
+        if self._base_catalog.supports_topic(topic_id):
+            return self._base_catalog.get(topic_id, hypothesis_code)
         canonical = self.canonical_topic_id(topic_id)
         generic = self._generic_by_code.get(str(hypothesis_code or "").strip())
         if canonical is None or generic is None:

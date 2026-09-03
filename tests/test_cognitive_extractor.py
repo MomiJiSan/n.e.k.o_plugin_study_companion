@@ -10,6 +10,7 @@ from adaptive_learning.cognitive_catalog import (
     CHAIN_RULE_TOPIC_ID,
     COGNITIVE_CATALOG_V1,
     COLLEGE_CHAIN_RULE_TOPIC_ID,
+    build_knowledge_graph_cognitive_catalog,
 )
 from adaptive_learning.cognitive_contracts import (
     COGNITIVE_EXTRACT_OPERATION,
@@ -95,6 +96,21 @@ def test_v1_catalog_is_closed_to_one_topic_and_three_codes() -> None:
     assert COGNITIVE_CATALOG_V1.allowed_codes(CHAIN_RULE_TOPIC_ID) == expected
     assert COGNITIVE_CATALOG_V1.allowed_codes(COLLEGE_CHAIN_RULE_TOPIC_ID) == expected
     assert COGNITIVE_CATALOG_V1.allowed_codes("algebra.linear_equation") == ()
+
+
+def test_graph_catalog_keeps_reviewed_topics_closed_to_reviewed_codes() -> None:
+    catalog = build_knowledge_graph_cognitive_catalog(
+        lambda topic_id: {"id": topic_id}
+    )
+
+    reviewed = catalog.get(CHAIN_RULE_TOPIC_ID, "omit_inner_derivative")
+    assert reviewed is not None
+    assert reviewed.code == "omit_inner_derivative"
+    assert catalog.get(CHAIN_RULE_TOPIC_ID, "concept_misunderstanding") is None
+
+    generic = catalog.get("algebra.linear_equation", "concept_misunderstanding")
+    assert generic is not None
+    assert generic.topic_id == "algebra.linear_equation"
 
 
 @pytest.mark.asyncio
