@@ -712,7 +712,7 @@
     "ui.settings.cognitive.help":  "Shadow analyzes answers without changing questions. Active can influence judgments and the next question. Analysis uses topics, prerequisites, skills, and common misconceptions from the current knowledge graph.",
     "ui.settings.cognitive.runtime.summary":  "Uses the knowledge graph to analyze answer errors, update mastery evidence, and help select the next question.",
     "ui.settings.cognitive.enabled.label":  "Enable cognitive engine",
-    "ui.settings.cognitive.enabled.help":  "When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the mode in Data settings.",
+    "ui.settings.cognitive.enabled.help":  "When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the operating mode below.",
     "ui.settings.cognitive.status.off":  "Off: answer evidence is not analyzed.",
     "ui.settings.cognitive.status.shadow":  "Shadow: analyzes answers without changing the question flow.",
     "ui.settings.cognitive.status.active":  "Active: analyzes answers and can influence the next question.",

@@ -202,18 +202,20 @@ def test_cognitive_settings_replace_the_running_tracker(
     assert owner.cognitive_wake_calls == 1
 
 
-def test_cognitive_setting_is_in_the_right_data_column_and_localized() -> None:
+def test_cognitive_setting_is_in_the_runtime_column_and_localized() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     data_panel = index[index.index('id="panel-data"') : index.index('id="panel-runtime"')]
     runtime_panel = index[index.index('id="panel-runtime"') : index.index('id="memoryDeckDialog"')]
 
-    assert data_panel.index('id="settingsDocExportEnabled"') < data_panel.index('id="settingsCognitiveMode"')
-    assert data_panel.count('class="settings-card"') == 2
-    assert '<option value="off"' in data_panel
-    assert '<option value="shadow"' in data_panel
-    assert '<option value="active"' in data_panel
+    assert 'id="settingsCognitiveMode"' not in data_panel
+    assert data_panel.count('class="settings-card"') == 1
     assert 'id="settingsCognitiveEnabled"' in runtime_panel
+    assert runtime_panel.index('id="settingsCognitiveEnabled"') < runtime_panel.index('id="settingsCognitiveMode"')
+    assert '<option value="off"' in runtime_panel
+    assert '<option value="shadow"' in runtime_panel
+    assert '<option value="active"' in runtime_panel
+    assert 'id="settingsCognitiveHelp"' in runtime_panel
     assert 'id="settingsCognitiveRuntimeHelp"' in runtime_panel
     assert 'id="settingsCognitiveRuntimeStatus"' in runtime_panel
     for token in (

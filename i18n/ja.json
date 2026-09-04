@@ -712,7 +712,7 @@
     "ui.settings.cognitive.help":  "Shadow は問題を変えずに回答を分析します。Active は学習判断と次の問題に反映できます。",
     "ui.settings.cognitive.runtime.summary":  "回答が正しいかを判定し、習熟度の根拠を更新して、次の問題選択を支援します。",
     "ui.settings.cognitive.enabled.label":  "認知エンジンを有効にする",
-    "ui.settings.cognitive.enabled.help":  "有効にすると、Shadow は出題の流れを変えずに回答の根拠を観察・記録します。Active は判定や次の問題にも反映できます。モードは「データ」設定で選択します。",
+    "ui.settings.cognitive.enabled.help":  "有効にすると、Shadow は出題の流れを変えずに回答の根拠を観察・記録します。Active は判定や次の問題にも反映できます。以下で動作モードを選択してください。",
     "ui.settings.cognitive.status.off":  "オフ：回答の根拠を分析しません。",
     "ui.settings.cognitive.status.shadow":  "Shadow：出題の流れを変えずに回答を分析します。",
     "ui.settings.cognitive.status.active":  "Active：回答を分析し、次の問題に反映できます。",

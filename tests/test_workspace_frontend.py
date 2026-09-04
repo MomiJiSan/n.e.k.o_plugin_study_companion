@@ -112,6 +112,22 @@ def test_workspace_assets_routes_and_locales_are_complete() -> None:
     assert "activateWorkspace(" not in escape_source
 
 
+def test_memory_editor_uses_full_width_stacked_fields() -> None:
+    index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    style = re.sub(r"\s+", " ", (STATIC_ROOT / "style.css").read_text(encoding="utf-8"))
+
+    memory_inputs = index[
+        index.index('<div class="memory-inputs">'):
+        index.index('<label class="input-label" for="memoryItemTypeSelect"')
+    ]
+    assert memory_inputs.count('class="memory-input-field"') == 2
+    assert memory_inputs.index('for="memoryFrontInput"') < memory_inputs.index('id="memoryFrontInput"')
+    assert memory_inputs.index('for="memoryBackInput"') < memory_inputs.index('id="memoryBackInput"')
+    assert ".memory-inputs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;" in style
+    assert ".memory-input-field { display: grid; gap: 8px; min-width: 0;" in style
+    assert "#memoryFrontInput, #memoryBackInput { min-height: 132px;" in style
+
+
 def test_neko_coach_scene_ignores_call_diagnostics_but_diagnosis_retains_them() -> None:
     main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
 
