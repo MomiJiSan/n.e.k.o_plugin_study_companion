@@ -116,6 +116,7 @@ def _safe_cognitive_dev_retention_payload(
     return {
         "enabled": payload.get("enabled") is True,
         "status": status,
+        "reason_code": str(payload.get("reason_code") or "").strip(),
         "development_override": payload.get("development_override") is True,
         "topic_id": topic_id,
         "hypothesis_code": hypothesis_code,

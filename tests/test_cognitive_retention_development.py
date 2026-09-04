@@ -899,6 +899,7 @@ def test_entry_requires_confirmation_and_respects_question_lifecycle(
         )
     )
     assert preview["status"] == "ready"
+    assert preview["reason_code"] == ""
     assert preview["source_attempt_id"] == prepared_fixture.source_attempt_id
     missing_confirmation = asyncio.run(
         harness.study_cognitive_dev_prepare_retention(
