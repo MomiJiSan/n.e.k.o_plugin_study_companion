@@ -77,10 +77,13 @@ uv run python -m plugin.neko_plugin_cli.cli check -r study_companion
 ```bash
 uv run python -m knowledge_dungeon.simulator --scenario calculus_v0_1
 uv run python -m knowledge_dungeon.fixture_exporter --output ../N.E.K.O-Knowledge-Dungeon/fixtures/demo-sequence.zh-CN.json
+uv run python -m knowledge_dungeon.persistence_simulator --database .tmp/knowledge-dungeon-v0.2-demo.sqlite3
 uv run python -m pytest -q tests/knowledge_dungeon
 ```
 
 Electron 演示夹具现由 Python 权威引擎完整导出；格式和同步检查见 [`docs/knowledge-dungeon-v0.2-fixture-export.md`](docs/knowledge-dungeon-v0.2-fixture-export.md)。
+
+v0.2-A1 增加可选的独立 SQLite 运行存储、原子命令回执、重启恢复与损坏隔离；实现边界见 [`docs/knowledge-dungeon-v0.2-persistence.md`](docs/knowledge-dungeon-v0.2-persistence.md)。
 
 > **注意：** 该原型尚未接入正式插件入口、真实 Mastery/FSRS/Cognitive 数据或用户数据库，也不会写回学习事实。详细验收范围见 [`docs/knowledge-dungeon-v0.1-acceptance.md`](docs/knowledge-dungeon-v0.1-acceptance.md)。
 

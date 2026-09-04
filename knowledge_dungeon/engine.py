@@ -8,22 +8,33 @@ from typing import Any, Iterable, Mapping
 
 from .commands import CommandValidationError, DungeonCommand, command_to_dict
 from .contracts import PROTOCOL_VERSION
+from .persistence import (
+    ConcurrentDungeonWrite,
+    DungeonCommandConflict,
+    DungeonRunStore,
+    DungeonStoreError,
+    DuplicateDungeonCommand,
+    command_fingerprint,
+)
 from .reducer import ReducerError, reduce_command
 from .serializer import state_hash
 from .state import RunState
 
 
 class KnowledgeDungeonEngine:
-    """Own in-memory v0.1 runs and enforce concurrency/idempotency rules."""
+    """Own dungeon runs and enforce concurrency/idempotency rules."""
 
-    def __init__(self) -> None:
+    def __init__(self, store: DungeonRunStore | None = None) -> None:
         self._lock = RLock()
+        self._store = store
         self._runs: dict[str, RunState] = {}
-        self._response_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._response_cache: dict[
+            tuple[str, str], tuple[str, dict[str, Any]]
+        ] = {}
 
     def get_state(self, run_id: str) -> RunState | None:
         with self._lock:
-            state = self._runs.get(run_id)
+            state = self._load_current(run_id)
             return deepcopy(state) if state is not None else None
 
     def dispatch(self, raw_command: DungeonCommand | Mapping[str, Any]) -> dict[str, Any]:
@@ -37,12 +48,43 @@ class KnowledgeDungeonEngine:
             return self._rejection(None, "invalid_command", str(exc))
 
         with self._lock:
-            cache_key = (command.run_id, command.command_id)
-            cached = self._response_cache.get(cache_key)
-            if cached is not None:
-                return deepcopy(cached)
+            try:
+                current = self._load_current(command.run_id)
+            except DungeonStoreError as exc:
+                return self._rejection(None, exc.code, str(exc))
 
-            current = self._runs.get(command.run_id)
+            cache_key = (command.run_id, command.command_id)
+            fingerprint = command_fingerprint(command)
+            if self._store is not None:
+                try:
+                    receipt = self._store.load_receipt(
+                        command.run_id, command.command_id
+                    )
+                except DungeonStoreError as exc:
+                    error_state = (
+                        None if exc.code == "corrupt_dungeon_state" else current
+                    )
+                    return self._rejection(error_state, exc.code, str(exc))
+                if receipt is not None:
+                    if receipt.request_hash != fingerprint:
+                        return self._rejection(
+                            current,
+                            "command_id_conflict",
+                            "command_id was already used with a different request",
+                        )
+                    return deepcopy(receipt.response)
+            else:
+                cached = self._response_cache.get(cache_key)
+                if cached is not None:
+                    cached_fingerprint, cached_response = cached
+                    if cached_fingerprint != fingerprint:
+                        return self._rejection(
+                            current,
+                            "command_id_conflict",
+                            "command_id was already used with a different request",
+                        )
+                    return deepcopy(cached_response)
+
             if current is not None and command.command_id in current.processed_command_ids:
                 # A state restored without the ephemeral response cache remains safe.
                 return self._acceptance(current, [], idempotent_replay=True)
@@ -65,16 +107,64 @@ class KnowledgeDungeonEngine:
             next_state.state_version = actual_version + 1
             next_state.processed_command_ids.append(command.command_id)
             next_state.command_log.append(command_to_dict(command))
-            self._runs[command.run_id] = next_state
             response = self._acceptance(next_state, transition.events)
-            self._response_cache[cache_key] = deepcopy(response)
+            if self._store is not None:
+                try:
+                    self._store.commit_transition(
+                        previous_state_version=actual_version,
+                        state=next_state,
+                        command=command,
+                        response=response,
+                    )
+                except DuplicateDungeonCommand as exc:
+                    if exc.receipt.request_hash != fingerprint:
+                        return self._rejection(
+                            current,
+                            "command_id_conflict",
+                            "command_id was already used with a different request",
+                        )
+                    return deepcopy(exc.receipt.response)
+                except DungeonCommandConflict as exc:
+                    return self._rejection(current, exc.code, str(exc))
+                except ConcurrentDungeonWrite:
+                    try:
+                        latest = self._load_current(command.run_id)
+                    except DungeonStoreError as exc:
+                        return self._rejection(None, exc.code, str(exc))
+                    latest_version = latest.state_version if latest is not None else 0
+                    return self._rejection(
+                        latest,
+                        "stale_state_version",
+                        f"expected {command.expected_state_version}, actual {latest_version}",
+                    )
+                except DungeonStoreError as exc:
+                    error_state = (
+                        None if exc.code == "corrupt_dungeon_state" else current
+                    )
+                    return self._rejection(error_state, exc.code, str(exc))
+
+            self._runs[command.run_id] = next_state
+            if self._store is None:
+                self._response_cache[cache_key] = (fingerprint, deepcopy(response))
             return response
 
     def restore_state(self, state: RunState) -> None:
         with self._lock:
+            if self._store is not None:
+                raise ValueError("persistent engines recover state from DungeonRunStore")
             if state.run_id in self._runs:
                 raise ValueError(f"run already exists: {state.run_id}")
             self._runs[state.run_id] = deepcopy(state)
+
+    def _load_current(self, run_id: str) -> RunState | None:
+        if self._store is None:
+            return self._runs.get(run_id)
+        state = self._store.load_run(run_id)
+        if state is None:
+            self._runs.pop(run_id, None)
+        else:
+            self._runs[run_id] = state
+        return state
 
     @classmethod
     def replay(cls, commands: Iterable[DungeonCommand | Mapping[str, Any]]) -> "KnowledgeDungeonEngine":
