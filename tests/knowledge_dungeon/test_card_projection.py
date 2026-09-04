@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 
-import pytest
-
 from knowledge_dungeon.card_catalog import (
     MATH_CARD_CATALOG,
     STARTER_CARD,
@@ -58,20 +56,7 @@ def test_mastered_topic_unlocks_card_but_ownership_is_independent_of_usability()
     assert cards["math.calculus.continuity"].effective_damage == 0
 
 
-@pytest.mark.parametrize(
-    ("mastery_bp", "expected_state", "expected_multiplier"),
-    [
-        (10_000, CardState.ACTIVE, 10_000),
-        (7_000, CardState.ACTIVE, 10_000),
-        (6_999, CardState.FADING_LIGHT, 8_000),
-        (6_500, CardState.FADING_LIGHT, 8_000),
-        (6_499, CardState.FADING_HEAVY, 5_000),
-        (6_000, CardState.FADING_HEAVY, 5_000),
-        (5_999, CardState.DORMANT, 0),
-        (0, CardState.DORMANT, 0),
-    ],
-)
-def test_card_state_threshold_boundaries(mastery_bp, expected_state, expected_multiplier) -> None:
+def _assert_threshold(mastery_bp: int, expected_state: CardState, expected_multiplier: int) -> None:
     card = MATH_CARD_CATALOG[0]
     snapshot = LearningSnapshot(
         snapshot_id="fixture.threshold.v1",
@@ -80,11 +65,42 @@ def test_card_state_threshold_boundaries(mastery_bp, expected_state, expected_mu
         topics=(TopicSnapshot(card.topic_id or "", "math", mastery_bp, False),),
         owned_card_ids=(card.card_id,),
     )
-
     projected = _by_id(project_cards(snapshot, "math"))[card.card_id]
 
     assert projected.state is expected_state
     assert projected.freshness_multiplier_bp == expected_multiplier
+
+
+def test_mastery_10000_is_active() -> None:
+    _assert_threshold(10_000, CardState.ACTIVE, 10_000)
+
+
+def test_mastery_7000_is_active() -> None:
+    _assert_threshold(7_000, CardState.ACTIVE, 10_000)
+
+
+def test_mastery_6999_is_fading_light() -> None:
+    _assert_threshold(6_999, CardState.FADING_LIGHT, 8_000)
+
+
+def test_mastery_6500_is_fading_light() -> None:
+    _assert_threshold(6_500, CardState.FADING_LIGHT, 8_000)
+
+
+def test_mastery_6499_is_fading_heavy() -> None:
+    _assert_threshold(6_499, CardState.FADING_HEAVY, 5_000)
+
+
+def test_mastery_6000_is_fading_heavy() -> None:
+    _assert_threshold(6_000, CardState.FADING_HEAVY, 5_000)
+
+
+def test_mastery_5999_is_dormant() -> None:
+    _assert_threshold(5_999, CardState.DORMANT, 0)
+
+
+def test_mastery_zero_is_dormant() -> None:
+    _assert_threshold(0, CardState.DORMANT, 0)
 
 
 def test_tier_budget_and_fixture_damage_are_fixed() -> None:
@@ -104,8 +120,12 @@ def test_integer_effect_calculation_rounds_half_up_and_keeps_active_attack_minim
 def test_contracts_are_immutable_and_canonical_serialization_is_stable() -> None:
     snapshot = learned_calculus_snapshot()
 
-    with pytest.raises(FrozenInstanceError):
+    try:
         snapshot.snapshot_id = "changed"  # type: ignore[misc]
+    except FrozenInstanceError:
+        pass
+    else:
+        raise AssertionError("LearningSnapshot must remain immutable")
 
     assert canonical_json({"z": 1, "name": "红枼", "a": (2, 3)}) == '{"a":[2,3],"name":"红枼","z":1}'
     assert canonical_sha256(snapshot) == canonical_sha256(snapshot.to_dict())
