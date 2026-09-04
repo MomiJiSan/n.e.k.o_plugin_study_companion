@@ -4,15 +4,15 @@ import asyncio
 import importlib.util
 import sys
 import threading
+from importlib import import_module
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
 
-from knowledge_dungeon import private_bridge as real_bridge_module
-
 ROOT = Path(__file__).resolve().parents[1]
+real_bridge_module: Any = import_module("knowledge_dungeon.private_bridge")
 
 
 class _Result:
