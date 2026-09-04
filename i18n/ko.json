@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "개념 오해",
     "ui.cognitive.hypothesis.prerequisite_gap": "선수 지식 부족",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "절차·변환·표현 오류",
-    "ui.cognitive.hypothesis.unknown": "반복되는 오류 패턴"
+    "ui.cognitive.hypothesis.unknown": "반복되는 오류 패턴",
+    "ui.release_notes.eyebrow": "버전 업데이트",
+    "ui.release_notes.title": "v{version}의 새로운 기능",
+    "ui.release_notes.intro": "Study Companion이 업데이트되었습니다. 이번 버전의 변경 사항을 확인해 보세요.",
+    "ui.release_notes.acknowledge": "확인",
+    "ui.release_notes.highlight.persistence": "Knowledge Dungeon 진행 상황을 안전하게 저장하고 동시 쓰기 보호를 강화했습니다.",
+    "ui.release_notes.highlight.cognitive_transfer": "인지 전이 문제의 학습 기록 저장 오류를 수정했습니다.",
+    "ui.release_notes.highlight.workspace": "학습 작업 공간 레이아웃과 인지 설정 환경을 개선했습니다.",
+    "ui.release_notes.highlight.announcement": "새 버전을 처음 열 때 한 번만 표시되는 업데이트 안내를 추가했습니다."
 }

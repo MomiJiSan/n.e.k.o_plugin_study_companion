@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "una comprensión conceptual incorrecta",
     "ui.cognitive.hypothesis.prerequisite_gap": "una carencia de conocimientos previos",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "un error de procedimiento, conversión o representación",
-    "ui.cognitive.hypothesis.unknown": "un patrón de error recurrente"
+    "ui.cognitive.hypothesis.unknown": "un patrón de error recurrente",
+    "ui.release_notes.eyebrow": "Actualización de versión",
+    "ui.release_notes.title": "Novedades de la v{version}",
+    "ui.release_notes.intro": "Study Companion se ha actualizado. Estos son los cambios de esta versión.",
+    "ui.release_notes.acknowledge": "Entendido",
+    "ui.release_notes.highlight.persistence": "El progreso de Knowledge Dungeon ahora se guarda de forma segura y con mayor protección ante escrituras simultáneas.",
+    "ui.release_notes.highlight.cognitive_transfer": "Se corrigió el guardado de registros de aprendizaje en preguntas de transferencia cognitiva.",
+    "ui.release_notes.highlight.workspace": "Se mejoraron el diseño del espacio de estudio y la experiencia de los ajustes cognitivos.",
+    "ui.release_notes.highlight.announcement": "Se añadieron avisos de versión que aparecen una sola vez al abrir cada nueva versión."
 }

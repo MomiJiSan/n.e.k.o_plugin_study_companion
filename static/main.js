@@ -3396,6 +3396,7 @@ async function bootstrap() {
     await window.I18n.init(PLUGIN_ID);
     window.I18n.scanDOM();
   }
+  window.StudyReleaseNotes?.initialize({ i18n: window.I18n });
   await initializeWorkspaceController();
   document.title = t('ui.title', 'Study Companion');
   syncLearningProfileUi();

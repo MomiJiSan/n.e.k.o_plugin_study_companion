@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "неверное понимание понятия",
     "ui.cognitive.hypothesis.prerequisite_gap": "пробел в предварительных знаниях",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "ошибка процедуры, преобразования или представления",
-    "ui.cognitive.hypothesis.unknown": "повторяющаяся закономерность ошибки"
+    "ui.cognitive.hypothesis.unknown": "повторяющаяся закономерность ошибки",
+    "ui.release_notes.eyebrow": "Обновление версии",
+    "ui.release_notes.title": "Что нового в v{version}",
+    "ui.release_notes.intro": "Study Companion обновлён. Посмотрите, что изменилось в этой версии.",
+    "ui.release_notes.acknowledge": "Понятно",
+    "ui.release_notes.highlight.persistence": "Прогресс Knowledge Dungeon теперь сохраняется безопасно, а защита от одновременной записи усилена.",
+    "ui.release_notes.highlight.cognitive_transfer": "Исправлено сохранение учебных записей для задач на когнитивный перенос.",
+    "ui.release_notes.highlight.workspace": "Улучшены макет учебного пространства и настройки когнитивных функций.",
+    "ui.release_notes.highlight.announcement": "Добавлены уведомления о версиях, которые показываются один раз при первом открытии новой версии."
 }

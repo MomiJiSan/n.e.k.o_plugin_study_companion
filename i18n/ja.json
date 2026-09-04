@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "概念の理解違い",
     "ui.cognitive.hypothesis.prerequisite_gap": "前提知識の不足",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "手順・変換・表現上の誤り",
-    "ui.cognitive.hypothesis.unknown": "繰り返し現れるエラーパターン"
+    "ui.cognitive.hypothesis.unknown": "繰り返し現れるエラーパターン",
+    "ui.release_notes.eyebrow": "バージョンアップデート",
+    "ui.release_notes.title": "v{version} の新機能",
+    "ui.release_notes.intro": "Study Companion が更新されました。このバージョンの変更点をご確認ください。",
+    "ui.release_notes.acknowledge": "確認しました",
+    "ui.release_notes.highlight.persistence": "Knowledge Dungeon の進行状況を安全に保存し、同時書き込み保護を強化しました。",
+    "ui.release_notes.highlight.cognitive_transfer": "認知転移問題の学習記録が保存されない問題を修正しました。",
+    "ui.release_notes.highlight.workspace": "学習ワークスペースのレイアウトと認知設定の操作性を改善しました。",
+    "ui.release_notes.highlight.announcement": "新バージョンを初めて開いたときに一度だけ表示される更新案内を追加しました。"
 }
