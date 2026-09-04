@@ -442,6 +442,109 @@ def test_invalid_intervention_rolls_back_answer_facts_atomically(
         store.close()
 
 
+@pytest.mark.parametrize(
+    ("mismatch", "expected_error"),
+    [
+        ("question", "detached from attempt facts"),
+        ("binding_topic", "topic is detached"),
+        ("hypothesis_topic", "topic is detached"),
+        ("verdict", "verdict differs"),
+    ],
+)
+def test_client_cognitive_identity_mismatch_rejects_whole_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mismatch: str,
+    expected_error: str,
+) -> None:
+    Store = _load_store(monkeypatch, f"_cognitive_identity_{mismatch}")
+    store = _store(tmp_path, Store)
+    try:
+        store.record_cognitive_intervention_event(
+            _event("event-question", "question_committed")
+        )
+        attempt_event = _event(
+            f"event-attempt-{mismatch}",
+            "attempt_committed",
+            attempt_id="attempt-identity",
+            verdict="wrong",
+        )
+        if mismatch == "question":
+            attempt_event["question_id"] = "forged-question"
+        elif mismatch == "binding_topic":
+            attempt_event["binding"] = {
+                **dict(attempt_event["binding"]),  # type: ignore[arg-type]
+                "topic_id": "forged-topic",
+            }
+        elif mismatch == "hypothesis_topic":
+            attempt_event["hypothesis_target"] = {
+                **dict(attempt_event["hypothesis_target"]),  # type: ignore[arg-type]
+                "topic_id": "forged-topic",
+            }
+        else:
+            attempt_event["evaluation_verdict"] = "correct"
+
+        with pytest.raises(ValueError, match=expected_error):
+            store.batch_write_answer_data(
+                **_answer_kwargs("attempt-identity", attempt_event)
+            )
+
+        assert store.get_attempt_fact("attempt-identity") is None
+        assert store.list_cognitive_outbox() == []
+        assert [
+            event["event_type"] for event in store.list_cognitive_intervention_events()
+        ] == ["question_committed"]
+    finally:
+        store.close()
+
+
+def test_stale_control_discards_cognitive_effect_but_preserves_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store = _load_store(monkeypatch, "_cognitive_answer_stale_control")
+    store = _store(tmp_path, Store)
+    try:
+        store.record_cognitive_intervention_event(
+            _event("event-question", "question_committed")
+        )
+        store.record_cognitive_user_control(
+            topic_id=TOPIC,
+            hypothesis_code=CODE,
+            action="dismiss",
+            reason="user stopped cognitive intervention",
+        )
+        attempt_event = _event(
+            "event-attempt-stale",
+            "attempt_committed",
+            attempt_id="attempt-stale",
+            verdict="wrong",
+        )
+
+        result = store.batch_write_answer_data(
+            **_answer_kwargs("attempt-stale", attempt_event)
+        )
+
+        assert result["cognitive_intervention_event"] == {
+            "recorded": False,
+            "error": "stale_control",
+        }
+        assert store.get_attempt_fact("attempt-stale") is not None
+        assert [
+            event["event_type"] for event in store.list_cognitive_intervention_events()
+        ] == ["question_committed"]
+        discarded = store.list_cognitive_outbox(status="discarded")
+        assert len(discarded) == 1
+        assert discarded[0]["attempt_id"] == "attempt-stale"
+        assert store.process_cognitive_outbox() == {
+            "claimed": 0,
+            "completed": 0,
+            "failed": 0,
+            "lease_lost": 0,
+        }
+    finally:
+        store.close()
+
+
 def test_later_answer_failure_rolls_back_successful_intervention_event(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

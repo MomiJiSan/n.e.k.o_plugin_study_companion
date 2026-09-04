@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -314,6 +315,36 @@ def test_abandoned_question_cannot_commit_attempt_event_or_diagnostic_provenance
         store.close()
 
 
+def test_attempt_commit_is_terminal_and_cannot_be_abandoned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store_module, tracker_module = _load_runtime(
+        monkeypatch, "_cognitive_answer_event_terminal"
+    )
+    store = _open_store(tmp_path, store_module.StudyStore)
+    try:
+        committed = store.record_cognitive_intervention_event(_question_event())
+        _submit(
+            _tracker(tracker_module.KnowledgeTracker, store),
+            attempt_id="attempt-terminal",
+        )
+        abandoned = dict(committed)
+        abandoned.update(
+            {
+                "event_id": "event-terminal-abandon",
+                "event_type": "intervention_abandoned",
+                "attempt_id": "",
+                "evaluation_verdict": "",
+                "abandonment_reason": "late_cancel",
+            }
+        )
+        abandoned.pop("event_seq", None)
+        with pytest.raises(ValueError, match="terminal"):
+            store.record_cognitive_intervention_event(abandoned)
+    finally:
+        store.close()
+
+
 @pytest.mark.parametrize("action", ["dismiss", "suppress", "delete"])
 def test_user_override_skips_attempt_event_but_preserves_ordinary_answer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, action: str
@@ -328,6 +359,11 @@ def test_user_override_skips_attempt_event_but_preserves_ordinary_answer(
             hypothesis_code=HYPOTHESIS,
             action=action,
             reason="integration test",
+            expires_at=(
+                (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+                if action == "suppress"
+                else ""
+            ),
         )
 
         attempt_id = f"attempt-{action}"
@@ -345,7 +381,7 @@ def test_user_override_skips_attempt_event_but_preserves_ordinary_answer(
         store.close()
 
 
-def test_cognitive_event_insert_failure_rolls_back_answer_transaction(
+def test_cognitive_event_insert_failure_preserves_answer_and_failed_outbox(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     store_module, tracker_module = _load_runtime(
@@ -358,17 +394,49 @@ def test_cognitive_event_insert_failure_rolls_back_answer_transaction(
         def fail_insert(*_args: object, **_kwargs: object) -> None:
             raise RuntimeError("injected cognitive event failure")
 
-        monkeypatch.setattr(
-            store_module, "insert_cognitive_intervention_event", fail_insert
+        intervention_module = importlib.import_module(
+            f"{store_module.__package__}.store_cognitive_intervention"
         )
-        with pytest.raises(RuntimeError, match="injected cognitive event failure"):
-            _submit(
-                _tracker(tracker_module.KnowledgeTracker, store),
-                attempt_id="attempt-insert-failure",
-            )
+        original_insert = intervention_module.insert_cognitive_intervention_event
+        monkeypatch.setattr(intervention_module, "insert_cognitive_intervention_event", fail_insert)
+        result = _submit(
+            _tracker(tracker_module.KnowledgeTracker, store),
+            attempt_id="attempt-insert-failure",
+        )
 
-        assert store.get_attempt_fact("attempt-insert-failure") is None
+        assert result["topic_id"] == TOPIC
+        _assert_ordinary_answer_committed(store, "attempt-insert-failure", cognitive=True)
         events = store.list_cognitive_intervention_events()
         assert [event["event_type"] for event in events] == ["question_committed"]
+        failed = store.list_cognitive_outbox(status="failed")
+        assert len(failed) == 1
+        assert failed[0]["attempt_id"] == "attempt-insert-failure"
+        assert failed[0]["retry_count"] == 1
+        assert "injected cognitive event failure" in failed[0]["last_error"]
+        assert "user_answer" not in failed[0]["payload"]
+        assert "expected_answer" not in failed[0]["payload"]
+
+        monkeypatch.setattr(
+            intervention_module,
+            "insert_cognitive_intervention_event",
+            original_insert,
+        )
+        assert store.process_cognitive_outbox() == {
+            "claimed": 1,
+            "completed": 1,
+            "failed": 0,
+            "lease_lost": 0,
+        }
+        assert len(
+            [
+                row
+                for row in store.list_cognitive_outbox(status="done")
+                if row["operation"] == "intervention_event"
+            ]
+        ) == 1
+        assert [event["event_type"] for event in store.list_cognitive_intervention_events()] == [
+            "question_committed",
+            "attempt_committed",
+        ]
     finally:
         store.close()

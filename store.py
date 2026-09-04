@@ -12,6 +12,7 @@ from .adaptive_learning.cognitive_contracts import (
     DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
     DEFAULT_COGNITIVE_MODEL_VERSION,
 )
+from .adaptive_learning.cognitive_retention import RETENTION_COGNITIVE_STRATEGY
 from .knowledge_quality import (
     DEFAULT_TRUSTED_NEGATIVE_THRESHOLD,
     KnowledgeCandidateStatus,
@@ -45,6 +46,7 @@ from .store_cognitive import (
     get_cognitive_topic_projection_state,
     is_cognitive_hypothesis_suppressed,
     list_cognitive_evidence,
+    list_cognitive_fact_timeline,
     list_cognitive_hypothesis_current,
     list_cognitive_hypothesis_snapshots,
     list_cognitive_projection_queue,
@@ -64,6 +66,29 @@ from .store_cognitive_intervention import (
     insert_cognitive_intervention_event,
     list_cognitive_intervention_events,
     record_cognitive_intervention_event,
+)
+from .store_cognitive_outbox import (
+    claim_cognitive_outbox,
+    deliver_cognitive_outbox_inline,
+    enqueue_cognitive_outbox,
+    enqueue_cognitive_projection_outbox,
+    enqueue_cognitive_retention_outbox,
+    list_cognitive_outbox,
+    process_cognitive_outbox,
+)
+from .store_cognitive_retention import (
+    apply_cognitive_obligation_control,
+    apply_cognitive_retention_disposition,
+    claim_cognitive_obligations,
+    complete_cognitive_obligation_claim,
+    expire_cognitive_monitoring_episodes,
+    insert_certified_transfer_episode,
+    list_cognitive_learning_obligations,
+    list_cognitive_monitoring_episodes,
+    rebuild_cognitive_retention_from_transfers,
+    record_certified_transfer_success,
+    record_cognitive_obligation_control,
+    release_cognitive_obligation_claim,
 )
 from .store_fsrs import (
     append_mastery_snapshot,
@@ -913,18 +938,60 @@ class StudyStore:
                     used_hint=used_hint,
                     attempt_id=attempt_key,
                 )
-                if cognitive_intervention_event:
-                    step = "cognitive_intervention"
-                cognitive_intervention_result = (
-                    self._batch_write_cognitive_intervention(
-                        conn,
-                        event=cognitive_intervention_event,
-                        attempt_id=attempt_key,
-                        attempt_facts_written=attempt_facts_written,
-                        expected_topic_id=topic_key,
-                        expected_verdict=str(eval_result.get("verdict") or "").strip(),
-                    )
+                retention_outbox_id = ""
+                target_binding = question_payload.get("target_binding")
+                binding_strategy = (
+                    str(target_binding.get("cognitive_strategy") or "").strip()
+                    if isinstance(target_binding, dict)
+                    else ""
                 )
+                if RETENTION_COGNITIVE_STRATEGY in {
+                    str(question_payload.get("cognitive_strategy") or "").strip(),
+                    binding_strategy,
+                }:
+                    if not attempt_facts_written or not attempt_key:
+                        raise ValueError(
+                            "retention question requires a stable new attempt"
+                        )
+                    step = "cognitive_retention_outbox"
+                    retention_outbox_id = enqueue_cognitive_retention_outbox(
+                        self,
+                        conn,
+                        attempt_id=attempt_key,
+                    )
+                cognitive_intervention_result: dict[str, Any] = {
+                    "recorded": False,
+                    "error": "",
+                }
+                if cognitive_intervention_event:
+                    validated_intervention_event = (
+                        self._batch_write_cognitive_intervention(
+                            conn,
+                            event=cognitive_intervention_event,
+                            attempt_id=attempt_key,
+                            attempt_facts_written=attempt_facts_written,
+                            expected_topic_id=topic_key,
+                            expected_verdict=str(
+                                eval_result.get("verdict") or ""
+                            ).strip(),
+                        )
+                    )
+                    step = "cognitive_intervention_outbox"
+                    event_outbox_id = enqueue_cognitive_outbox(
+                        self,
+                        conn,
+                        attempt_id=attempt_key,
+                        event=validated_intervention_event,
+                    )
+                    delivery_result = deliver_cognitive_outbox_inline(
+                        self,
+                        conn,
+                        outbox_id=event_outbox_id,
+                    )
+                    cognitive_intervention_result = {
+                        "recorded": delivery_result.get("recorded") is True,
+                        "error": str(delivery_result.get("error") or ""),
+                    }
                 if enqueue_mastery_v2 and attempt_facts_written:
                     step = "mastery_v2_enqueue"
                     enqueue_mastery_projection(
@@ -937,17 +1004,25 @@ class StudyStore:
                     and attempt_facts_written
                     and topic_key
                 ):
-                    step = "cognitive_projection_enqueue"
-                    if not str(cognitive_extractor_version or "").strip():
-                        raise ValueError(
-                            "cognitive_extractor_version is required when projection is enabled"
-                        )
-                    _enqueue_cognitive_projection(
+                    step = "cognitive_projection_outbox"
+                    projection_outbox_id = enqueue_cognitive_projection_outbox(
                         self,
                         conn,
                         attempt_id=attempt_key,
                         extractor_version=cognitive_extractor_version,
                         model_version=cognitive_model_version,
+                    )
+                    deliver_cognitive_outbox_inline(
+                        self,
+                        conn,
+                        outbox_id=projection_outbox_id,
+                    )
+                if retention_outbox_id:
+                    step = "cognitive_retention_delivery"
+                    deliver_cognitive_outbox_inline(
+                        self,
+                        conn,
+                        outbox_id=retention_outbox_id,
                     )
                 step = "qa_record"
                 self._batch_write_qa_record(
@@ -1046,9 +1121,15 @@ class StudyStore:
         expected_topic_id: str,
         expected_verdict: str,
     ) -> dict[str, Any]:
-        outcome: dict[str, Any] = {"recorded": False, "error": ""}
+        """Validate client-visible identities before cognitive delivery.
+
+        Domain validation and projection writes intentionally remain in the
+        cognitive outbox savepoint so their failure cannot erase an otherwise
+        valid answer.  Identity detachment is rejected with the answer request.
+        """
+
         if not event:
-            return outcome
+            return {}
         payload = dict(event)
         event_attempt_id = str(payload.get("attempt_id") or "").strip()
         event_question_id = str(payload.get("question_id") or "").strip()
@@ -1091,9 +1172,7 @@ class StudyStore:
             raise ValueError("cognitive intervention event is detached from attempt facts")
         if event_verdict != expected_verdict:
             raise ValueError("cognitive intervention verdict differs from evaluation")
-        insert_cognitive_intervention_event(self, conn, payload)
-        outcome["recorded"] = True
-        return outcome
+        return payload
 
     def _batch_write_answer_candidates_noncritical(
         self,
@@ -1819,6 +1898,7 @@ StudyStore.claim_cognitive_topic_projections = claim_cognitive_topic_projections
 StudyStore.complete_cognitive_topic_projection = complete_cognitive_topic_projection  # type: ignore[method-assign]
 StudyStore.mark_cognitive_topic_projection_failed = mark_cognitive_topic_projection_failed  # type: ignore[method-assign]
 StudyStore.list_cognitive_evidence = list_cognitive_evidence  # type: ignore[method-assign]
+StudyStore.list_cognitive_fact_timeline = list_cognitive_fact_timeline  # type: ignore[method-assign]
 StudyStore.upsert_cognitive_hypothesis_snapshot = upsert_cognitive_hypothesis_snapshot  # type: ignore[method-assign]
 StudyStore.replace_cognitive_hypothesis_snapshots = replace_cognitive_hypothesis_snapshots  # type: ignore[method-assign]
 StudyStore.list_cognitive_hypothesis_snapshots = list_cognitive_hypothesis_snapshots  # type: ignore[method-assign]
@@ -1829,6 +1909,21 @@ StudyStore.is_cognitive_hypothesis_suppressed = is_cognitive_hypothesis_suppress
 StudyStore.record_cognitive_intervention_event = record_cognitive_intervention_event  # type: ignore[method-assign]
 StudyStore.insert_cognitive_intervention_event = insert_cognitive_intervention_event  # type: ignore[method-assign]
 StudyStore.list_cognitive_intervention_events = list_cognitive_intervention_events  # type: ignore[method-assign]
+StudyStore.claim_cognitive_outbox = claim_cognitive_outbox  # type: ignore[method-assign]
+StudyStore.list_cognitive_outbox = list_cognitive_outbox  # type: ignore[method-assign]
+StudyStore.process_cognitive_outbox = process_cognitive_outbox  # type: ignore[method-assign]
+StudyStore.record_certified_transfer_success = record_certified_transfer_success  # type: ignore[method-assign]
+StudyStore.insert_certified_transfer_episode = insert_certified_transfer_episode  # type: ignore[method-assign]
+StudyStore.rebuild_cognitive_retention_from_transfers = rebuild_cognitive_retention_from_transfers  # type: ignore[method-assign]
+StudyStore.claim_cognitive_obligations = claim_cognitive_obligations  # type: ignore[method-assign]
+StudyStore.release_cognitive_obligation_claim = release_cognitive_obligation_claim  # type: ignore[method-assign]
+StudyStore.complete_cognitive_obligation_claim = complete_cognitive_obligation_claim  # type: ignore[method-assign]
+StudyStore.apply_cognitive_retention_disposition = apply_cognitive_retention_disposition  # type: ignore[method-assign]
+StudyStore.expire_cognitive_monitoring_episodes = expire_cognitive_monitoring_episodes  # type: ignore[method-assign]
+StudyStore.record_cognitive_obligation_control = record_cognitive_obligation_control  # type: ignore[method-assign]
+StudyStore.apply_cognitive_obligation_control = apply_cognitive_obligation_control  # type: ignore[method-assign]
+StudyStore.list_cognitive_monitoring_episodes = list_cognitive_monitoring_episodes  # type: ignore[method-assign]
+StudyStore.list_cognitive_learning_obligations = list_cognitive_learning_obligations  # type: ignore[method-assign]
 StudyStore.list_mastery_projection_queue = list_mastery_projection_queue  # type: ignore[method-assign]
 StudyStore.claim_mastery_projections = claim_mastery_projections  # type: ignore[method-assign]
 StudyStore.mark_mastery_projection_failed = mark_mastery_projection_failed  # type: ignore[method-assign]

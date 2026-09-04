@@ -43,7 +43,7 @@ def test_cognitive_fallbacks_preserve_request_locale() -> None:
         and node.func.attr == "_generate_question_payload_impl"
     ]
 
-    assert len(recursive_calls) == 3
+    assert len(recursive_calls) == 4
     assert all(
         any(
             keyword.arg == "language"

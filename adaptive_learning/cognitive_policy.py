@@ -13,7 +13,13 @@ from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from typing import Literal, Mapping
 
 from .cognitive_state import LearnerCognitiveHypothesis, LearnerCognitiveStateView
-from .contracts import HypothesisRef, LearningIntent, QuestionPlan, RepairStrategy
+from .contracts import (
+    HypothesisRef,
+    LearningActionCandidate,
+    LearningIntent,
+    QuestionPlan,
+    RepairStrategy,
+)
 
 CognitiveIntentMode = Literal["off", "shadow", "on"]
 
@@ -49,6 +55,7 @@ class CognitivePolicyDecision:
     effective_plan: QuestionPlan
     proposed_intent: LearningIntent = "practice"
     selected_hypothesis: HypothesisRef | None = None
+    action_candidate: LearningActionCandidate | None = None
     repair_strategy: RepairStrategy = ""
     applied: bool = False
     fallback_reason: str = ""
@@ -83,6 +90,14 @@ class CognitiveIntentPolicy:
         if self._mode == "off":
             return self._fallback(
                 original_plan, original_fingerprint, "policy_off", trace
+            )
+        if original_plan.learning_intent != "practice":
+            trace.append(f"plan_intent:{original_plan.learning_intent}")
+            return self._fallback(
+                original_plan,
+                original_fingerprint,
+                "planner_intent_already_set",
+                trace,
             )
         if not state.usable:
             trace.append(f"state:{state.reason}")
@@ -132,6 +147,23 @@ class CognitiveIntentPolicy:
                 original_plan, original_fingerprint, "strategy_missing", trace
             )
         try:
+            candidate = LearningActionCandidate(
+                source="cognitive_engine",
+                topic_id=hypothesis.ref.topic_id,
+                intent=intent,
+                urgency=max(0.0, min(1.0, hypothesis.ref.probability)),
+                expected_learning_gain=0.5,
+                information_gain=(0.8 if intent == "misconception_probe" else 0.5),
+                evidence_refs=tuple(
+                    value
+                    for value in (
+                        hypothesis.ref.source_snapshot_id,
+                        hypothesis.ref.source_attempt_id,
+                    )
+                    if value
+                ),
+                satisfies=(f"cognitive_hypothesis:{hypothesis.ref.hypothesis_id}",),
+            )
             proposed = replace(
                 original_plan,
                 learning_intent=intent,
@@ -168,6 +200,7 @@ class CognitiveIntentPolicy:
             effective_plan=proposed if applied else original_plan,
             proposed_intent=intent,
             selected_hypothesis=hypothesis.ref,
+            action_candidate=candidate,
             repair_strategy=strategy,
             applied=applied,
             original_fingerprint=original_fingerprint,
@@ -217,9 +250,15 @@ class CognitiveIntentPolicy:
 
 
 def question_plan_ownership_fingerprint(plan: QuestionPlan) -> str:
-    """Fingerprint every plan field except the three cognitive decorations."""
+    """Fingerprint every plan field except cognitive candidate decorations."""
 
-    cognitive_fields = {"learning_intent", "hypothesis_target", "repair_strategy"}
+    cognitive_fields = {
+        "learning_intent",
+        "hypothesis_target",
+        "repair_strategy",
+        "obligation_refs",
+        "cognitive_strategy",
+    }
     payload = {
         item.name: _json_value(getattr(plan, item.name))
         for item in fields(plan)

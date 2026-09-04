@@ -297,6 +297,14 @@ class _CognitiveEntriesMixin:
                                 0,
                                 int(_hypothesis_value(item, "diagnostic_support_count", 0) or 0),
                             ),
+                            "intervention_stage": str(
+                                _hypothesis_value(item, "intervention_stage", "idle")
+                                or "idle"
+                            ).strip(),
+                            "relapse_count": max(
+                                0,
+                                int(_hypothesis_value(item, "relapse_count", 0) or 0),
+                            ),
                             "evidence": evidence,
                             "computed_at": str(_hypothesis_value(item, "computed_at", "") or "").strip(),
                         }

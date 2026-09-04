@@ -19,6 +19,7 @@ SelectionReason = Literal[
     "wrong_retry",
     "due_review",
     "weak_topic",
+    "blocked_diagnostic",
     "recommended",
     "default",
 ]
@@ -110,6 +111,8 @@ class QuestionPlan:
     learning_intent: LearningIntent = "practice"
     hypothesis_target: HypothesisRef | None = None
     repair_strategy: RepairStrategy = ""
+    obligation_refs: tuple[str, ...] = ()
+    cognitive_strategy: str = ""
 
     @property
     def target_topic(self) -> TopicRef:
@@ -118,7 +121,7 @@ class QuestionPlan:
 
 @dataclass(frozen=True, slots=True)
 class LearningActionCandidate:
-    """Shadow-only proposal for the coach's future obligation merger.
+    """Proposal for the Coach-owned action and obligation merger.
 
     Cognitive policy may submit one of these candidates but never owns the
     final next-action decision.
@@ -134,6 +137,8 @@ class LearningActionCandidate:
     satisfies: tuple[str, ...]
     not_before: str = ""
     expires_at: str = ""
+    due_by: str = ""
+    obligation_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +177,8 @@ class QuestionInstance:
     cognitive_decision_id: str = ""
     cognitive_validator_version: str = ""
     diagnostic_validation_id: str = ""
+    obligation_refs: tuple[str, ...] = ()
+    cognitive_strategy: str = ""
 
 
 @dataclass(frozen=True, slots=True)

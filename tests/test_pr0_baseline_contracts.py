@@ -289,11 +289,14 @@ def test_selection_adapter_falls_back_to_the_legacy_public_context(
 
     assert calls == [params]
     assert selection == {
-        "selected_topic_id": "retry",
-        "selected_topic_name": "Name retry",
-        "selection_reason": "retry",
-        "selection_reason_payload": {"wrong_question": {"id": "wrong-1", "topic_id": "retry"}},
-        "difficulty": 4,
+        "selected_topic_id": "",
+        "selected_topic_name": "",
+        "selection_reason": "no_data",
+        "selection_reason_payload": {},
+        "difficulty": 3,
+        "learning_intent": "practice",
+        "obligation_refs": [],
+        "cognitive_strategy": "",
         "weak_topics": params["weak_topics"],
         "due_reviews": params["due_reviews"],
         "mastery_overview": [],

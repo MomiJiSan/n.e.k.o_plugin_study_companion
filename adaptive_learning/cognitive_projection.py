@@ -23,6 +23,11 @@ from .cognitive_contracts import (
     CognitiveExtractionInput,
     CognitiveExtractionOutcome,
 )
+from .cognitive_versions import (
+    CognitiveVersionSet,
+    get_cognitive_version_set,
+    supported_cognitive_version_sets,
+)
 
 HypothesisStatus = Literal[
     "hypothesized",
@@ -114,6 +119,16 @@ class CognitiveProjectionStore(Protocol):
         model_version: str | None = None,
         event_types: Sequence[str] | None = None,
         limit: int = 200,
+    ) -> list[dict[str, Any]]: ...
+
+    def list_cognitive_fact_timeline(
+        self,
+        *,
+        topic_id: str,
+        hypothesis_code: str | None = None,
+        extractor_version: str | None = None,
+        model_version: str | None = None,
+        limit: int = 10_000,
     ) -> list[dict[str, Any]]: ...
 
     def claim_cognitive_topic_projections(
@@ -267,6 +282,7 @@ class CognitiveProjector:
         catalog: CognitiveCatalog = COGNITIVE_CATALOG_V1,
         extractor_version: str = DEFAULT_COGNITIVE_EXTRACTOR_VERSION,
         model_version: str = DEFAULT_COGNITIVE_MODEL_VERSION,
+        version_set: str | None = None,
         policy: CognitiveProjectionPolicy = DEFAULT_COGNITIVE_PROJECTION_POLICY,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -279,6 +295,14 @@ class CognitiveProjector:
         self._clock = clock or _utc_now
         if not self._extractor_version or not self._model_version:
             raise ValueError("cognitive projector versions are required")
+        resolved_version_set = _resolve_version_set(
+            version_set,
+            extractor_version=self._extractor_version,
+            projection_version=self._model_version,
+        )
+        if resolved_version_set is None:
+            raise ValueError("unsupported cognitive version set")
+        self._version_set = resolved_version_set
 
     async def process_pending(
         self,
@@ -351,6 +375,10 @@ class CognitiveProjector:
             )
         )
 
+    @property
+    def _uses_fact_timeline(self) -> bool:
+        return callable(getattr(self._store, "list_cognitive_fact_timeline", None))
+
     async def process_dirty_topics(
         self,
         *,
@@ -381,21 +409,34 @@ class CognitiveProjector:
             lease_token = str(item.get("lease_token") or "").strip()
             generation = int(item.get("claimed_generation") or 0)
             try:
-                evidence_rows = await asyncio.to_thread(
-                    self._store.list_cognitive_evidence,
-                    topic_id=topic_id,
-                    extractor_version=self._extractor_version,
-                )
-                intervention_events = await asyncio.to_thread(
-                    self._store.list_cognitive_intervention_events,
-                    topic_id=topic_id,
-                    model_version=self._model_version,
-                    limit=10_000,
-                )
+                fact_timeline: Sequence[Mapping[str, Any]] = ()
+                if self._uses_fact_timeline:
+                    fact_timeline = await asyncio.to_thread(
+                        self._store.list_cognitive_fact_timeline,
+                        topic_id=topic_id,
+                        extractor_version=self._extractor_version,
+                        model_version=self._model_version,
+                        limit=10_000,
+                    )
+                    evidence_rows: Sequence[Mapping[str, Any]] = ()
+                    intervention_events: Sequence[Mapping[str, Any]] = ()
+                else:
+                    evidence_rows = await asyncio.to_thread(
+                        self._store.list_cognitive_evidence,
+                        topic_id=topic_id,
+                        extractor_version=self._extractor_version,
+                    )
+                    intervention_events = await asyncio.to_thread(
+                        self._store.list_cognitive_intervention_events,
+                        topic_id=topic_id,
+                        model_version=self._model_version,
+                        limit=10_000,
+                    )
                 snapshots = await self._rebuild_snapshot_history(
                     topic_id,
                     evidence_rows,
                     intervention_events=intervention_events,
+                    fact_timeline=fact_timeline,
                     projection_time=projection_time,
                 )
                 await asyncio.to_thread(
@@ -460,27 +501,44 @@ class CognitiveProjector:
         failures: list[CognitiveProjectionFailure] = []
         for topic_id in requested:
             try:
-                evidence_rows = await asyncio.to_thread(
-                    self._store.list_cognitive_evidence,
-                    topic_id=topic_id,
-                    extractor_version=self._extractor_version,
-                )
-                intervention_events = (
-                    await asyncio.to_thread(
-                        self._store.list_cognitive_intervention_events,
+                fact_timeline: Sequence[Mapping[str, Any]] = ()
+                if self._uses_fact_timeline:
+                    fact_timeline = await asyncio.to_thread(
+                        self._store.list_cognitive_fact_timeline,
                         topic_id=topic_id,
+                        extractor_version=self._extractor_version,
                         model_version=self._model_version,
                         limit=10_000,
                     )
-                    if callable(
-                        getattr(self._store, "list_cognitive_intervention_events", None)
+                    evidence_rows: Sequence[Mapping[str, Any]] = ()
+                    intervention_events: Sequence[Mapping[str, Any]] = ()
+                else:
+                    evidence_rows = await asyncio.to_thread(
+                        self._store.list_cognitive_evidence,
+                        topic_id=topic_id,
+                        extractor_version=self._extractor_version,
                     )
-                    else []
-                )
+                    intervention_events = (
+                        await asyncio.to_thread(
+                            self._store.list_cognitive_intervention_events,
+                            topic_id=topic_id,
+                            model_version=self._model_version,
+                            limit=10_000,
+                        )
+                        if callable(
+                            getattr(
+                                self._store,
+                                "list_cognitive_intervention_events",
+                                None,
+                            )
+                        )
+                        else []
+                    )
                 snapshots = await self._rebuild_snapshot_history(
                     topic_id,
                     evidence_rows,
                     intervention_events=intervention_events,
+                    fact_timeline=fact_timeline,
                     projection_time=projection_time,
                 )
                 await asyncio.to_thread(
@@ -628,8 +686,17 @@ class CognitiveProjector:
         evidence_rows: Sequence[Mapping[str, Any]],
         *,
         intervention_events: Sequence[Mapping[str, Any]] = (),
+        fact_timeline: Sequence[Mapping[str, Any]] = (),
         projection_time: datetime,
     ) -> list[dict[str, Any]]:
+        if fact_timeline:
+            return project_cognitive_fact_timeline(
+                fact_timeline,
+                topic_id=topic_id,
+                model_version=self._model_version,
+                computed_at=_iso_utc(projection_time),
+                policy=self._policy,
+            )
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for row in evidence_rows:
             code = str(row.get("hypothesis_code") or "").strip()
@@ -1082,6 +1149,326 @@ def project_cognitive_intervention_events(
     return result
 
 
+def project_cognitive_fact_timeline(
+    facts: Sequence[Mapping[str, Any]],
+    *,
+    topic_id: str,
+    model_version: str,
+    computed_at: str,
+    policy: CognitiveProjectionPolicy = DEFAULT_COGNITIVE_PROJECTION_POLICY,
+) -> list[dict[str, Any]]:
+    """Fold evidence and intervention facts once in root-causal order."""
+
+    topic_key = _required_text(topic_id, "topic_id")
+    model_key = _required_text(model_version, "model_version")
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for fact in facts:
+        payload = fact.get("payload")
+        if not isinstance(payload, Mapping):
+            raise ValueError("cognitive fact payload is required")
+        root_fact_seq = int(fact.get("root_fact_seq") or 0)
+        if root_fact_seq <= 0:
+            raise ValueError("cognitive fact root sequence is required")
+        row_topic = str(payload.get("topic_id") or _nested_topic(payload)).strip()
+        code = str(
+            payload.get("hypothesis_code") or _nested_code(payload)
+        ).strip()
+        if row_topic != topic_key or not code:
+            raise ValueError("cognitive fact has inconsistent identity")
+        grouped.setdefault(code, []).append(fact)
+
+    projected: list[dict[str, Any]] = []
+    for code in sorted(grouped):
+        ordered = sorted(
+            grouped[code],
+            key=lambda item: (
+                int(item.get("root_fact_seq") or 0),
+                int(item.get("fact_order") or 0),
+                int(
+                    (item.get("payload") or {}).get("event_seq")  # type: ignore[union-attr]
+                    or 0
+                ),
+                str(
+                    (item.get("payload") or {}).get("evidence_id")  # type: ignore[union-attr]
+                    or (item.get("payload") or {}).get("event_id")  # type: ignore[union-attr]
+                    or (item.get("payload") or {}).get("satisfaction_id")  # type: ignore[union-attr]
+                    or (item.get("payload") or {}).get("fact_id")  # type: ignore[union-attr]
+                    or ""
+                ),
+            ),
+        )
+        projected.extend(
+            _project_one_cognitive_timeline(
+                ordered,
+                topic_id=topic_key,
+                hypothesis_code=code,
+                model_version=model_key,
+                computed_at=computed_at,
+                policy=policy,
+            )
+        )
+    projected.sort(
+        key=lambda item: (
+            int(item.get("_root_fact_seq") or 0),
+            str(item.get("hypothesis_code") or ""),
+        )
+    )
+    for item in projected:
+        item.pop("_root_fact_seq", None)
+    return projected
+
+
+def _project_one_cognitive_timeline(
+    facts: Sequence[Mapping[str, Any]],
+    *,
+    topic_id: str,
+    hypothesis_code: str,
+    model_version: str,
+    computed_at: str,
+    policy: CognitiveProjectionPolicy,
+) -> list[dict[str, Any]]:
+    evidence_rows: list[Mapping[str, Any]] = []
+    snapshots: list[dict[str, Any]] = []
+    state: dict[str, Any] | None = None
+    committed: dict[tuple[str, str, str], Mapping[str, Any]] = {}
+    abandoned_exact: set[tuple[str, str, str]] = set()
+    abandoned_decisions: set[tuple[str, str]] = set()
+    last_repair_failure_key: tuple[str, str] | None = None
+    retention_entry_stages: dict[str, str] = {}
+    counted_relapse_attempts: set[str] = set()
+
+    for fact in facts:
+        payload_value = fact.get("payload")
+        if not isinstance(payload_value, Mapping):
+            raise ValueError("cognitive fact payload is required")
+        payload = payload_value
+        root_fact_seq = int(fact.get("root_fact_seq") or 0)
+        fact_kind = str(fact.get("fact_kind") or "").strip()
+        if fact_kind == "evidence":
+            evidence_rows.append(payload)
+            previous = state
+            attempt_id = _required_text(payload.get("attempt_id"), "attempt_id")
+            state = project_cognitive_hypothesis(
+                evidence_rows,
+                model_version=model_version,
+                source_attempt_id=attempt_id,
+                computed_at=computed_at,
+                policy=policy,
+            )
+            state["user_override"] = ""
+            if previous is not None:
+                previous_stage = str(
+                    previous.get("intervention_stage") or "idle"
+                ).strip()
+                direction = str(payload.get("direction") or "").strip()
+                source_kind = str(payload.get("source_kind") or "").strip()
+                retention_entry_stages[attempt_id] = previous_stage
+                state["last_intent"] = str(previous.get("last_intent") or "")
+                state["last_outcome"] = str(previous.get("last_outcome") or "")
+                state["consecutive_repair_failures"] = int(
+                    previous.get("consecutive_repair_failures") or 0
+                )
+                state["relapse_count"] = max(
+                    int(state.get("relapse_count") or 0),
+                    int(previous.get("relapse_count") or 0),
+                )
+                if direction == "support" and previous_stage in {
+                    "monitored",
+                    "resolved",
+                }:
+                    state["status"] = "supported"
+                    state["evidence_status"] = "supported"
+                    state["intervention_stage"] = "idle"
+                    state["relapse_count"] = max(
+                        int(state["relapse_count"]),
+                        int(previous.get("relapse_count") or 0) + 1,
+                    )
+                    counted_relapse_attempts.add(attempt_id)
+                elif direction == "support" and previous_stage == "provisionally_resolved":
+                    state["status"] = "supported"
+                    state["evidence_status"] = "supported"
+                    state["intervention_stage"] = "idle"
+                elif (
+                    previous_stage
+                    in {
+                        "probing",
+                        "remediating",
+                        "provisionally_resolved",
+                        "monitored",
+                        "resolved",
+                    }
+                    and source_kind
+                    not in _REPAIR_SOURCES | _TRANSFER_SOURCES | _RETENTION_SOURCES
+                ):
+                    state["status"] = previous["status"]
+                    state["intervention_stage"] = previous_stage
+            state["_root_fact_seq"] = root_fact_seq
+            snapshots.append(dict(state))
+            continue
+        if fact_kind in {"obligation_satisfaction", "episode"}:
+            if (
+                str(payload.get("hypothesis_id") or "").strip()
+                != f"{topic_id}:{hypothesis_code}"
+                or str(payload.get("model_version") or "").strip()
+                != model_version
+            ):
+                continue
+            if state is None:
+                continue
+            if fact_kind == "obligation_satisfaction":
+                disposition = str(payload.get("disposition") or "").strip()
+                if disposition not in {
+                    "resolved",
+                    "relapse",
+                    "reschedule",
+                    "ordinary_evidence",
+                }:
+                    raise ValueError("unsupported cognitive retention disposition")
+                attempt_id = _required_text(payload.get("attempt_id"), "attempt_id")
+                entry_stage = retention_entry_stages.get(
+                    attempt_id,
+                    str(state.get("intervention_stage") or "idle").strip(),
+                )
+                eligible = entry_stage in {"monitored", "resolved"}
+                if disposition == "resolved" and entry_stage == "monitored":
+                    state["status"] = "resolved"
+                    state["intervention_stage"] = "resolved"
+                elif disposition == "relapse" and (
+                    eligible or attempt_id in counted_relapse_attempts
+                ):
+                    state["status"] = "supported"
+                    state["evidence_status"] = "supported"
+                    state["intervention_stage"] = "idle"
+                    if attempt_id not in counted_relapse_attempts:
+                        state["relapse_count"] = (
+                            int(state.get("relapse_count") or 0) + 1
+                        )
+                        counted_relapse_attempts.add(attempt_id)
+                elif disposition in {"reschedule", "ordinary_evidence"} and (
+                    entry_stage == "monitored"
+                ):
+                    state["status"] = "monitored"
+                    state["intervention_stage"] = "monitored"
+                state["last_intent"] = "retention_check"
+                state["last_outcome"] = disposition
+            elif (
+                str(payload.get("event_type") or "").strip() == "expired"
+                and str(state.get("intervention_stage") or "").strip()
+                == "monitored"
+            ):
+                state["status"] = "provisionally_resolved"
+                state["intervention_stage"] = "provisionally_resolved"
+                state["last_intent"] = "transfer_check"
+                state["last_outcome"] = "monitoring_window_expired"
+            state["_root_fact_seq"] = max(
+                int(state.get("_root_fact_seq") or 0), root_fact_seq
+            )
+            if snapshots:
+                snapshots[-1] = dict(state)
+            continue
+        if fact_kind != "intervention":
+            raise ValueError("unsupported cognitive fact kind")
+        if (
+            str(payload.get("hypothesis_id") or "").strip()
+            != f"{topic_id}:{hypothesis_code}"
+            or str(payload.get("model_version") or "").strip() != model_version
+        ):
+            continue
+        event_type = str(payload.get("event_type") or "").strip()
+        intent = str(payload.get("learning_intent") or "").strip()
+        decision_id = str(payload.get("decision_id") or "").strip()
+        question_id = str(payload.get("question_id") or "").strip()
+        key = (decision_id, question_id, intent)
+        if event_type == "intent_proposed":
+            continue
+        if event_type == "question_committed":
+            committed[key] = payload
+            if state is None:
+                continue
+            state["last_intent"] = intent
+            state["last_outcome"] = ""
+            if intent == "misconception_probe":
+                state["intervention_stage"] = "probing"
+            elif intent == "misconception_repair":
+                state["intervention_stage"] = "remediating"
+                state["status"] = "remediating"
+        elif event_type == "intervention_abandoned":
+            if question_id:
+                abandoned_exact.add(key)
+                matches = key in committed
+            else:
+                abandoned_decisions.add((decision_id, intent))
+                matches = any(
+                    candidate[0] == decision_id and candidate[2] == intent
+                    for candidate in committed
+                )
+            if state is None:
+                continue
+            if matches:
+                state["last_intent"] = intent
+                state["last_outcome"] = "abandoned"
+                if not (
+                    intent == "transfer_check"
+                    and state.get("intervention_stage")
+                    == "provisionally_resolved"
+                ):
+                    state["intervention_stage"] = "idle"
+                    state["status"] = "supported"
+        elif state is not None and (
+            event_type == "attempt_committed"
+            and key in committed
+            and key not in abandoned_exact
+            and (decision_id, intent) not in abandoned_decisions
+        ):
+            verdict = str(payload.get("evaluation_verdict") or "").strip()
+            state["last_intent"] = intent
+            state["last_outcome"] = verdict
+            passed = verdict == "correct"
+            if intent == "misconception_probe":
+                state["status"] = "supported"
+                if _has_authenticated_probe_support(payload, evidence_rows):
+                    state["intervention_stage"] = "probing"
+                    state["last_outcome"] = "confirmed"
+                else:
+                    state["intervention_stage"] = "idle"
+                    state["last_outcome"] = "not_confirmed"
+            elif intent == "misconception_repair":
+                if passed:
+                    state["intervention_stage"] = "provisionally_resolved"
+                    state["status"] = "provisionally_resolved"
+                    state["consecutive_repair_failures"] = 0
+                    last_repair_failure_key = None
+                else:
+                    state["intervention_stage"] = "remediating"
+                    state["status"] = "supported"
+                    failure_key = (
+                        str(payload.get("session_id") or "").strip(),
+                        str(payload.get("repair_strategy") or "").strip(),
+                    )
+                    failures = int(state.get("consecutive_repair_failures") or 0)
+                    state["consecutive_repair_failures"] = (
+                        failures + 1
+                        if failure_key == last_repair_failure_key
+                        else 1
+                    )
+                    last_repair_failure_key = failure_key
+            elif intent == "transfer_check":
+                if passed:
+                    state["intervention_stage"] = "monitored"
+                    state["status"] = "monitored"
+                else:
+                    state["intervention_stage"] = "idle"
+                    state["status"] = "supported"
+        if state is None:
+            continue
+        state["_root_fact_seq"] = max(
+            int(state.get("_root_fact_seq") or 0), root_fact_seq
+        )
+        if snapshots:
+            snapshots[-1] = dict(state)
+    return snapshots
+
+
 def _has_authenticated_probe_support(
     event: Mapping[str, Any], evidence_rows: Sequence[Mapping[str, Any]]
 ) -> bool:
@@ -1235,6 +1622,33 @@ def _error_text(exc: Exception) -> str:
     return (str(exc).strip() or exc.__class__.__name__)[:2_000]
 
 
+def _resolve_version_set(
+    requested_name: str | None,
+    *,
+    extractor_version: str,
+    projection_version: str,
+) -> CognitiveVersionSet | None:
+    if requested_name is not None:
+        candidate = get_cognitive_version_set(requested_name)
+        if candidate is None:
+            return None
+        return (
+            candidate
+            if candidate.extractor_version == extractor_version
+            and candidate.projection_version == projection_version
+            else None
+        )
+    for name in supported_cognitive_version_sets():
+        candidate = get_cognitive_version_set(name)
+        if (
+            candidate is not None
+            and candidate.extractor_version == extractor_version
+            and candidate.projection_version == projection_version
+        ):
+            return candidate
+    return None
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -1268,6 +1682,7 @@ __all__ = [
     "CognitiveProjector",
     "CognitiveRebuildSummary",
     "HypothesisStatus",
+    "project_cognitive_fact_timeline",
     "project_cognitive_intervention_events",
     "project_cognitive_hypothesis",
 ]

@@ -207,6 +207,8 @@ type CognitiveHypothesisEvidence = {
   hypothesis_code?: string;
   support_count?: number;
   diagnostic_support_count?: number;
+  intervention_stage?: 'idle' | 'probing' | 'remediating' | 'provisionally_resolved' | 'monitored' | 'resolved';
+  relapse_count?: number;
   evidence?: CognitiveEvidenceItem[];
   computed_at?: string;
 };
@@ -1672,6 +1674,21 @@ export default function StudyPanel(props: PluginSurfaceProps) {
       'a recurring error pattern',
     ];
     return t(pair[0], pair[1]);
+  }
+
+  function cognitiveStageLabel(hypothesis: CognitiveHypothesisEvidence) {
+    if (Number(hypothesis.relapse_count || 0) > 0
+      && hypothesis.intervention_stage !== 'monitored'
+      && hypothesis.intervention_stage !== 'resolved') {
+      return t('ui.cognitive.stage.relapsed', 'Appeared again');
+    }
+    if (hypothesis.intervention_stage === 'monitored') {
+      return t('ui.cognitive.stage.monitored', 'Retention check pending');
+    }
+    if (hypothesis.intervention_stage === 'resolved') {
+      return t('ui.cognitive.stage.resolved', 'Resolved');
+    }
+    return '';
   }
 
   function clearCognitiveEvidence() {
@@ -3866,6 +3883,9 @@ export default function StudyPanel(props: PluginSurfaceProps) {
               'ui.cognitive.hidden_notice',
               'A learning judgment is hidden. You can restore future tracking here.',
             )}</p>
+          {cognitiveHypothesis && cognitiveStageLabel(cognitiveHypothesis) ? (
+            <small role="status">{cognitiveStageLabel(cognitiveHypothesis)}</small>
+          ) : null}
           {cognitiveHypothesis ? (
             <>
               <button

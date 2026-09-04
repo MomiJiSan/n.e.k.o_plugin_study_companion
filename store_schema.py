@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import re
 
+from .adaptive_learning.cognitive_versions import (
+    get_cognitive_version_set,
+    supported_cognitive_version_sets,
+)
+from .store_cognitive_retention import create_cognitive_retention_schema
 from .store_common import (
     STORE_CONFIG,
     STORE_STATE,
@@ -11,6 +16,13 @@ from .store_common import (
 )
 
 _SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SUPPORTED_COGNITIVE_PROJECTION_VERSIONS = tuple(
+    dict.fromkeys(
+        version_set.projection_version
+        for name in supported_cognitive_version_sets()
+        if (version_set := get_cognitive_version_set(name)) is not None
+    )
+)
 _COLUMN_DEFINITION_ALLOWLIST = {
     "TEXT",
     "TEXT NOT NULL DEFAULT ''",
@@ -21,6 +33,68 @@ _COLUMN_DEFINITION_ALLOWLIST = {
     "INTEGER CHECK(USED_HINT IS NULL OR USED_HINT IN (0, 1))",
     "REAL",
 }
+
+_COGNITIVE_OUTBOX_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS cognitive_outbox (
+    outbox_id TEXT PRIMARY KEY,
+    attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
+    event_id TEXT NOT NULL UNIQUE,
+    operation TEXT NOT NULL CHECK(operation IN (
+        'intervention_event', 'projection_enqueue', 'retention_disposition'
+    )),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN (
+        'pending', 'processing', 'done', 'failed', 'discarded'
+    )),
+    retry_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_count >= 0),
+    last_error TEXT NOT NULL DEFAULT '',
+    lease_token TEXT NOT NULL DEFAULT '',
+    lease_expires_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+"""
+
+
+def _ensure_cognitive_outbox_schema(conn: sqlite3.Connection) -> None:
+    """Add the retention operation without losing an existing outbox."""
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cognitive_outbox'"
+    ).fetchone()
+    if row is None:
+        conn.execute(_COGNITIVE_OUTBOX_TABLE_SQL)
+        return
+    if "retention_disposition" in str(row["sql"] or ""):
+        return
+    interrupted = conn.execute(
+        """SELECT 1 FROM sqlite_master
+        WHERE type = 'table' AND name = 'cognitive_outbox_pre_retention'"""
+    ).fetchone()
+    if interrupted is not None:
+        raise RuntimeError("incomplete cognitive outbox migration requires recovery")
+    before = int(conn.execute("SELECT COUNT(*) FROM cognitive_outbox").fetchone()[0])
+    conn.execute(
+        "ALTER TABLE cognitive_outbox RENAME TO cognitive_outbox_pre_retention"
+    )
+    conn.execute(_COGNITIVE_OUTBOX_TABLE_SQL)
+    conn.execute(
+        """
+        INSERT INTO cognitive_outbox (
+            outbox_id, attempt_id, event_id, operation, payload_json, status,
+            retry_count, last_error, lease_token, lease_expires_at,
+            created_at, updated_at
+        )
+        SELECT outbox_id, attempt_id, event_id, operation, payload_json, status,
+               retry_count, last_error, lease_token, lease_expires_at,
+               created_at, updated_at
+        FROM cognitive_outbox_pre_retention
+        """
+    )
+    after = int(conn.execute("SELECT COUNT(*) FROM cognitive_outbox").fetchone()[0])
+    if after != before:
+        raise RuntimeError("cognitive outbox migration did not preserve every row")
+    conn.execute("DROP TABLE cognitive_outbox_pre_retention")
 
 
 def _validate_sql_identifier(value: str, field: str) -> str:
@@ -348,6 +422,18 @@ def _init_db(self) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS cognitive_fact_roots (
+            root_fact_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            fact_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            effective_at TEXT NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(fact_type, source_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS question_instances (
             question_id TEXT PRIMARY KEY,
             topic_id TEXT REFERENCES topics(id),
@@ -356,6 +442,7 @@ def _init_db(self) -> None:
             question_type TEXT NOT NULL DEFAULT '',
             difficulty INTEGER,
             status TEXT NOT NULL DEFAULT 'answered',
+            root_fact_seq INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
@@ -372,6 +459,7 @@ def _init_db(self) -> None:
             mode TEXT NOT NULL,
             response_time_ms INTEGER,
             used_hint INTEGER CHECK(used_hint IS NULL OR used_hint IN (0, 1)),
+            root_fact_seq INTEGER NOT NULL DEFAULT 0,
             submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
@@ -476,6 +564,7 @@ def _init_db(self) -> None:
             question_id TEXT NOT NULL DEFAULT '',
             session_id TEXT NOT NULL DEFAULT '',
             diagnostic_validation_id TEXT NOT NULL DEFAULT '',
+            root_fact_seq INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(attempt_id, hypothesis_code, extractor_version)
         )
@@ -577,7 +666,20 @@ def _init_db(self) -> None:
             action TEXT NOT NULL CHECK(action IN ('dismiss', 'suppress', 'restore', 'delete')),
             reason TEXT NOT NULL DEFAULT '',
             expires_at TEXT NOT NULL DEFAULT '',
+            root_fact_seq INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cognitive_delete_cutoffs (
+            topic_id TEXT NOT NULL REFERENCES topics(id),
+            hypothesis_code TEXT NOT NULL,
+            delete_cutoff_seq INTEGER NOT NULL CHECK(delete_cutoff_seq > 0),
+            control_id TEXT NOT NULL,
+            deleted_at TEXT NOT NULL,
+            PRIMARY KEY(topic_id, hypothesis_code)
         )
         """
     )
@@ -628,6 +730,7 @@ def _init_db(self) -> None:
             validator_version TEXT NOT NULL DEFAULT '',
             schema_version INTEGER NOT NULL DEFAULT 1,
             metadata_json TEXT NOT NULL DEFAULT '{}',
+            root_fact_seq INTEGER NOT NULL DEFAULT 0,
             occurred_at TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
@@ -818,6 +921,350 @@ def _init_db(self) -> None:
         "expires_at",
         "TEXT NOT NULL DEFAULT ''",
     )
+    # Before suppress controls became bounded, legacy rows had no expiry.
+    # Preserve their active, indefinite semantics using the established
+    # dismiss representation before the new insert validator is installed.
+    conn.execute(
+        """
+        UPDATE cognitive_user_controls
+        SET action = 'dismiss'
+        WHERE action = 'suppress' AND expires_at = ''
+        """
+    )
+    for table in (
+        "question_instances",
+        "attempts",
+        "cognitive_evidence",
+        "cognitive_user_controls",
+        "cognitive_intervention_events",
+    ):
+        self._ensure_column(
+            conn,
+            table,
+            "root_fact_seq",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+    # Allocate one stable, database-wide sequence for each immutable source
+    # fact.  Existing rows are backfilled deterministically; late cognitive
+    # extraction later reuses the originating attempt's sequence.
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_fact_roots (
+            fact_type, source_id, effective_at, recorded_at
+        )
+        SELECT fact_type, source_id, effective_at, recorded_at
+        FROM (
+            SELECT 'question' AS fact_type, question_id AS source_id,
+                   created_at AS effective_at, created_at AS recorded_at,
+                   1 AS fact_rank
+            FROM question_instances
+            UNION ALL
+            SELECT 'attempt', attempt_id, submitted_at, submitted_at, 2
+            FROM attempts
+            UNION ALL
+            SELECT 'control', control_id, created_at, created_at, 3
+            FROM cognitive_user_controls
+            UNION ALL
+            SELECT CASE
+                       WHEN event_type = 'question_committed' THEN 'question'
+                       WHEN event_type = 'attempt_committed' THEN 'attempt'
+                       ELSE 'intervention'
+                   END,
+                   CASE
+                       WHEN event_type = 'question_committed' THEN question_id
+                       WHEN event_type = 'attempt_committed' THEN attempt_id
+                       ELSE event_id
+                   END,
+                   occurred_at, created_at, 4
+            FROM cognitive_intervention_events
+        ) facts
+        WHERE source_id != ''
+        ORDER BY effective_at, fact_rank, source_id
+        """
+    )
+    _ensure_cognitive_outbox_schema(conn)
+    create_cognitive_retention_schema(conn)
+    # Older development databases may already contain terminal episode rows
+    # from before lifecycle facts were introduced.  Preserve those expiries as
+    # immutable cognitive facts instead of rebuilding from mutable episode
+    # status.
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_fact_roots (
+            fact_type, source_id, effective_at, recorded_at
+        )
+        SELECT 'cognitive_episode',
+               'cognitive-episode-fact:' || episode_id || ':expired',
+               expired_at,
+               CASE WHEN updated_at != '' THEN updated_at ELSE expired_at END
+        FROM cognitive_monitoring_episodes
+        WHERE status = 'expired' AND expired_at != ''
+        ORDER BY expired_at, episode_id
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cognitive_monitoring_episode_facts (
+            fact_id, episode_id, fact_type, root_fact_seq,
+            occurred_at, created_at
+        )
+        SELECT 'cognitive-episode-fact:' || episodes.episode_id || ':expired',
+               episodes.episode_id,
+               'expired',
+               roots.root_fact_seq,
+               episodes.expired_at,
+               CASE
+                   WHEN episodes.updated_at != '' THEN episodes.updated_at
+                   ELSE episodes.expired_at
+               END
+        FROM cognitive_monitoring_episodes episodes
+        JOIN cognitive_fact_roots roots
+          ON roots.fact_type = 'cognitive_episode'
+         AND roots.source_id =
+             'cognitive-episode-fact:' || episodes.episode_id || ':expired'
+        WHERE episodes.status = 'expired' AND episodes.expired_at != ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE question_instances
+        SET root_fact_seq = (
+            SELECT roots.root_fact_seq FROM cognitive_fact_roots roots
+            WHERE roots.fact_type = 'question'
+              AND roots.source_id = question_instances.question_id
+        )
+        WHERE root_fact_seq <= 0
+        """
+    )
+    conn.execute(
+        """
+        UPDATE attempts
+        SET root_fact_seq = (
+            SELECT roots.root_fact_seq FROM cognitive_fact_roots roots
+            WHERE roots.fact_type = 'attempt'
+              AND roots.source_id = attempts.attempt_id
+        )
+        WHERE root_fact_seq <= 0
+        """
+    )
+    conn.execute(
+        """
+        UPDATE cognitive_evidence
+        SET root_fact_seq = COALESCE((
+            SELECT attempts.root_fact_seq FROM attempts
+            WHERE attempts.attempt_id = cognitive_evidence.attempt_id
+        ), 0)
+        WHERE root_fact_seq <= 0
+        """
+    )
+    conn.execute(
+        """
+        UPDATE cognitive_user_controls
+        SET root_fact_seq = (
+            SELECT roots.root_fact_seq FROM cognitive_fact_roots roots
+            WHERE roots.fact_type = 'control'
+              AND roots.source_id = cognitive_user_controls.control_id
+        )
+        WHERE root_fact_seq <= 0
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO cognitive_delete_cutoffs (
+            topic_id, hypothesis_code, delete_cutoff_seq,
+            control_id, deleted_at
+        )
+        SELECT controls.topic_id, controls.hypothesis_code,
+               controls.root_fact_seq, controls.control_id, controls.created_at
+        FROM cognitive_user_controls controls
+        WHERE controls.action = 'delete'
+          AND controls.root_fact_seq = (
+              SELECT MAX(latest.root_fact_seq)
+              FROM cognitive_user_controls latest
+              WHERE latest.topic_id = controls.topic_id
+                AND latest.hypothesis_code = controls.hypothesis_code
+                AND latest.action = 'delete'
+          )
+        ON CONFLICT(topic_id, hypothesis_code) DO UPDATE SET
+            delete_cutoff_seq = MAX(
+                cognitive_delete_cutoffs.delete_cutoff_seq,
+                excluded.delete_cutoff_seq
+            ),
+            control_id = CASE
+                WHEN excluded.delete_cutoff_seq
+                     >= cognitive_delete_cutoffs.delete_cutoff_seq
+                    THEN excluded.control_id
+                ELSE cognitive_delete_cutoffs.control_id
+            END,
+            deleted_at = CASE
+                WHEN excluded.delete_cutoff_seq
+                     >= cognitive_delete_cutoffs.delete_cutoff_seq
+                    THEN excluded.deleted_at
+                ELSE cognitive_delete_cutoffs.deleted_at
+            END
+        """
+    )
+    conn.execute(
+        """
+        UPDATE cognitive_intervention_events
+        SET root_fact_seq = (
+            SELECT roots.root_fact_seq FROM cognitive_fact_roots roots
+            WHERE roots.fact_type = CASE
+                    WHEN cognitive_intervention_events.event_type = 'question_committed'
+                        THEN 'question'
+                    WHEN cognitive_intervention_events.event_type = 'attempt_committed'
+                        THEN 'attempt'
+                    ELSE 'intervention'
+                END
+              AND roots.source_id = CASE
+                    WHEN cognitive_intervention_events.event_type = 'question_committed'
+                        THEN cognitive_intervention_events.question_id
+                    WHEN cognitive_intervention_events.event_type = 'attempt_committed'
+                        THEN cognitive_intervention_events.attempt_id
+                    ELSE cognitive_intervention_events.event_id
+                END
+        )
+        WHERE root_fact_seq <= 0
+        """
+    )
+    conn.executescript(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_root_question_insert
+        AFTER INSERT ON question_instances
+        WHEN NEW.root_fact_seq <= 0
+        BEGIN
+            INSERT OR IGNORE INTO cognitive_fact_roots (
+                fact_type, source_id, effective_at, recorded_at
+            ) VALUES ('question', NEW.question_id, NEW.created_at, datetime('now'));
+            UPDATE question_instances
+            SET root_fact_seq = (
+                SELECT root_fact_seq FROM cognitive_fact_roots
+                WHERE fact_type = 'question' AND source_id = NEW.question_id
+            )
+            WHERE question_id = NEW.question_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_root_attempt_insert
+        AFTER INSERT ON attempts
+        WHEN NEW.root_fact_seq <= 0
+        BEGIN
+            INSERT OR IGNORE INTO cognitive_fact_roots (
+                fact_type, source_id, effective_at, recorded_at
+            ) VALUES ('attempt', NEW.attempt_id, NEW.submitted_at, datetime('now'));
+            UPDATE attempts
+            SET root_fact_seq = (
+                SELECT root_fact_seq FROM cognitive_fact_roots
+                WHERE fact_type = 'attempt' AND source_id = NEW.attempt_id
+            )
+            WHERE attempt_id = NEW.attempt_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_root_evidence_insert
+        AFTER INSERT ON cognitive_evidence
+        WHEN NEW.root_fact_seq <= 0
+        BEGIN
+            UPDATE cognitive_evidence
+            SET root_fact_seq = COALESCE((
+                SELECT root_fact_seq FROM attempts
+                WHERE attempt_id = NEW.attempt_id
+            ), 0)
+            WHERE evidence_id = NEW.evidence_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_root_control_insert
+        AFTER INSERT ON cognitive_user_controls
+        WHEN NEW.root_fact_seq <= 0
+        BEGIN
+            INSERT OR IGNORE INTO cognitive_fact_roots (
+                fact_type, source_id, effective_at, recorded_at
+            ) VALUES ('control', NEW.control_id, NEW.created_at, datetime('now'));
+            UPDATE cognitive_user_controls
+            SET root_fact_seq = (
+                SELECT root_fact_seq FROM cognitive_fact_roots
+                WHERE fact_type = 'control' AND source_id = NEW.control_id
+            )
+            WHERE control_id = NEW.control_id;
+            INSERT INTO cognitive_delete_cutoffs (
+                topic_id, hypothesis_code, delete_cutoff_seq,
+                control_id, deleted_at
+            )
+            SELECT NEW.topic_id, NEW.hypothesis_code, roots.root_fact_seq,
+                   NEW.control_id, NEW.created_at
+            FROM cognitive_fact_roots roots
+            WHERE NEW.action = 'delete'
+              AND roots.fact_type = 'control'
+              AND roots.source_id = NEW.control_id
+            ON CONFLICT(topic_id, hypothesis_code) DO UPDATE SET
+                delete_cutoff_seq = MAX(
+                    cognitive_delete_cutoffs.delete_cutoff_seq,
+                    excluded.delete_cutoff_seq
+                ),
+                control_id = CASE
+                    WHEN excluded.delete_cutoff_seq
+                         >= cognitive_delete_cutoffs.delete_cutoff_seq
+                        THEN excluded.control_id
+                    ELSE cognitive_delete_cutoffs.control_id
+                END,
+                deleted_at = CASE
+                    WHEN excluded.delete_cutoff_seq
+                         >= cognitive_delete_cutoffs.delete_cutoff_seq
+                        THEN excluded.deleted_at
+                    ELSE cognitive_delete_cutoffs.deleted_at
+                END;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_control_expiry_validate
+        BEFORE INSERT ON cognitive_user_controls
+        WHEN (
+            NEW.action = 'suppress'
+            AND (
+                NEW.expires_at = ''
+                OR julianday(NEW.expires_at) IS NULL
+                OR julianday(NEW.expires_at) - julianday('now') > 1.0
+            )
+        ) OR (NEW.action != 'suppress' AND NEW.expires_at != '')
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid cognitive suppress expiry');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cognitive_root_intervention_insert
+        AFTER INSERT ON cognitive_intervention_events
+        WHEN NEW.root_fact_seq <= 0
+        BEGIN
+            INSERT OR IGNORE INTO cognitive_fact_roots (
+                fact_type, source_id, effective_at, recorded_at
+            ) VALUES (
+                CASE
+                    WHEN NEW.event_type = 'question_committed' THEN 'question'
+                    WHEN NEW.event_type = 'attempt_committed' THEN 'attempt'
+                    ELSE 'intervention'
+                END,
+                CASE
+                    WHEN NEW.event_type = 'question_committed' THEN NEW.question_id
+                    WHEN NEW.event_type = 'attempt_committed' THEN NEW.attempt_id
+                    ELSE NEW.event_id
+                END,
+                NEW.occurred_at,
+                datetime('now')
+            );
+            UPDATE cognitive_intervention_events
+            SET root_fact_seq = (
+                SELECT root_fact_seq FROM cognitive_fact_roots
+                WHERE fact_type = CASE
+                        WHEN NEW.event_type = 'question_committed' THEN 'question'
+                        WHEN NEW.event_type = 'attempt_committed' THEN 'attempt'
+                        ELSE 'intervention'
+                    END
+                  AND source_id = CASE
+                        WHEN NEW.event_type = 'question_committed' THEN NEW.question_id
+                        WHEN NEW.event_type = 'attempt_committed' THEN NEW.attempt_id
+                        ELSE NEW.event_id
+                    END
+            )
+            WHERE event_id = NEW.event_id;
+        END;
+        """
+    )
     self._ensure_column(
         conn,
         "cognitive_hypothesis_current",
@@ -873,8 +1320,11 @@ def _init_db(self) -> None:
     # projector rebuilds ``cognitive_hypothesis_current`` on its next wake.
     # ``INSERT OR IGNORE`` keeps repeated opens idempotent and never dirties an
     # already-managed V2 topic.
+    projection_version_placeholders = ", ".join(
+        "?" for _ in _SUPPORTED_COGNITIVE_PROJECTION_VERSIONS
+    )
     conn.execute(
-        """
+        f"""
         INSERT OR IGNORE INTO cognitive_topic_projection_queue (
             topic_id, model_version, status, requested_generation,
             claimed_generation, projected_generation, retry_count,
@@ -883,7 +1333,9 @@ def _init_db(self) -> None:
         SELECT DISTINCT topic_id, model_version, 'pending', 1, 0, 0, 0,
                         NULL, '', datetime('now'), datetime('now')
         FROM cognitive_hypothesis_snapshots
-        """
+        WHERE model_version IN ({projection_version_placeholders})
+        """,
+        _SUPPORTED_COGNITIVE_PROJECTION_VERSIONS,
     )
     conn.execute(
         """
@@ -980,6 +1432,12 @@ def _init_db(self) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cognitive_evidence_topic_hypothesis ON cognitive_evidence(topic_id, hypothesis_code, extractor_version, created_at, evidence_id)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_evidence_root ON cognitive_evidence(topic_id, hypothesis_code, root_fact_seq, evidence_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_fact_roots_source ON cognitive_fact_roots(fact_type, source_id, root_fact_seq)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cognitive_snapshots_topic_model ON cognitive_hypothesis_snapshots(topic_id, model_version, computed_at DESC, snapshot_id DESC)"
     )
     conn.execute(
@@ -989,10 +1447,19 @@ def _init_db(self) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cognitive_controls_hypothesis ON cognitive_user_controls(topic_id, hypothesis_code, created_at DESC)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_controls_root ON cognitive_user_controls(topic_id, hypothesis_code, root_fact_seq DESC)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cognitive_interventions_hypothesis ON cognitive_intervention_events(topic_id, hypothesis_code, hypothesis_model_version, occurred_at, event_seq)"
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_interventions_root ON cognitive_intervention_events(topic_id, hypothesis_code, hypothesis_model_version, root_fact_seq, event_seq)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cognitive_interventions_decision ON cognitive_intervention_events(decision_id, occurred_at, event_seq)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cognitive_outbox_status_lease ON cognitive_outbox(status, lease_expires_at, created_at, outbox_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_captured_questions_topic_used ON captured_questions(topic_id, last_used_at DESC, id DESC)"

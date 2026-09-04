@@ -95,10 +95,12 @@ def test_cognitive_settings_round_trip_all_runtime_modes(
     assert entries._settings_config_payload(shadow)["cognitive"] == {
         "projection_enabled": True,
         "read_mode": "shadow",
-        "intent_policy": "shadow",
-        "ui_enabled": False,
-        "knowledge_graph_enabled": True,
-        "model_version": "cognitive-v1",
+            "intent_policy": "shadow",
+            "ui_enabled": False,
+            "retention_enabled": False,
+            "knowledge_graph_enabled": True,
+            "version_set": "cognitive-v2.1-1",
+            "model_version": "cognitive-v2.1-1",
         "supported_topics": ["calculus.chain_rule", "college_chain_rule"],
     }
 
