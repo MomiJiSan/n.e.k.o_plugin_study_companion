@@ -123,11 +123,11 @@ def test_release_notes_are_versioned_localized_and_shown_once() -> None:
 
     assert plugin_version and release_version
     assert release_version.group(1) == plugin_version.group(1)
-    assert "version: '0.2.6'" not in release_notes
+    assert "version: '0.3.0'" not in release_notes
     assert 'id="releaseNotesDialog"' in index
     assert 'aria-labelledby="releaseNotesTitle"' in index
     assert './release-notes.js?v=controller-1' in index
-    assert 'release-notes-0.2.6' not in index
+    assert 'release-notes-0.3.0' not in index
     assert index.index("./release-notes.js") < index.index("./main.js")
     assert "window.StudyReleaseNotes?.initialize" in main
     assert ".release-notes-dialog::backdrop" in style
