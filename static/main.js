@@ -3129,7 +3129,11 @@ async function evaluateAnswer() {
   const evaluatingMessage = t('ui.status.evaluating_answer', 'Evaluating answer...');
   setStatus(evaluatingMessage);
   if (evaluationStatus) evaluationStatus.textContent = evaluatingMessage;
-  if (feedbackPanel) feedbackPanel.hidden = false;
+  if (feedbackPanel) {
+    feedbackPanel.hidden = false;
+    feedbackPanel.dataset.compact = 'true';
+    feedbackPanel.setAttribute('aria-busy', 'true');
+  }
   if (feedbackText) feedbackText.textContent = evaluatingMessage;
   if (masteryDeltaText) masteryDeltaText.textContent = '';
   if (nextStepDetails) nextStepDetails.textContent = '';
@@ -3153,6 +3157,7 @@ async function evaluateAnswer() {
     const errorMessage = formatPluginError(error);
     if (evaluationStatus) evaluationStatus.textContent = errorMessage;
     if (feedbackText) feedbackText.textContent = errorMessage;
+    if (feedbackPanel) feedbackPanel.setAttribute('aria-busy', 'false');
     throw error;
   } finally {
     if (evaluateAnswerBtn) {
@@ -3163,9 +3168,18 @@ async function evaluateAnswer() {
     ? t('ui.status.reply_ready_fallback', 'Reply ready (fallback)')
     : t('ui.status.reply_ready', 'Reply ready'));
   if (data.degraded) {
+    if (feedbackPanel) {
+      feedbackPanel.hidden = true;
+      delete feedbackPanel.dataset.compact;
+      feedbackPanel.removeAttribute('aria-busy');
+    }
     setReply(formatTutorDiagnostic(data.diagnostic));
     await refreshStatus({ updateReply: false });
     return;
+  }
+  if (feedbackPanel) {
+    delete feedbackPanel.dataset.compact;
+    feedbackPanel.removeAttribute('aria-busy');
   }
   renderFeedback(data);
   const updatedPlanProgress = data.learning_update?.plan_progress || data.next_step?.plan_progress;

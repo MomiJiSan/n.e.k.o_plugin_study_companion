@@ -1159,6 +1159,16 @@ button.loading { cursor: wait; }
   display: none;
 }
 
+.feedback-panel[data-compact="true"] > :not(#feedbackText) {
+  display: none;
+}
+
+.feedback-panel[data-compact="true"] #feedbackText {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .practice-verdict {
   padding: 10px 12px;
   border: 1px solid rgba(47, 125, 87, 0.24);
@@ -1295,8 +1305,18 @@ pre,
 .study-document-progress { display: grid; gap: 5px; } .study-document-progress[hidden] { display: none; } .study-document-progress progress { width: 100%; accent-color: var(--accent); } .study-document-progress span { color: var(--muted); font-size: 13px; }
 .memory-inputs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.memory-input-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.memory-input-field .input-label {
+  margin-bottom: 0;
 }
 
 .memory-panel > summary {
@@ -1325,7 +1345,7 @@ pre,
 
 #memoryFrontInput,
 #memoryBackInput {
-  min-height: 92px;
+  min-height: 132px;
 }
 
 #memoryDeckSelect { width: 100%; min-height: 38px; margin: 0 0 2px; padding: 7px 32px 7px 10px; border: 1px solid rgba(47, 125, 87, 0.28); border-radius: var(--radius-sm); background-color: var(--paper-strong); color: var(--ink); font: inherit; font-weight: 700; line-height: 1.35; cursor: pointer; transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast); } #memoryDeckSelect:hover:not(:disabled) { border-color: rgba(47, 125, 87, 0.58); background-color: #ffffff; } #memoryDeckSelect:focus-visible { border-color: var(--brand); outline: 3px solid rgba(47, 125, 87, 0.22); outline-offset: 1px; box-shadow: 0 0 0 1px rgba(47, 125, 87, 0.10); } #memoryDeckSelect:disabled { border-color: rgba(31, 41, 36, 0.10); background-color: rgba(239, 244, 240, 0.88); color: var(--muted); cursor: not-allowed; opacity: 0.72; } .memory-deck-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 8px; } #memoryItemTypeSelect, #memoryDeckTypeSelect { width: 100%; min-height: 38px; padding: 7px 32px 7px 10px; border: 1px solid rgba(47, 125, 87, 0.28); border-radius: var(--radius-sm); background-color: var(--paper-strong); color: var(--ink); font: inherit; font-weight: 700; line-height: 1.35; cursor: pointer; } #memoryItemTypeSelect:focus-visible, #memoryDeckTypeSelect:focus-visible { border-color: var(--brand); outline: 3px solid rgba(47, 125, 87, 0.22); outline-offset: 1px; }

@@ -488,7 +488,7 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-related-topics-20260903" in index
-    assert "./style.css?v=study-practice-answer-flow-20260903" in index
+    assert "./style.css?v=study-memory-editor-wide-20260904" in index
     assert "./local-models-controller.js" not in index
     assert "./main.js?v=practice-i18n-cancel-20260903" in index
 
@@ -551,6 +551,7 @@ def test_failed_next_question_generation_keeps_feedback_and_retry_action_visible
 
 def test_static_evaluation_shows_inline_progress_and_errors() -> None:
     static = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    style = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
     evaluate_answer = static[
         static.index("async function evaluateAnswer"):
         static.index("async function continueAdaptiveLoop")
@@ -559,11 +560,15 @@ def test_static_evaluation_shows_inline_progress_and_errors() -> None:
     assert "const evaluatingMessage = t('ui.status.evaluating_answer'" in evaluate_answer
     assert "evaluationStatus.textContent = evaluatingMessage" in evaluate_answer
     assert "feedbackPanel.hidden = false" in evaluate_answer
+    assert "feedbackPanel.dataset.compact = 'true'" in evaluate_answer
+    assert "feedbackPanel.setAttribute('aria-busy', 'true')" in evaluate_answer
     assert "feedbackText.textContent = evaluatingMessage" in evaluate_answer
     assert "evaluateAnswerBtn.textContent = evaluatingMessage" in evaluate_answer
     assert "evaluationStatus.textContent = errorMessage" in evaluate_answer
     assert "feedbackText.textContent = errorMessage" in evaluate_answer
     assert "evaluateAnswerBtn.textContent = t('ui.button.evaluate_answer'" in evaluate_answer
+    assert '.feedback-panel[data-compact="true"] > :not(#feedbackText)' in style
+    assert '.feedback-panel[data-compact="true"] #feedbackText' in style
 
 
 def test_successful_evaluation_shows_verdict_and_always_offers_next_action() -> None:

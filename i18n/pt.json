@@ -712,7 +712,7 @@
     "ui.settings.cognitive.help":  "Shadow analisa respostas sem alterar as questões. Active pode influenciar a avaliação e a próxima questão.",
     "ui.settings.cognitive.runtime.summary":  "Avalia se uma resposta está correta, atualiza as evidências de domínio e pode ajudar a escolher a próxima questão.",
     "ui.settings.cognitive.enabled.label":  "Ativar motor cognitivo",
-    "ui.settings.cognitive.enabled.help":  "Quando ativado, Shadow observa e registra evidências das respostas sem alterar o fluxo de questões. Active também pode influenciar a avaliação e a próxima questão. Escolha o modo nas configurações de Dados.",
+    "ui.settings.cognitive.enabled.help":  "Quando ativado, Shadow observa e registra evidências das respostas sem alterar o fluxo de questões. Active também pode influenciar a avaliação e a próxima questão. Escolha o modo de operação abaixo.",
     "ui.settings.cognitive.status.off":  "Desativado: as evidências das respostas não são analisadas.",
     "ui.settings.cognitive.status.shadow":  "Shadow: analisa respostas sem alterar o fluxo de questões.",
     "ui.settings.cognitive.status.active":  "Active: analisa respostas e pode influenciar a próxima questão.",

@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; object-src 'none'" />
     <title>Study Companion</title>
     <link rel="stylesheet" href="./katex.min.css?v=study-hotfix-20260615v" />
-    <link rel="stylesheet" href="./style.css?v=study-practice-answer-flow-20260903" />
+    <link rel="stylesheet" href="./style.css?v=study-memory-editor-wide-20260904" />
     <link rel="stylesheet" href="./notebook.css?v=study-notebook-migration-20260823" />
     <link rel="stylesheet" href="./workspace.css?v=study-settings-dialog-20260824" />
   </head>
@@ -270,10 +270,14 @@
                 <span id="memoryDeckStatus">-</span>
               </summary>
               <div class="memory-inputs">
-                <label class="input-label" for="memoryFrontInput" data-i18n="ui.memory.front">Front</label>
-                <label class="input-label" for="memoryBackInput" data-i18n="ui.memory.back">Back</label>
-                <textarea id="memoryFrontInput" spellcheck="true" data-i18n-placeholder="ui.memory.front_placeholder" placeholder="Question or prompt"></textarea>
-                <textarea id="memoryBackInput" spellcheck="true" data-i18n-placeholder="ui.memory.back_placeholder" placeholder="Answer or recall target"></textarea>
+                <div class="memory-input-field">
+                  <label class="input-label" for="memoryFrontInput" data-i18n="ui.memory.front">Front</label>
+                  <textarea id="memoryFrontInput" spellcheck="true" data-i18n-placeholder="ui.memory.front_placeholder" placeholder="Question or prompt"></textarea>
+                </div>
+                <div class="memory-input-field">
+                  <label class="input-label" for="memoryBackInput" data-i18n="ui.memory.back">Back</label>
+                  <textarea id="memoryBackInput" spellcheck="true" data-i18n-placeholder="ui.memory.back_placeholder" placeholder="Answer or recall target"></textarea>
+                </div>
               </div>
               <label class="input-label" for="memoryItemTypeSelect" data-i18n="ui.memory.item_type">Card type</label>
               <select id="memoryItemTypeSelect" data-i18n-aria-label="ui.memory.item_type" aria-label="Card type">
@@ -647,18 +651,6 @@
                   <span id="settingsDataConfigStatus" class="settings-status" aria-live="polite"></span>
                 </div>
               </article>
-              <article class="settings-card">
-                <h3 data-i18n="ui.settings.cognitive.title">Cognitive engine</h3>
-                <label class="setting-field">
-                  <span data-i18n="ui.settings.cognitive.mode.label">Operating mode</span>
-                  <select id="settingsCognitiveMode" aria-describedby="settingsCognitiveHelp">
-                    <option value="off" data-i18n="ui.settings.cognitive.mode.off">Off</option>
-                    <option value="shadow" data-i18n="ui.settings.cognitive.mode.shadow">Shadow (observe only)</option>
-                    <option value="active" data-i18n="ui.settings.cognitive.mode.active">Active</option>
-                  </select>
-                </label>
-                <p id="settingsCognitiveHelp" data-i18n="ui.settings.cognitive.help">Shadow analyzes answers without changing questions. Active can influence judgments and the next question.</p>
-              </article>
             </div>
             <div class="settings-entry-row">
               <p id="settingsDataSummary" data-i18n="ui.settings.data.summary">Session history and exports are available in hosted panels.</p>
@@ -775,7 +767,16 @@
                     <input id="settingsCognitiveEnabled" type="checkbox" aria-describedby="settingsCognitiveRuntimeHelp settingsCognitiveRuntimeStatus" />
                     <span data-i18n="ui.settings.cognitive.enabled.label">Enable cognitive engine</span>
                   </label>
-                  <p id="settingsCognitiveRuntimeHelp" class="model-runtime__help" data-i18n="ui.settings.cognitive.enabled.help">When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the mode in Data settings.</p>
+                  <label class="setting-field">
+                    <span data-i18n="ui.settings.cognitive.mode.label">Operating mode</span>
+                    <select id="settingsCognitiveMode" aria-describedby="settingsCognitiveHelp">
+                      <option value="off" data-i18n="ui.settings.cognitive.mode.off">Off</option>
+                      <option value="shadow" data-i18n="ui.settings.cognitive.mode.shadow">Shadow (observe only)</option>
+                      <option value="active" data-i18n="ui.settings.cognitive.mode.active">Active</option>
+                    </select>
+                  </label>
+                  <p id="settingsCognitiveHelp" data-i18n="ui.settings.cognitive.help">Shadow analyzes answers without changing questions. Active can influence judgments and the next question.</p>
+                  <p id="settingsCognitiveRuntimeHelp" class="model-runtime__help" data-i18n="ui.settings.cognitive.enabled.help">When enabled, Shadow observes and records answer evidence without changing the question flow. Active can also influence evaluation and the next question. Choose the operating mode below.</p>
                   <p id="settingsCognitiveRuntimeStatus" class="settings-status" aria-live="polite"></p>
                 </div>
               </details>
