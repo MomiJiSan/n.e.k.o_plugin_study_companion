@@ -138,7 +138,10 @@ class KnowledgeDungeonEngine:
                         f"expected {command.expected_state_version}, actual {latest_version}",
                     )
                 except DungeonStoreError as exc:
-                    return self._rejection(current, exc.code, str(exc))
+                    error_state = (
+                        None if exc.code == "corrupt_dungeon_state" else current
+                    )
+                    return self._rejection(error_state, exc.code, str(exc))
 
             self._runs[command.run_id] = next_state
             if self._store is None:

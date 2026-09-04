@@ -148,11 +148,42 @@ class DungeonRunStore:
     def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
         self.close()
 
+    def _fetchone(
+        self,
+        query: str,
+        parameters: tuple[Any, ...],
+        *,
+        operation: str,
+    ) -> sqlite3.Row | None:
+        try:
+            return self._connection.execute(query, parameters).fetchone()
+        except sqlite3.Error as exc:
+            raise DungeonStoreError(
+                "persistence_failure",
+                f"failed to {operation}: {exc}",
+            ) from exc
+
+    def _fetchall(
+        self,
+        query: str,
+        parameters: tuple[Any, ...] = (),
+        *,
+        operation: str,
+    ) -> list[sqlite3.Row]:
+        try:
+            return list(self._connection.execute(query, parameters).fetchall())
+        except sqlite3.Error as exc:
+            raise DungeonStoreError(
+                "persistence_failure",
+                f"failed to {operation}: {exc}",
+            ) from exc
+
     def _quarantine_reason(self, run_id: str) -> str | None:
-        row = self._connection.execute(
+        row = self._fetchone(
             "SELECT reason FROM dungeon_quarantine WHERE run_id = ?",
             (run_id,),
-        ).fetchone()
+            operation=f"read quarantine status for run {run_id}",
+        )
         return str(row["reason"]) if row is not None else None
 
     def _require_not_quarantined(self, run_id: str) -> None:
@@ -194,14 +225,15 @@ class DungeonRunStore:
     def load_run(self, run_id: str) -> RunState | None:
         with self._lock:
             self._require_not_quarantined(run_id)
-            row = self._connection.execute(
+            row = self._fetchone(
                 """
                 SELECT run_id, state_version, state_hash, state_json
                 FROM dungeon_runs
                 WHERE run_id = ?
                 """,
                 (run_id,),
-            ).fetchone()
+                operation=f"load dungeon run {run_id}",
+            )
             if row is None:
                 return None
             try:
@@ -225,14 +257,15 @@ class DungeonRunStore:
     def load_receipt(self, run_id: str, command_id: str) -> CommandReceipt | None:
         with self._lock:
             self._require_not_quarantined(run_id)
-            row = self._connection.execute(
+            row = self._fetchone(
                 """
                 SELECT request_hash, request_json, response_hash, response_json
                 FROM dungeon_command_receipts
                 WHERE run_id = ? AND command_id = ?
                 """,
                 (run_id, command_id),
-            ).fetchone()
+                operation=f"load command receipt {run_id}/{command_id}",
+            )
             if row is None:
                 return None
             try:
@@ -257,13 +290,14 @@ class DungeonRunStore:
                 if _SHA256_PATTERN.fullmatch(str(response.get("state_hash") or "")) is None:
                     raise ValueError("response state hash is invalid")
             except Exception as exc:
-                run_row = self._connection.execute(
+                run_row = self._fetchone(
                     """
                     SELECT run_id, state_version, state_hash, state_json
                     FROM dungeon_runs WHERE run_id = ?
                     """,
                     (run_id,),
-                ).fetchone()
+                    operation=f"load dungeon run {run_id} for quarantine",
+                )
                 reason = f"invalid command receipt {command_id}: {exc}"
                 if run_row is not None:
                     self._quarantine(run_row, reason)
@@ -295,7 +329,11 @@ class DungeonRunStore:
         with self._lock:
             self._require_not_quarantined(state.run_id)
             try:
+                if self._fault_hook is not None:
+                    self._fault_hook("before_transaction_begin")
                 self._connection.execute("BEGIN IMMEDIATE")
+                # Recheck under the SQLite write lock so concurrent quarantine wins.
+                self._require_not_quarantined(state.run_id)
                 existing = self._connection.execute(
                     """
                     SELECT request_hash, response_hash, response_json
@@ -395,18 +433,20 @@ class DungeonRunStore:
 
     def list_active_run_ids(self) -> list[str]:
         with self._lock:
-            rows = self._connection.execute(
-                "SELECT run_id FROM dungeon_runs ORDER BY run_id"
-            ).fetchall()
+            rows = self._fetchall(
+                "SELECT run_id FROM dungeon_runs ORDER BY run_id",
+                operation="list active dungeon runs",
+            )
             return [str(row["run_id"]) for row in rows]
 
     def list_quarantined_runs(self) -> list[dict[str, Any]]:
         with self._lock:
-            rows = self._connection.execute(
+            rows = self._fetchall(
                 """
                 SELECT run_id, state_version, stored_hash, reason, quarantined_at
                 FROM dungeon_quarantine
                 ORDER BY quarantine_id
-                """
-            ).fetchall()
+                """,
+                operation="list quarantined dungeon runs",
+            )
             return [dict(row) for row in rows]

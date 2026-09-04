@@ -13,7 +13,11 @@ from threading import Event
 import knowledge_dungeon.engine as engine_module
 import pytest
 from knowledge_dungeon.engine import KnowledgeDungeonEngine
-from knowledge_dungeon.persistence import DungeonRunStore
+from knowledge_dungeon.persistence import (
+    CorruptDungeonState,
+    DungeonRunStore,
+    DungeonStoreError,
+)
 # isort: on
 
 
@@ -200,6 +204,72 @@ def test_two_engines_cannot_commit_the_same_version(
     finally:
         first_store.close()
         second_store.close()
+
+
+def test_concurrent_quarantine_cannot_be_overwritten_by_a_commit(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "dungeon.sqlite3"
+    with DungeonRunStore(database) as seed_store:
+        assert KnowledgeDungeonEngine(seed_store).dispatch(
+            command("start", 0, "start_run")
+        )["accepted"]
+
+    before_transaction = Event()
+    release_transaction = Event()
+
+    def pause_before_transaction(point: str) -> None:
+        if point == "before_transaction_begin":
+            before_transaction.set()
+            assert release_transaction.wait(timeout=2)
+
+    writer_store = DungeonRunStore(database, fault_hook=pause_before_transaction)
+    quarantine_store = DungeonRunStore(database)
+    try:
+        writer_engine = KnowledgeDungeonEngine(writer_store)
+        select = command(
+            "select", 1, "select_node", {"node_id": "battle_1"}
+        )
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            pending = executor.submit(writer_engine.dispatch, select)
+            assert before_transaction.wait(timeout=1)
+            try:
+                with sqlite3.connect(database) as connection:
+                    connection.execute(
+                        "UPDATE dungeon_runs SET state_json = ? WHERE run_id = ?",
+                        ('{"run_id":"tampered"}', "persistent-run"),
+                    )
+                with pytest.raises(CorruptDungeonState):
+                    quarantine_store.load_run("persistent-run")
+            finally:
+                release_transaction.set()
+            response = pending.result(timeout=2)
+
+        assert response["accepted"] is False
+        assert response["error_code"] == "corrupt_dungeon_state"
+        assert response["view"] is None
+        assert writer_store.list_active_run_ids() == []
+        assert len(writer_store.list_quarantined_runs()) == 1
+    finally:
+        release_transaction.set()
+        writer_store.close()
+        quarantine_store.close()
+
+
+def test_sqlite_read_failure_becomes_a_controlled_engine_rejection(
+    tmp_path: Path,
+) -> None:
+    store = DungeonRunStore(tmp_path / "dungeon.sqlite3")
+    engine = KnowledgeDungeonEngine(store)
+    store.close()
+
+    response = engine.dispatch(command("start", 0, "start_run"))
+
+    assert response["accepted"] is False
+    assert response["error_code"] == "persistence_failure"
+    with pytest.raises(DungeonStoreError) as captured:
+        store.list_active_run_ids()
+    assert captured.value.code == "persistence_failure"
 
 
 def test_corrupt_state_is_quarantined_and_cannot_be_silently_recreated(
