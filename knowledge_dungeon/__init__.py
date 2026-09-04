@@ -1,7 +1,7 @@
-"""Knowledge Dungeon v0.1 deterministic prototype contracts.
+"""Knowledge Dungeon deterministic prototype contracts.
 
 This package is intentionally isolated from the production learning domains.
-It consumes simulated snapshots only until a later integration version.
+It still consumes simulated snapshots only; v0.2 adds optional run persistence.
 """
 
 from .card_catalog import (
@@ -51,6 +51,7 @@ from .fixtures import (
     learned_calculus_snapshot,
     new_learner_snapshot,
 )
+from .persistence import DungeonRunStore, DungeonStoreError
 from .rng import PCG32
 from .serializer import deserialize_state, serialize_state, state_hash
 from .state import RunState
@@ -78,6 +79,8 @@ __all__ = [
     "CommandIntent",
     "DungeonResponse",
     "DungeonCommand",
+    "DungeonRunStore",
+    "DungeonStoreError",
     "LearningSnapshot",
     "PCG32",
     "ProjectedCard",
