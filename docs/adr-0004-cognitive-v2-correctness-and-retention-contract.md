@@ -186,8 +186,8 @@ V2.0 active intervention requires projection, `read_mode="active"`, and
 new retention obligations. Disabling intent still records ordinary attempts
 and eligible evidence but delivers no cognitive question.
 
-The V2.0 correctness closure is targeted for `v0.2.6`. Monitoring episodes,
-obligations, and end-to-end retention are targeted for `v0.3.0`. Even then,
+The V2.0 correctness closure, monitoring episodes, obligations, and end-to-end
+retention are targeted for `v0.2.6`. Even then,
 the only active misconception remains `omit_inner_derivative`; all other
 hypotheses remain non-active.
 

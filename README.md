@@ -7,7 +7,7 @@
 
 猫娘伴学是 [N.E.K.O](https://github.com/Project-N-E-K-O/N.E.K.O) 的自适应学习插件。它把材料导入、AI 讲解、练习批改、知识图谱、间隔复习、学习计划和专注习惯整合在同一个学习工作台中。
 
-当前源码版本：`0.3.0` · Python `>=3.11` · N.E.K.O Plugin SDK `>=0.1.0,<0.3.0`
+当前源码版本：`0.2.6` · Python `>=3.11` · N.E.K.O Plugin SDK `>=0.1.0,<0.3.0`
 
 ## 功能概览
 
@@ -66,9 +66,9 @@ uv run python -m plugin.neko_plugin_cli.cli check -r study_companion
 
 ## 认知引擎 V2
 
-`0.3.0` 加入了可审计、可回滚的认知证据与保持检查闭环：它可以从结构化答题记录中识别受支持的错误模式，在 Shadow 模式下仅观察，或在 Active 模式下参与下一题规划。用户可以查看证据、否认、暂时忽略、删除或恢复相关判断。
+`0.2.6` 加入了可审计、可回滚的认知证据与保持检查闭环：它可以从结构化答题记录中识别受支持的错误模式，在 Shadow 模式下仅观察，或在 Active 模式下参与下一题规划。用户可以查看证据、否认、暂时忽略、删除或恢复相关判断。
 
-该能力默认关闭，并采用独立开关控制投影、读取、题目意图、界面和保持检查。当前主动干预范围仍严格限定在已验证的链式法则场景；未知版本、积压或冲突都会回退到普通学习流程。配置示例见 [`config.example.toml`](config.example.toml)，设计与升级边界见 [`docs/releases/v0.3.0-cognitive-v2.md`](docs/releases/v0.3.0-cognitive-v2.md)。
+该能力默认关闭，并采用独立开关控制投影、读取、题目意图、界面和保持检查。当前主动干预范围仍严格限定在已验证的链式法则场景；未知版本、积压或冲突都会回退到普通学习流程。配置示例见 [`config.example.toml`](config.example.toml)，设计与升级边界见 [`docs/releases/v0.2.6-cognitive-v2.md`](docs/releases/v0.2.6-cognitive-v2.md)。
 
 ## 知识副本原型
 
@@ -92,7 +92,7 @@ v0.2-A1 增加可选的独立 SQLite 运行存储、原子命令回执、重启�
 主要默认配置位于 [`plugin.toml`](plugin.toml)，可选配置示例位于 [`config.example.toml`](config.example.toml)。需要特别注意：
 
 - `study.adaptive_loop` 控制学习计划预览、材料学习计划与自动出题。
-- `cognitive` 的所有行为面默认关闭，启用前请先阅读 v0.3.0 发布边界。
+- `cognitive` 的所有行为面默认关闭，启用前请先阅读 v0.2.6 发布边界。
 - `ocr_reader` 与 `rapidocr` 控制截图/文档页面识别及模型资源。
 - `fsrs.retention_target` 控制记忆卡目标保持率。
 - `doc_export.enabled` 默认关闭，启用后才开放笔记导出能力。
@@ -141,8 +141,8 @@ Python 运行时依赖由 `pyproject.toml` 声明，发布时会同步到 `vendo
 3. 推送与插件版本一致的标签，例如：
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.2.6
+git push origin v0.2.6
 ```
 
 `.github/workflows/release.yml` 会调用 N.E.K.O 的插件市场发布工作流，并把 `study_companion.neko-plugin` 上传到 GitHub Release。插件市场发布时应填写该 Release 资源的下载地址。
