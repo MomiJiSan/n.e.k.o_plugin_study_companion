@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from knowledge_dungeon.application_service import (
     ApplicationServiceError,
     KnowledgeDungeonApplicationService,
@@ -24,7 +25,17 @@ CREATE_REQUEST = {
 
 
 def _sensitive_paths(value: Any, path: str = "root") -> list[str]:
-    sensitive = {"seed", "command_id", "command_log", "rng_state", "rng_increment", "learner_id", "snapshot_id"}
+    sensitive = {
+        "seed",
+        "command_id",
+        "command_log",
+        "rng_state",
+        "rng_increment",
+        "learner_id",
+        "client_id",
+        "owner_client_id",
+        "snapshot_id",
+    }
     found: list[str] = []
     if isinstance(value, dict):
         for key, item in value.items():
@@ -55,6 +66,7 @@ def test_create_run_generates_authority_identifiers_and_hides_internal_state() -
 
     assert internal is not None
     assert internal.seed > 0
+    assert internal.owner_client_id == CONTEXT.client_id
     assert internal.command_log[0]["command_id"].startswith("command-")
     assert internal.command_log[0]["payload"]["seed"] == internal.seed
     assert _sensitive_paths(response) == []
@@ -62,13 +74,16 @@ def test_create_run_generates_authority_identifiers_and_hides_internal_state() -
     assert response["run"]["cards"][0]["card_id"] == "neutral.momiji_mercy"
 
 
-def test_stable_client_and_request_generate_deterministic_identity() -> None:
-    first = KnowledgeDungeonApplicationService().create_run(CONTEXT, CREATE_REQUEST)
-    second = KnowledgeDungeonApplicationService().create_run(CONTEXT, CREATE_REQUEST)
+def test_stable_client_and_request_generate_deterministic_run_id_only() -> None:
+    first = KnowledgeDungeonApplicationService(seed_factory=lambda: 1).create_run(
+        CONTEXT, CREATE_REQUEST
+    )
+    second = KnowledgeDungeonApplicationService(seed_factory=lambda: 2).create_run(
+        CONTEXT, CREATE_REQUEST
+    )
 
     assert first["run"]["run_id"] == second["run"]["run_id"]
-    assert first["state_hash"] == second["state_hash"]
-    assert first["available_actions"] == second["available_actions"]
+    assert first["state_hash"] != second["state_hash"]
 
 
 def test_client_submits_only_action_id_and_service_builds_engine_command() -> None:
@@ -204,14 +219,48 @@ def test_action_retry_after_response_loss_survives_service_restart(tmp_path) -> 
 def test_create_retry_survives_service_restart(tmp_path) -> None:
     database_path = tmp_path / "dungeon.sqlite3"
     with DungeonRunStore(database_path) as first_store:
-        created = KnowledgeDungeonApplicationService(KnowledgeDungeonEngine(first_store)).create_run(
-            CONTEXT, CREATE_REQUEST
-        )
+        created = KnowledgeDungeonApplicationService(
+            KnowledgeDungeonEngine(first_store),
+            seed_factory=lambda: 123456789,
+        ).create_run(CONTEXT, CREATE_REQUEST)
     with DungeonRunStore(database_path) as second_store:
-        retried = KnowledgeDungeonApplicationService(KnowledgeDungeonEngine(second_store)).create_run(
-            CONTEXT, CREATE_REQUEST
-        )
+        retried = KnowledgeDungeonApplicationService(
+            KnowledgeDungeonEngine(second_store),
+            seed_factory=lambda: pytest.fail("retry generated a replacement seed"),
+        ).create_run(CONTEXT, CREATE_REQUEST)
     assert retried == created
+
+
+def test_run_access_is_bound_to_creating_client_across_restart(tmp_path) -> None:
+    database_path = tmp_path / "dungeon.sqlite3"
+    other_context = TrustedInvocationContext(
+        client_id="other-electron-client",
+        scope="study_companion:dungeon",
+    )
+    with DungeonRunStore(database_path) as first_store:
+        created = KnowledgeDungeonApplicationService(
+            KnowledgeDungeonEngine(first_store)
+        ).create_run(CONTEXT, CREATE_REQUEST)
+
+    with DungeonRunStore(database_path) as second_store:
+        restarted = KnowledgeDungeonApplicationService(KnowledgeDungeonEngine(second_store))
+        run_id = created["run"]["run_id"]
+        with pytest.raises(ApplicationServiceError) as get_error:
+            restarted.get_run(other_context, run_id)
+        with pytest.raises(ApplicationServiceError) as action_error:
+            restarted.perform_action(
+                other_context,
+                run_id,
+                {
+                    "bridge_protocol_version": 1,
+                    "request_id": "foreign-action-001",
+                    "expected_state_version": 1,
+                    "action_id": "select_node:battle_1",
+                },
+            )
+
+    assert get_error.value.code == "run_not_found"
+    assert action_error.value.code == "run_not_found"
 
 
 def test_same_action_request_id_with_different_body_reaches_engine_conflict() -> None:

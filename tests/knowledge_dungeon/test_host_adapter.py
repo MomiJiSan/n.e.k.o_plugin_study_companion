@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from knowledge_dungeon.application_service import KnowledgeDungeonApplicationService
 from knowledge_dungeon.bridge_contracts import TrustedInvocationContext
 from knowledge_dungeon.host_adapter import KnowledgeDungeonHostAdapter
@@ -150,6 +151,20 @@ async def test_adapter_recovers_real_persisted_run_across_instances(tmp_path: Pa
     assert recovered_after_action.value is not None
     assert recovered_after_action.value["state_version"] == 2
     assert recovered_after_action.value["state_hash"] == selected.value["state_hash"]
+
+
+@pytest.mark.asyncio
+async def test_same_create_request_is_concurrently_idempotent(tmp_path: Path) -> None:
+    store_path = tmp_path / "dungeon.sqlite3"
+
+    first, second = await asyncio.gather(
+        KnowledgeDungeonHostAdapter(store_path).invoke(CONTEXT, "create_run", _create_payload()),
+        KnowledgeDungeonHostAdapter(store_path).invoke(CONTEXT, "create_run", _create_payload()),
+    )
+
+    assert first.ok is True
+    assert second.ok is True
+    assert first.to_dict() == second.to_dict()
 
 
 @pytest.mark.asyncio

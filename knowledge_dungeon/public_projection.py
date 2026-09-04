@@ -49,6 +49,8 @@ _SENSITIVE_KEYS = frozenset(
         "command_id",
         "command_log",
         "learner_id",
+        "client_id",
+        "owner_client_id",
         "snapshot_id",
         "attempt_id",
     )

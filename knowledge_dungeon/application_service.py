@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from secrets import randbelow
 from threading import RLock
 from typing import Any, Mapping
 
@@ -25,6 +27,11 @@ from .fixtures import calculus_card_projection
 from .public_projection import project_public_run
 
 _AUTHORITY_NAMESPACE = "study-companion.knowledge-dungeon.v0.2-c0"
+_MAX_SEED = (1 << 64) - 1
+
+
+def _secure_seed() -> int:
+    return randbelow(_MAX_SEED) + 1
 
 
 class ApplicationServiceError(RuntimeError):
@@ -43,9 +50,11 @@ class KnowledgeDungeonApplicationService:
         engine: KnowledgeDungeonEngine | None = None,
         *,
         authority_namespace: str = _AUTHORITY_NAMESPACE,
+        seed_factory: Callable[[], int] = _secure_seed,
     ) -> None:
         self._engine = engine or KnowledgeDungeonEngine()
         self._authority_namespace = require_identifier(authority_namespace, "authority_namespace")
+        self._seed_factory = seed_factory
         self._lock = RLock()
 
     def bootstrap(self, context: TrustedInvocationContext) -> dict[str, Any]:
@@ -78,28 +87,41 @@ class KnowledgeDungeonApplicationService:
             else CreateRunRequest.from_mapping(raw_request)
         )
         with self._lock:
-            run_id, seed = self._derive_run_identity(trusted, request)
+            run_id = self._derive_run_identity(trusted, request)
             projection = calculus_card_projection().to_dict()
             command_id = self._create_command_id(trusted, request, run_id)
-            response = self._engine.dispatch(
-                {
-                    "protocol_version": PROTOCOL_VERSION,
-                    "command_id": command_id,
-                    "run_id": run_id,
-                    "expected_state_version": 0,
-                    "intent": "start_run",
-                    "payload": {
-                        "seed": seed,
-                        "map_subject_id": CALCULUS_SCENARIO.map_subject_id,
-                        "cards": projection["cards"],
-                        "versions": projection["versions"],
-                    },
-                }
+            state = self._engine.get_state(run_id)
+            if state is not None:
+                self._require_run_owner(state.owner_client_id, trusted.client_id)
+            seed = state.seed if state is not None else self._new_seed()
+            response = self._dispatch_create(
+                trusted,
+                run_id=run_id,
+                command_id=command_id,
+                seed=seed,
+                projection=projection,
             )
+            error = response.get("error")
+            if (
+                response.get("accepted") is not True
+                and isinstance(error, Mapping)
+                and error.get("code") == "command_id_conflict"
+            ):
+                state = self._engine.get_state(run_id)
+                if state is not None:
+                    self._require_run_owner(state.owner_client_id, trusted.client_id)
+                    response = self._dispatch_create(
+                        trusted,
+                        run_id=run_id,
+                        command_id=command_id,
+                        seed=state.seed,
+                        projection=projection,
+                    )
             self._require_accepted(response)
             state = self._engine.get_state(run_id)
             if state is None:
                 raise ApplicationServiceError("authority_failure", "created run is unavailable")
+            self._require_run_owner(state.owner_client_id, trusted.client_id)
             return project_public_run(
                 state,
                 scenario_id=request.scenario_id,
@@ -107,12 +129,13 @@ class KnowledgeDungeonApplicationService:
             )
 
     def get_run(self, context: TrustedInvocationContext, run_id: str) -> dict[str, Any]:
-        require_trusted_context(context)
+        trusted = require_trusted_context(context)
         canonical_run_id = require_identifier(run_id, "run_id")
         with self._lock:
             state = self._engine.get_state(canonical_run_id)
             if state is None:
                 raise ApplicationServiceError("run_not_found", "knowledge dungeon run was not found")
+            self._require_run_owner(state.owner_client_id, trusted.client_id)
             return project_public_run(state, scenario_id=CALCULUS_SCENARIO_ID)
 
     def perform_action(
@@ -132,6 +155,7 @@ class KnowledgeDungeonApplicationService:
             state = self._engine.get_state(canonical_run_id)
             if state is None:
                 raise ApplicationServiceError("run_not_found", "knowledge dungeon run was not found")
+            self._require_run_owner(state.owner_client_id, trusted.client_id)
             intent, payload = command_for_action_id(request.action_id)
             if (
                 state.state_version == request.expected_state_version
@@ -166,7 +190,7 @@ class KnowledgeDungeonApplicationService:
         self,
         context: TrustedInvocationContext,
         request: CreateRunRequest,
-    ) -> tuple[str, int]:
+    ) -> str:
         digest = canonical_sha256(
             {
                 "namespace": self._authority_namespace,
@@ -178,7 +202,50 @@ class KnowledgeDungeonApplicationService:
                 "application_service_version": APPLICATION_SERVICE_VERSION,
             }
         )
-        return f"run-{digest[:24]}", int(digest[24:40], 16)
+        return f"run-{digest[:24]}"
+
+    def _new_seed(self) -> int:
+        seed = self._seed_factory()
+        if isinstance(seed, bool) or not isinstance(seed, int) or not 1 <= seed <= _MAX_SEED:
+            raise ApplicationServiceError(
+                "authority_failure",
+                "authority generated an invalid run seed",
+            )
+        return seed
+
+    def _dispatch_create(
+        self,
+        context: TrustedInvocationContext,
+        *,
+        run_id: str,
+        command_id: str,
+        seed: int,
+        projection: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        return self._engine.dispatch(
+            {
+                "protocol_version": PROTOCOL_VERSION,
+                "command_id": command_id,
+                "run_id": run_id,
+                "expected_state_version": 0,
+                "intent": "start_run",
+                "payload": {
+                    "seed": seed,
+                    "owner_client_id": context.client_id,
+                    "map_subject_id": CALCULUS_SCENARIO.map_subject_id,
+                    "cards": projection["cards"],
+                    "versions": projection["versions"],
+                },
+            }
+        )
+
+    @staticmethod
+    def _require_run_owner(owner_client_id: str, client_id: str) -> None:
+        if owner_client_id != client_id:
+            raise ApplicationServiceError(
+                "run_not_found",
+                "knowledge dungeon run was not found",
+            )
 
     def _create_command_id(
         self,

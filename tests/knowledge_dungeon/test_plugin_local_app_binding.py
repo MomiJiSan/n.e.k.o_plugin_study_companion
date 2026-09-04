@@ -45,7 +45,12 @@ def _trusted_operation(operation: str):
     return decorator
 
 
-def _load_binding(monkeypatch: pytest.MonkeyPatch, *, with_new_sdk: bool) -> ModuleType:
+def _load_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    with_new_sdk: bool,
+    sdk_attributes: dict[str, object] | None = None,
+) -> ModuleType:
     plugin = ModuleType("plugin")
     plugin.__path__ = []  # type: ignore[attr-defined]
     sdk = ModuleType("plugin.sdk")
@@ -55,8 +60,16 @@ def _load_binding(monkeypatch: pytest.MonkeyPatch, *, with_new_sdk: bool) -> Mod
     monkeypatch.delitem(sys.modules, "plugin.sdk.local_app", raising=False)
     if with_new_sdk:
         local_app = ModuleType("plugin.sdk.local_app")
-        local_app.TrustedLocalAppPluginContext = _SdkContext  # type: ignore[attr-defined]
-        local_app.trusted_local_app_operation = _trusted_operation  # type: ignore[attr-defined]
+        attributes = (
+            {
+                "TrustedLocalAppPluginContext": _SdkContext,
+                "trusted_local_app_operation": _trusted_operation,
+            }
+            if sdk_attributes is None
+            else sdk_attributes
+        )
+        for name, value in attributes.items():
+            setattr(local_app, name, value)
         monkeypatch.setitem(sys.modules, "plugin.sdk.local_app", local_app)
 
     package_name = f"_study_local_app_binding_{with_new_sdk}_{id(monkeypatch)}"
@@ -191,3 +204,36 @@ async def test_old_sdk_imports_fail_closed_without_exposing_operations(
     )
     assert outcome["category"] == "protocol"
     assert outcome["error"]["code"] == "local_app_sdk_unavailable"  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "sdk_attributes",
+    [
+        {},
+        {"TrustedLocalAppPluginContext": _SdkContext},
+        {"trusted_local_app_operation": _trusted_operation},
+        {
+            "TrustedLocalAppPluginContext": object(),
+            "trusted_local_app_operation": _trusted_operation,
+        },
+        {
+            "TrustedLocalAppPluginContext": _SdkContext,
+            "trusted_local_app_operation": object(),
+        },
+    ],
+)
+def test_partial_or_invalid_sdk_disables_only_local_app_operations(
+    monkeypatch: pytest.MonkeyPatch,
+    sdk_attributes: dict[str, object],
+) -> None:
+    module = _load_binding(
+        monkeypatch,
+        with_new_sdk=True,
+        sdk_attributes=sdk_attributes,
+    )
+
+    assert module._TRUSTED_LOCAL_APP_SDK_AVAILABLE is False
+    assert not hasattr(
+        module._KnowledgeDungeonLocalAppMixin.knowledge_dungeon_bootstrap,
+        "__neko_trusted_local_app_operation__",
+    )

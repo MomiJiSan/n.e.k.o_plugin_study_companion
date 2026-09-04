@@ -47,16 +47,19 @@ except ModuleNotFoundError as exc:
     _TrustedLocalAppContextType: type[Any] | None = None
     trusted_local_app_operation = _unavailable_operation_decorator
 else:
-    _context_type = getattr(_local_app_sdk, "TrustedLocalAppPluginContext")
-    _operation_decorator = getattr(_local_app_sdk, "trusted_local_app_operation")
-    if not isinstance(_context_type, type) or not callable(_operation_decorator):
-        raise RuntimeError("plugin.sdk.local_app contract is invalid")
-    _TRUSTED_LOCAL_APP_SDK_AVAILABLE = True
-    _TrustedLocalAppContextType = _context_type
-    trusted_local_app_operation = cast(
-        _OperationDecorator,
-        _operation_decorator,
-    )
+    _context_type = getattr(_local_app_sdk, "TrustedLocalAppPluginContext", None)
+    _operation_decorator = getattr(_local_app_sdk, "trusted_local_app_operation", None)
+    if isinstance(_context_type, type) and callable(_operation_decorator):
+        _TRUSTED_LOCAL_APP_SDK_AVAILABLE = True
+        _TrustedLocalAppContextType = _context_type
+        trusted_local_app_operation = cast(
+            _OperationDecorator,
+            _operation_decorator,
+        )
+    else:
+        _TRUSTED_LOCAL_APP_SDK_AVAILABLE = False
+        _TrustedLocalAppContextType = None
+        trusted_local_app_operation = _unavailable_operation_decorator
 
 
 def _safe_failure(
