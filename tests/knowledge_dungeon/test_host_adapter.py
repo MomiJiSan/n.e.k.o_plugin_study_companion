@@ -158,6 +158,8 @@ async def test_adapter_recovers_real_persisted_run_across_instances(tmp_path: Pa
 @pytest.mark.asyncio
 async def test_same_create_request_is_concurrently_idempotent(tmp_path: Path) -> None:
     store_path = tmp_path / "dungeon.sqlite3"
+    with DungeonRunStore(store_path):
+        pass
 
     first, second = await asyncio.gather(
         KnowledgeDungeonHostAdapter(store_path).invoke(CONTEXT, "create_run", _create_payload()),
