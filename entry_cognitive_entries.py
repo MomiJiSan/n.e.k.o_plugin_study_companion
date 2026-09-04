@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -25,6 +26,31 @@ _CONTROL_ACTIONS = frozenset({"dismiss", "suppress", "delete", "restore"})
 _BLOCKING_CONTROL_ACTIONS = frozenset({"dismiss", "suppress", "delete"})
 _MAX_EVIDENCE_ITEMS = 20
 _MAX_SUPPRESSION_SECONDS = 24 * 60 * 60
+_COGNITIVE_DEV_TOOLS_ENV = "STUDY_COMPANION_COGNITIVE_DEV_TOOLS"
+_COGNITIVE_DEV_RETENTION_CONFIRMATION = (
+    "ADVANCE_RETENTION_WINDOW_FOR_DEVELOPMENT"
+)
+_COGNITIVE_DEV_RETENTION_TOPIC = "college_chain_rule"
+_COGNITIVE_DEV_RETENTION_HYPOTHESIS = "omit_inner_derivative"
+_COGNITIVE_DEV_RETENTION_REASON_CODES = frozenset(
+    {
+        "dev_tools_disabled",
+        "confirmation_required",
+        "retention_disabled",
+        "unsupported_target",
+        "projection_stale",
+        "source_attempt_mismatch",
+        "transfer_not_certified",
+        "control_active",
+        "episode_conflict",
+        "claim_active",
+        "window_expired",
+        "operation_busy",
+    }
+)
+_COGNITIVE_DEV_RETENTION_SUCCESS_STATUSES = frozenset(
+    {"ready", "prepared", "already_prepared"}
+)
 
 
 def _cognitive_config(owner: object) -> object | None:
@@ -40,6 +66,68 @@ def _config_value(config: object | None, name: str, default: object) -> object:
 def _cognitive_catalog(owner: object):
     tracker = getattr(owner, "_knowledge_tracker", None)
     return getattr(tracker, "cognitive_catalog", COGNITIVE_CATALOG_V1)
+
+
+def _cognitive_dev_retention_failure(
+    *,
+    topic_id: str,
+    hypothesis_code: str,
+    reason_code: str,
+    enabled: bool,
+) -> dict[str, Any]:
+    safe_reason = (
+        reason_code
+        if reason_code in _COGNITIVE_DEV_RETENTION_REASON_CODES
+        else "transfer_not_certified"
+    )
+    return {
+        "enabled": enabled,
+        "status": "failed",
+        "reason_code": safe_reason,
+        "topic_id": topic_id,
+        "hypothesis_code": hypothesis_code,
+    }
+
+
+def _safe_cognitive_dev_retention_payload(
+    payload: object,
+    *,
+    topic_id: str,
+    hypothesis_code: str,
+) -> dict[str, Any]:
+    if not isinstance(payload, Mapping):
+        return _cognitive_dev_retention_failure(
+            topic_id=topic_id,
+            hypothesis_code=hypothesis_code,
+            reason_code="transfer_not_certified",
+            enabled=True,
+        )
+    status = str(payload.get("status") or "").strip()
+    if (
+        status not in _COGNITIVE_DEV_RETENTION_SUCCESS_STATUSES
+        or payload.get("enabled") is not True
+    ):
+        return _cognitive_dev_retention_failure(
+            topic_id=topic_id,
+            hypothesis_code=hypothesis_code,
+            reason_code=str(payload.get("reason_code") or ""),
+            enabled=payload.get("enabled") is True,
+        )
+    return {
+        "enabled": payload.get("enabled") is True,
+        "status": status,
+        "development_override": payload.get("development_override") is True,
+        "topic_id": topic_id,
+        "hypothesis_code": hypothesis_code,
+        "source_attempt_id": str(payload.get("source_attempt_id") or "").strip(),
+        "episode_id": str(payload.get("episode_id") or "").strip(),
+        "obligation_id": str(payload.get("obligation_id") or "").strip(),
+        "not_before": str(payload.get("not_before") or "").strip(),
+        "due_by": str(payload.get("due_by") or "").strip(),
+        "eligibility_until": str(
+            payload.get("eligibility_until") or ""
+        ).strip(),
+    }
 
 
 def _ui_enabled(owner: object, topic_id: str) -> bool:
@@ -320,6 +408,190 @@ class _CognitiveEntriesMixin:
                 return _empty_payload(topic_key, status="unavailable", enabled=True)
 
         return Ok(await asyncio.to_thread(_read))
+
+    @plugin_entry(
+        id="study_cognitive_dev_prepare_retention",
+        name=tr(
+            "entries.cognitive_dev_prepare_retention.name",
+            default="Prepare Cognitive Retention for Development",
+        ),
+        description=tr(
+            "entries.cognitive_dev_prepare_retention.description",
+            default=(
+                "Preflight or prepare the frozen cognitive retention scenario "
+                "when local development tools are explicitly enabled."
+            ),
+        ),
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "topic_id": {"type": "string"},
+                "hypothesis_code": {"type": "string"},
+                "expected_source_attempt_id": {"type": "string"},
+                "apply": {"type": "boolean", "default": False},
+                "confirmation": {"type": "string", "default": ""},
+            },
+            "required": [
+                "topic_id",
+                "hypothesis_code",
+            ],
+        },
+        llm_result_fields=[
+            "enabled",
+            "status",
+            "reason_code",
+            "development_override",
+            "topic_id",
+            "hypothesis_code",
+            "source_attempt_id",
+            "episode_id",
+            "obligation_id",
+            "not_before",
+            "due_by",
+            "eligibility_until",
+        ],
+    )
+    async def study_cognitive_dev_prepare_retention(
+        self,
+        topic_id: str = "",
+        hypothesis_code: str = "",
+        expected_source_attempt_id: str = "",
+        apply: bool = False,
+        confirmation: str = "",
+        **_,
+    ):
+        topic_key = str(topic_id or "").strip()
+        code_key = str(hypothesis_code or "").strip()
+        if os.environ.get(_COGNITIVE_DEV_TOOLS_ENV) != "1":
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="dev_tools_disabled",
+                    enabled=False,
+                )
+            )
+        if (
+            topic_key != _COGNITIVE_DEV_RETENTION_TOPIC
+            or code_key != _COGNITIVE_DEV_RETENTION_HYPOTHESIS
+        ):
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="unsupported_target",
+                    enabled=True,
+                )
+            )
+        apply_requested = apply is True
+        source_attempt_key = str(expected_source_attempt_id or "").strip()
+        if (
+            apply_requested
+            and str(confirmation or "")
+            != _COGNITIVE_DEV_RETENTION_CONFIRMATION
+        ):
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="confirmation_required",
+                    enabled=True,
+                )
+            )
+        if apply_requested and not source_attempt_key:
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="source_attempt_mismatch",
+                    enabled=True,
+                )
+            )
+        config = _cognitive_config(self)
+        if not (
+            _config_value(config, "projection_enabled", False) is True
+            and str(_config_value(config, "read_mode", "off")).strip().lower()
+            == "active"
+            and str(_config_value(config, "intent_policy", "off")).strip().lower()
+            == "on"
+            and _config_value(config, "retention_enabled", False) is True
+        ):
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="retention_disabled",
+                    enabled=True,
+                )
+            )
+
+        lifecycle_operation = "cognitive_dev_prepare_retention"
+        active_operation = await reserve_question_lifecycle(
+            self,
+            lifecycle_operation,
+        )
+        if active_operation:
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="operation_busy",
+                    enabled=True,
+                )
+            )
+        try:
+            store = getattr(self, "_store", None)
+            if store is None:
+                return Ok(
+                    _cognitive_dev_retention_failure(
+                        topic_id=topic_key,
+                        hypothesis_code=code_key,
+                        reason_code="transfer_not_certified",
+                        enabled=True,
+                    )
+                )
+
+            def _prepare() -> dict[str, Any]:
+                from .store_cognitive_development import (
+                    prepare_cognitive_retention_for_development,
+                )
+
+                return prepare_cognitive_retention_for_development(
+                    store,
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    expected_source_attempt_id=source_attempt_key,
+                    apply=apply_requested,
+                )
+
+            result = await asyncio.to_thread(_prepare)
+            return Ok(
+                _safe_cognitive_dev_retention_payload(
+                    result,
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                )
+            )
+        except Exception:
+            logger = getattr(self, "logger", None)
+            if logger is not None and hasattr(logger, "warning"):
+                try:
+                    logger.warning(
+                        "cognitive development retention preparation failed"
+                    )
+                except Exception:
+                    pass
+            return Ok(
+                _cognitive_dev_retention_failure(
+                    topic_id=topic_key,
+                    hypothesis_code=code_key,
+                    reason_code="transfer_not_certified",
+                    enabled=True,
+                )
+            )
+        finally:
+            await release_question_lifecycle(self, lifecycle_operation)
 
     @ui.action()
     @plugin_entry(
