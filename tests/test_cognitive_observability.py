@@ -6,7 +6,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-
 from tools.cognitive_health import main
 from tools.cognitive_observability import collect_cognitive_health
 
