@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import sqlite3
 from pathlib import Path
 
 import pytest
-from tools.cognitive_health import main
-from tools.cognitive_observability import collect_cognitive_health
+
+main = importlib.import_module("tools.cognitive_health").main
+collect_cognitive_health = importlib.import_module(
+    "tools.cognitive_observability"
+).collect_cognitive_health
 
 NOW = "2026-09-04T12:00:00.000000Z"
 
