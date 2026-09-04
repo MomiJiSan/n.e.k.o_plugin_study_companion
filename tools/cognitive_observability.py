@@ -196,7 +196,10 @@ def _iso(value: datetime) -> str:
 
 
 def _open_read_only(database: Path) -> sqlite3.Connection:
-    resolved = database.expanduser().resolve()
+    try:
+        resolved = database.expanduser().resolve()
+    except (OSError, RuntimeError) as exc:
+        raise CognitiveHealthError("database path could not be resolved") from exc
     if not resolved.is_file():
         raise CognitiveHealthError("database file does not exist")
     try:

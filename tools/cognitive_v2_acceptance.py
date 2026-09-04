@@ -1405,6 +1405,10 @@ def _scenario_all_features_disabled(
 ) -> dict[str, Any]:
     recorder = ScenarioRecorder("all_cognitive_features_disabled_equivalence")
     models = importlib.import_module(f"{_RUNTIME_PACKAGE}.models")
+    tracker_module = importlib.import_module(
+        f"{_RUNTIME_PACKAGE}.knowledge_tracker"
+    )
+    fsrs_module = importlib.import_module(f"{_RUNTIME_PACKAGE}.fsrs_bridge")
     baseline_config = models.CognitiveConfig()
     disabled_config = models.CognitiveConfig(
         projection_enabled=False,
@@ -1416,10 +1420,51 @@ def _scenario_all_features_disabled(
     )
     baseline = _open_store(Store, root, "baseline")
     disabled = _open_store(Store, root, "all-disabled")
+    original_fsrs_clock = getattr(fsrs_module, "_utc_now")
+    setattr(fsrs_module, "_utc_now", FixedClock().now)
     try:
         attempt_id = "ordinary-disabled"
-        baseline_result = _ordinary_answer(baseline, attempt_id, cognitive=False)
-        disabled_result = _ordinary_answer(disabled, attempt_id, cognitive=False)
+        baseline_tracker = tracker_module.KnowledgeTracker(
+            baseline,
+            logger=_Logger(),
+            cognitive_config=baseline_config,
+        )
+        disabled_tracker = tracker_module.KnowledgeTracker(
+            disabled,
+            logger=_Logger(),
+            cognitive_config=disabled_config,
+        )
+        answer_input = {
+            "topic_id": TOPIC,
+            "question": {
+                "question_id": "question-ordinary-disabled",
+                "question": "Synthetic chain-rule item",
+                "answer": "synthetic-reference",
+                "question_type": "math_reasoning",
+                "difficulty": 3,
+            },
+            "user_answer": "synthetic-response",
+            "eval_result": {
+                "verdict": "correct",
+                "score": 100,
+                "evaluator_type": "deterministic_math",
+                "evaluator_version": "acceptance-evaluator-v1",
+                "confidence": 1.0,
+            },
+            "mode": "companion",
+            "session_id": "acceptance-session",
+            "response_time_ms": 100,
+            "used_hint": False,
+            "attempt_id": attempt_id,
+        }
+        baseline_result = baseline_tracker._on_answer_batch(
+            **answer_input,
+            cognitive_eligible=False,
+        )
+        disabled_result = disabled_tracker._on_answer_batch(
+            **answer_input,
+            cognitive_eligible=True,
+        )
         tables = (
             "cognitive_projection_queue",
             "cognitive_extraction_queue",
@@ -1466,9 +1511,14 @@ def _scenario_all_features_disabled(
             "ordinary_answer_is_preserved_without_cognitive_writes",
             expected=(True, (0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 0)),
             actual=(equivalent, baseline_counts, disabled_counts),
-            input_event={"operation": "commit_ordinary_attempt_with_all_gates_off"},
+            input_event={
+                "operation": "knowledge_tracker_answer_batch",
+                "cognitive_eligible": True,
+                "cognitive_config": "disabled",
+            },
         )
     finally:
+        setattr(fsrs_module, "_utc_now", original_fsrs_clock)
         disabled.close()
         baseline.close()
     return recorder.result()

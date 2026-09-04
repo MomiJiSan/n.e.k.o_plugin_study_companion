@@ -163,6 +163,24 @@ def test_missing_schema_is_blocked_without_attempting_migration(tmp_path: Path) 
     assert _digest(path) == before
 
 
+@pytest.mark.parametrize("failure", [OSError("path failure"), RuntimeError("home failure")])
+def test_cli_normalizes_path_resolution_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: Exception,
+) -> None:
+    def fail_to_expand(_path: Path) -> Path:
+        raise failure
+
+    monkeypatch.setattr(Path, "expanduser", fail_to_expand)
+
+    result = main(["--db", "~/health.sqlite3", "--format", "json"])
+    captured = capsys.readouterr()
+
+    assert result == 3
+    assert json.loads(captured.err) == {"error": {"code": "inspection_failed"}}
+
+
 def test_recoverable_backlog_is_degraded_and_errors_are_redacted(
     database: Path,
 ) -> None:

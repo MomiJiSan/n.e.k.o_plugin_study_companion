@@ -94,19 +94,20 @@ The JSON snapshot has a versioned envelope:
 ```json
 {
   "schema_version": 1,
-  "runtime": {"mode": "unknown"},
+  "as_of": "2026-09-04T12:00:00.000000Z",
+  "runtime": {"mode": "unknown", "source": "offline_database"},
   "health": {
     "status": "degraded",
     "reasons": [
-      {"code": "projection_generation_lag", "severity": "degraded", "count": 1}
+      {"code": "projection_stale", "severity": "degraded", "count": 1}
     ]
   },
-  "queues": {},
-  "projections": {},
+  "schema": {"missing_tables": [], "missing_columns": {}},
+  "queues": {"extraction": {}, "topic_projection": {}},
   "outbox": {},
   "retention": {},
   "controls": {},
-  "version_sets": {}
+  "versions": {}
 }
 ```
 
