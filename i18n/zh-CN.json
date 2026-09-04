@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "概念理解错误",
     "ui.cognitive.hypothesis.prerequisite_gap": "前置知识缺口",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "步骤、转换或表达错误",
-    "ui.cognitive.hypothesis.unknown": "重复出现的错误模式"
+    "ui.cognitive.hypothesis.unknown": "重复出现的错误模式",
+    "ui.release_notes.eyebrow": "版本更新",
+    "ui.release_notes.title": "v{version} 更新内容",
+    "ui.release_notes.intro": "Study Companion 已更新，来看看这个版本有哪些变化。",
+    "ui.release_notes.acknowledge": "我知道了",
+    "ui.release_notes.highlight.persistence": "知识地牢进度现在会安全保存，并加强了并发写入保护。",
+    "ui.release_notes.highlight.cognitive_transfer": "修复了认知迁移题目的学习记录提交。",
+    "ui.release_notes.highlight.workspace": "优化了学习工作区布局与认知设置体验。",
+    "ui.release_notes.highlight.announcement": "新增版本更新通告；每个新版本首次打开时展示一次。"
 }

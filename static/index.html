@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; object-src 'none'" />
     <title>Study Companion</title>
     <link rel="stylesheet" href="./katex.min.css?v=study-hotfix-20260615v" />
-    <link rel="stylesheet" href="./style.css?v=study-memory-editor-wide-20260904" />
+    <link rel="stylesheet" href="./style.css?v=study-memory-editor-wide-20260904-release-notes-controller-1" />
     <link rel="stylesheet" href="./notebook.css?v=study-notebook-migration-20260823" />
     <link rel="stylesheet" href="./workspace.css?v=study-settings-dialog-20260824" />
   </head>
@@ -841,6 +841,25 @@
         </div>
       </div>
     </dialog>
+    <dialog id="releaseNotesDialog" class="release-notes-dialog" data-release-version="0.3.0" aria-labelledby="releaseNotesTitle" aria-describedby="releaseNotesIntro">
+      <article class="release-notes-dialog__panel">
+        <header class="release-notes-dialog__header">
+          <div class="release-notes-dialog__mark" aria-hidden="true">🐾</div>
+          <div>
+            <p class="release-notes-dialog__eyebrow" data-i18n="ui.release_notes.eyebrow">Version update</p>
+            <h2 id="releaseNotesTitle"></h2>
+          </div>
+          <span id="releaseNotesVersion" class="release-notes-dialog__version"></span>
+        </header>
+        <div class="release-notes-dialog__body">
+          <p id="releaseNotesIntro" data-i18n="ui.release_notes.intro">Study Companion has been updated. Here's what changed in this version.</p>
+          <ul id="releaseNotesList" class="release-notes-dialog__list"></ul>
+        </div>
+        <footer class="release-notes-dialog__actions">
+          <button id="releaseNotesCloseBtn" class="button button-primary" type="button" data-i18n="ui.release_notes.acknowledge">Got it</button>
+        </footer>
+      </article>
+    </dialog>
     <script src="./i18n.js"></script>
     <script src="./katex.min.js?v=study-hotfix-20260615v"></script>
     <script src="./katex-render.js?v=study-hotfix-20260615v"></script>
@@ -856,6 +875,7 @@
     <script src="./model-runtime.js?v=study-api-runtime-20260902"></script>
     <script src="./request-utils.js?v=study-request-abort-20260819"></script>
     <script src="./workspace-controller.js?v=study-workspace-shell-pr1"></script>
-    <script src="./main.js?v=practice-i18n-cancel-20260903"></script>
+    <script src="./release-notes.js?v=controller-1"></script>
+    <script src="./main.js?v=practice-i18n-cancel-20260903-release-notes-controller-1"></script>
   </body>
 </html>

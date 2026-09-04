@@ -112,6 +112,84 @@ def test_workspace_assets_routes_and_locales_are_complete() -> None:
     assert "activateWorkspace(" not in escape_source
 
 
+def test_release_notes_are_versioned_localized_and_shown_once() -> None:
+    index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    main = (STATIC_ROOT / "main.js").read_text(encoding="utf-8")
+    release_notes = (STATIC_ROOT / "release-notes.js").read_text(encoding="utf-8")
+    style = (STATIC_ROOT / "style.css").read_text(encoding="utf-8")
+    plugin_toml = (PLUGIN_ROOT / "plugin.toml").read_text(encoding="utf-8")
+    plugin_version = re.search(r'^version = "([^"]+)"$', plugin_toml, re.MULTILINE)
+    release_version = re.search(r'data-release-version="([^"]+)"', index)
+
+    assert plugin_version and release_version
+    assert release_version.group(1) == plugin_version.group(1)
+    assert "version: '0.3.0'" not in release_notes
+    assert 'id="releaseNotesDialog"' in index
+    assert 'aria-labelledby="releaseNotesTitle"' in index
+    assert './release-notes.js?v=controller-1' in index
+    assert 'release-notes-0.3.0' not in index
+    assert index.index("./release-notes.js") < index.index("./main.js")
+    assert "window.StudyReleaseNotes?.initialize" in main
+    assert ".release-notes-dialog::backdrop" in style
+    assert "grid-template-rows: auto minmax(0, 1fr) auto" in style
+    assert ".release-notes-dialog__body { display: grid; gap: 16px; min-height: 0;" in style
+    assert "study_companion.release_notes.seen_version" in release_notes
+
+    release_keys = set(re.findall(r"ui\.release_notes\.[a-z0-9_.]+", index + release_notes))
+    assert len(release_keys) >= 8
+    for locale in LOCALES:
+        messages = json.loads((PLUGIN_ROOT / "i18n" / f"{locale}.json").read_text(encoding="utf-8"))
+        missing = release_keys - messages.keys()
+        assert not missing, f"{locale}: missing {sorted(missing)}"
+
+    script = f"""
+import {{ Window }} from 'happy-dom';
+
+const window = new Window({{ url: 'http://localhost/' }});
+const document = window.document;
+document.body.innerHTML = `
+  <dialog id="releaseNotesDialog" data-release-version={json.dumps(release_version.group(1))}>
+    <h2 id="releaseNotesTitle"></h2>
+    <span id="releaseNotesVersion"></span>
+    <ul id="releaseNotesList"></ul>
+    <button id="releaseNotesCloseBtn" type="button">Close</button>
+  </dialog>`;
+const dialog = document.getElementById('releaseNotesDialog');
+dialog.showModal = function () {{ this.setAttribute('open', ''); }};
+dialog.close = function () {{ this.removeAttribute('open'); }};
+
+const values = new Map();
+const storage = {{
+  getItem(key) {{ return values.get(key) || null; }},
+  setItem(key, value) {{ values.set(key, String(value)); }},
+}};
+const i18n = {{
+  t(key, fallback) {{ return key.startsWith('ui.release_notes.highlight.') ? `translated:${{key}}` : fallback; }},
+  tf(_key, fallback, replacements) {{ return fallback.replace('{{version}}', replacements.version); }},
+}};
+
+const releaseSource = {json.dumps(release_notes)};
+new Function('window', releaseSource)(window);
+const api = window.StudyReleaseNotes;
+const first = api.initialize({{ document, storage, i18n }});
+if (!first.shown || !dialog.hasAttribute('open')) throw new Error('new version was not shown');
+if (document.getElementById('releaseNotesList').children.length !== 4) throw new Error('release highlights missing');
+if (document.getElementById('releaseNotesTitle').textContent !== `What's new in v${{first.version}}`) throw new Error('version title missing');
+
+document.getElementById('releaseNotesCloseBtn').click();
+if (dialog.hasAttribute('open')) throw new Error('dialog did not close');
+if (values.get(api.storageKey) !== first.version) throw new Error('seen version was not persisted');
+
+const second = api.initialize({{ document, storage, i18n }});
+if (second.shown || second.reason !== 'already_seen') throw new Error('same version was shown twice');
+
+values.set(api.storageKey, '0.2.9');
+const upgraded = api.initialize({{ document, storage, i18n }});
+if (!upgraded.shown || !dialog.hasAttribute('open')) throw new Error('newer version was not shown');
+"""
+    _run_frontend_script(script)
+
+
 def test_memory_editor_uses_full_width_stacked_fields() -> None:
     index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
     style = re.sub(r"\s+", " ", (STATIC_ROOT / "style.css").read_text(encoding="utf-8"))

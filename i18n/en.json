@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "a concept misunderstanding",
     "ui.cognitive.hypothesis.prerequisite_gap": "a prerequisite knowledge gap",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "a procedural, conversion, or representation error",
-    "ui.cognitive.hypothesis.unknown": "a recurring error pattern"
+    "ui.cognitive.hypothesis.unknown": "a recurring error pattern",
+    "ui.release_notes.eyebrow": "Version update",
+    "ui.release_notes.title": "What's new in v{version}",
+    "ui.release_notes.intro": "Study Companion has been updated. Here's what changed in this version.",
+    "ui.release_notes.acknowledge": "Got it",
+    "ui.release_notes.highlight.persistence": "Knowledge Dungeon progress is now saved safely with stronger concurrent-write protection.",
+    "ui.release_notes.highlight.cognitive_transfer": "Fixed learning-record commits for cognitive transfer questions.",
+    "ui.release_notes.highlight.workspace": "Refined the study workspace layout and cognitive settings experience.",
+    "ui.release_notes.highlight.announcement": "Added release announcements, shown once when each new version is first opened."
 }

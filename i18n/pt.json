@@ -1050,5 +1050,13 @@
     "ui.cognitive.hypothesis.concept_misunderstanding": "uma compreensão conceitual incorreta",
     "ui.cognitive.hypothesis.prerequisite_gap": "uma lacuna de pré-requisitos",
     "ui.cognitive.hypothesis.procedure_or_representation_error": "um erro de procedimento, conversão ou representação",
-    "ui.cognitive.hypothesis.unknown": "um padrão de erro recorrente"
+    "ui.cognitive.hypothesis.unknown": "um padrão de erro recorrente",
+    "ui.release_notes.eyebrow": "Atualização de versão",
+    "ui.release_notes.title": "Novidades da v{version}",
+    "ui.release_notes.intro": "O Study Companion foi atualizado. Veja o que mudou nesta versão.",
+    "ui.release_notes.acknowledge": "Entendi",
+    "ui.release_notes.highlight.persistence": "O progresso do Knowledge Dungeon agora é salvo com segurança e maior proteção contra gravações simultâneas.",
+    "ui.release_notes.highlight.cognitive_transfer": "Corrigido o registro de aprendizagem em questões de transferência cognitiva.",
+    "ui.release_notes.highlight.workspace": "Aprimorados o layout do espaço de estudo e a experiência das configurações cognitivas.",
+    "ui.release_notes.highlight.announcement": "Adicionados avisos de versão, exibidos uma única vez ao abrir cada nova versão."
 }
