@@ -1,12 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://neko.local/knowledge-dungeon/bridge-requests-v1.schema.json",
-  "title": "Knowledge Dungeon bridge request envelopes v1",
+  "title": "Knowledge Dungeon domain request bodies v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["operation", "bridge_protocol_version"],
+  "required": ["bridge_protocol_version"],
   "properties": {
-    "operation": {"enum": ["bootstrap", "create_run", "get_run", "perform_action"]},
     "bridge_protocol_version": {"const": 1},
     "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{24}$"},
     "request_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
@@ -20,7 +19,6 @@
   },
   "oneOf": [
     {
-      "properties": {"operation": {"const": "bootstrap"}},
       "not": {
         "anyOf": [
           {"required": ["run_id"]},
@@ -33,7 +31,6 @@
       }
     },
     {
-      "properties": {"operation": {"const": "create_run"}},
       "required": ["request_id", "subject_id", "scenario_id"],
       "not": {
         "anyOf": [
@@ -44,7 +41,6 @@
       }
     },
     {
-      "properties": {"operation": {"const": "get_run"}},
       "required": ["run_id"],
       "not": {
         "anyOf": [
@@ -57,7 +53,6 @@
       }
     },
     {
-      "properties": {"operation": {"const": "perform_action"}},
       "required": ["run_id", "request_id", "expected_state_version", "action_id"],
       "not": {
         "anyOf": [

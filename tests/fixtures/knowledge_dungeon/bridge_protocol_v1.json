@@ -37,27 +37,23 @@
   "fixture_version": 1,
   "requests": [
     {
-      "operation": "create_run",
       "bridge_protocol_version": 1,
       "request_id": "create-run-001",
       "subject_id": "math",
       "scenario_id": "calculus_v0_1"
     },
     {
-      "operation": "get_run",
       "bridge_protocol_version": 1,
       "run_id": "run-401beed3e9e15a3170cd9fec"
     },
     {
       "action_id": "select_node:battle_1",
       "expected_state_version": 1,
-      "operation": "perform_action",
       "bridge_protocol_version": 1,
       "request_id": "select-battle-001",
       "run_id": "run-401beed3e9e15a3170cd9fec"
     },
     {
-      "operation": "bootstrap",
       "bridge_protocol_version": 1
     }
   ]

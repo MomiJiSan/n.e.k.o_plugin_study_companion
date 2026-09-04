@@ -48,7 +48,6 @@ from .entry_communication_tutor_events import _CommunicationTutorEventsMixin
 from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
 from .entry_export_support import _ExportSupportMixin
 from .entry_goal_entries import _GoalEntriesMixin
-from .entry_knowledge_dungeon_local_app import _KnowledgeDungeonLocalAppMixin
 from .entry_knowledge_entries import _KnowledgeEntriesMixin
 from .entry_learning_plan_entries import _LearningPlanEntriesMixin
 from .entry_local_model_entries import _LocalModelEntriesMixin
@@ -79,6 +78,7 @@ from .entry_tutor_explain_entries import _TutorExplainEntriesMixin
 from .entry_tutor_question_entries import _TutorQuestionEntriesMixin
 from .entry_tutor_summary_entries import _TutorSummaryEntriesMixin
 from .knowledge_contribution import PublicGraphContributionBuilder
+from .knowledge_dungeon.private_bridge import KnowledgeDungeonPrivateBridge
 from .knowledge_tracker import KnowledgeTracker
 from .memory_deck_store import MemoryDeckStore, MemoryItemNotFoundError
 from .memory_habit_bridge import MemoryHabitBridge
@@ -241,7 +241,6 @@ class StudyCompanionPlugin(
     _GoalEntriesMixin,
     _CheckinEntriesMixin,
     _SupervisionEntriesMixin,
-    _KnowledgeDungeonLocalAppMixin,
     _KnowledgeEntriesMixin,
     _CognitiveEntriesMixin,
     _LearningPlanEntriesMixin,
@@ -321,12 +320,21 @@ class StudyCompanionPlugin(
         self._neko_command_watcher: Any | None = None
         self._worker_crash_count = 0
         self._worker_last_crash_time = 0.0
+        self._knowledge_dungeon_bridge: KnowledgeDungeonPrivateBridge | None = None
 
     @lifecycle(id="startup")
     async def startup(self, **_):
         try:
             raw = await self.config.dump(timeout=5.0)
             self._cfg = build_config(raw if isinstance(raw, dict) else {})
+            knowledge_dungeon_config = (
+                raw.get("knowledge_dungeon")
+                if isinstance(raw, dict) and isinstance(raw.get("knowledge_dungeon"), dict)
+                else {}
+            )
+            knowledge_dungeon_bridge_enabled = (
+                knowledge_dungeon_config.get("bridge_enabled", True) is True
+            )
             self._voice_filter = VoiceFilter(
                 plugin_config=raw if isinstance(raw, dict) else {},
                 logger=self.logger,
@@ -416,6 +424,9 @@ class StudyCompanionPlugin(
             )
             self._sync_doc_export_entry()
             await self._persist_state()
+            await self._start_knowledge_dungeon_bridge(
+                enabled=knowledge_dungeon_bridge_enabled
+            )
             self._start_review_due_task()
             if self._event_bus is not None:
                 await self._subscribe_neko_commands()
@@ -425,6 +436,7 @@ class StudyCompanionPlugin(
             status_payload = await asyncio.to_thread(self._status_payload)
             return Ok({"status": STATUS_READY, "result": status_payload})
         except asyncio.CancelledError:
+            await self._finish_cancelled_startup_cleanup()
             raise
         except Exception as exc:
             self.logger.warning("study plugin startup failed: {}", exc)
@@ -434,7 +446,37 @@ class StudyCompanionPlugin(
                 self._state.last_error = "startup_failed"
             return Err(SdkError("failed to start study_companion"))
 
+    async def _finish_cancelled_startup_cleanup(self) -> None:
+        """Finish bounded cleanup even when startup receives repeated cancellation."""
+
+        cleanup_task = asyncio.create_task(
+            asyncio.wait_for(self._cleanup_after_failed_startup(), timeout=8.0)
+        )
+        while not cleanup_task.done():
+            try:
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                # The caller is already being cancelled.  A second cancellation
+                # must not strand a listener or rendezvous published earlier in
+                # startup, so keep waiting for the independently bounded task.
+                continue
+            except TimeoutError:
+                self.logger.warning("study startup cancellation cleanup timed out")
+                return
+            except Exception as exc:
+                self.logger.warning(
+                    "study startup cancellation cleanup failed: {}", exc
+                )
+                return
+        try:
+            cleanup_task.result()
+        except TimeoutError:
+            self.logger.warning("study startup cancellation cleanup timed out")
+        except Exception as exc:
+            self.logger.warning("study startup cancellation cleanup failed: {}", exc)
+
     async def _cleanup_after_failed_startup(self) -> None:
+        await self._stop_knowledge_dungeon_bridge()
         document_jobs = getattr(self, "_document_jobs", None)
         if document_jobs is not None:
             try:
@@ -517,6 +559,7 @@ class StudyCompanionPlugin(
 
     @lifecycle(id="shutdown")
     async def shutdown(self, **_):
+        await self._stop_knowledge_dungeon_bridge()
         document_jobs = getattr(self, "_document_jobs", None)
         if document_jobs is not None:
             try:
@@ -565,6 +608,66 @@ class StudyCompanionPlugin(
         await asyncio.to_thread(self._store.save_state, self._state)
         await asyncio.to_thread(self._store.close)
         return Ok({"status": STATUS_STOPPED})
+
+    async def _start_knowledge_dungeon_bridge(self, *, enabled: bool) -> None:
+        if not enabled or self._knowledge_dungeon_bridge is not None:
+            return
+        bridge = KnowledgeDungeonPrivateBridge(
+            self.data_path("knowledge_dungeon.sqlite3"),
+            logger=self.logger,
+        )
+        start_task = asyncio.create_task(asyncio.to_thread(bridge.start))
+        try:
+            await asyncio.shield(start_task)
+        except asyncio.CancelledError:
+            while not start_task.done():
+                try:
+                    await asyncio.shield(start_task)
+                except asyncio.CancelledError:
+                    continue
+            try:
+                start_task.result()
+            except Exception:
+                pass
+            stop_task = asyncio.create_task(asyncio.to_thread(bridge.stop))
+            while not stop_task.done():
+                try:
+                    await asyncio.shield(stop_task)
+                except asyncio.CancelledError:
+                    continue
+            try:
+                stop_task.result()
+            except Exception as exc:
+                self.logger.warning("knowledge dungeon bridge cleanup failed: {}", exc)
+            raise
+        except Exception as exc:
+            # Knowledge Dungeon is optional.  Its bridge must not make OCR,
+            # tutoring, or the rest of Study Companion unavailable.
+            self.logger.warning("knowledge dungeon bridge unavailable: {}", exc)
+            await asyncio.to_thread(bridge.stop)
+            return
+        self._knowledge_dungeon_bridge = bridge
+
+    async def _stop_knowledge_dungeon_bridge(self) -> None:
+        bridge = self._knowledge_dungeon_bridge
+        self._knowledge_dungeon_bridge = None
+        if bridge is None:
+            return
+        stop_task = asyncio.create_task(asyncio.to_thread(bridge.stop))
+        try:
+            drained = await asyncio.wait_for(asyncio.shield(stop_task), timeout=7.0)
+            if not drained:
+                self.logger.warning(
+                    "knowledge dungeon bridge stopped with unfinished requests"
+                )
+        except asyncio.CancelledError:
+            try:
+                await stop_task
+            except Exception as exc:
+                self.logger.warning("knowledge dungeon bridge cleanup failed: {}", exc)
+            raise
+        except Exception as exc:
+            self.logger.warning("knowledge dungeon bridge cleanup failed: {}", exc)
 
     def _start_review_due_task(self) -> None:
         if self._event_bus is None:

@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import sys
 import threading
+from importlib import import_module
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+real_bridge_module: Any = import_module("knowledge_dungeon.private_bridge")
 
 
 class _Result:
@@ -217,6 +219,16 @@ def _load_runtime(monkeypatch: pytest.MonkeyPatch):
             "utc_now_iso": lambda: "now",
         },
     }
+    knowledge_dungeon_package = _install_module(
+        monkeypatch,
+        f"{package}.knowledge_dungeon",
+    )
+    knowledge_dungeon_package.__path__ = []  # type: ignore[attr-defined]
+    _install_module(
+        monkeypatch,
+        f"{package}.knowledge_dungeon.private_bridge",
+        KnowledgeDungeonPrivateBridge=_blank_class("KnowledgeDungeonPrivateBridge"),
+    )
     for module_name, attributes in local_modules.items():
         _install_module(monkeypatch, f"{package}.{module_name}", **attributes)
 
@@ -386,6 +398,7 @@ def _owner(module: ModuleType, calls: list[str]):
     owner._command_worker_task = None
     owner._interruptible_task = None
     owner._static_ui_config = {"path": "static"}
+    owner._knowledge_dungeon_bridge = None
     owner.projection_awaited = False
 
     async def unsubscribe() -> None:
@@ -403,6 +416,150 @@ def _owner(module: ModuleType, calls: list[str]):
     owner.clear_list_actions = lambda: calls.append("actions.clear")
     owner.unregister_dynamic_entry = lambda entry_id: calls.append(f"entry.unregister:{entry_id}")
     return owner
+
+
+@pytest.mark.asyncio
+async def test_knowledge_dungeon_bridge_switch_false_creates_no_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    owner = _owner(module, [])
+    constructed = 0
+
+    class _Bridge:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            nonlocal constructed
+            constructed += 1
+
+    monkeypatch.setattr(module, "KnowledgeDungeonPrivateBridge", _Bridge)
+    owner.data_path = lambda filename: tmp_path / filename
+    await owner._start_knowledge_dungeon_bridge(enabled=False)
+
+    assert constructed == 0
+    assert owner._knowledge_dungeon_bridge is None
+    assert not (tmp_path / "runtime" / "bridge-v1.json").exists()
+    assert not any(
+        thread.name == "study-companion-knowledge-dungeon-bridge" and thread.is_alive()
+        for thread in threading.enumerate()
+    )
+
+
+@pytest.mark.asyncio
+async def test_optional_knowledge_dungeon_bridge_failure_does_not_fail_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    calls: list[str] = []
+    owner = _owner(module, calls)
+
+    class _Bridge:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            calls.append("bridge.start")
+            raise RuntimeError("bind failed")
+
+        def stop(self) -> bool:
+            calls.append("bridge.stop")
+            return True
+
+    monkeypatch.setattr(module, "KnowledgeDungeonPrivateBridge", _Bridge)
+    owner.data_path = lambda filename: tmp_path / filename
+    await owner._start_knowledge_dungeon_bridge(enabled=True)
+
+    assert calls == ["bridge.start", "bridge.stop"]
+    assert owner._knowledge_dungeon_bridge is None
+    assert any(level == "warning" for level, _args in owner.logger.messages)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failed_thread_name",
+    [
+        "study-companion-knowledge-dungeon-bridge",
+        "study-companion-knowledge-dungeon-rendezvous-renewal",
+    ],
+)
+async def test_real_bridge_thread_start_failure_remains_optional_during_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failed_thread_name: str,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    owner = _owner(module, [])
+    runtime_dir = tmp_path / "runtime"
+    owner.data_path = lambda filename: tmp_path / filename
+    monkeypatch.setattr(
+        module,
+        "KnowledgeDungeonPrivateBridge",
+        real_bridge_module.KnowledgeDungeonPrivateBridge,
+    )
+    monkeypatch.setenv(
+        "NEKO_KNOWLEDGE_DUNGEON_RUNTIME_DIR",
+        str(runtime_dir),
+    )
+    original_start = threading.Thread.start
+    failure_injected = False
+
+    def fail_one_start(thread: threading.Thread) -> None:
+        nonlocal failure_injected
+        if thread.name == failed_thread_name and not failure_injected:
+            failure_injected = True
+            raise RuntimeError(f"injected {failed_thread_name} start failure")
+        original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", fail_one_start)
+
+    await owner._start_knowledge_dungeon_bridge(enabled=True)
+
+    assert failure_injected is True
+    assert owner._knowledge_dungeon_bridge is None
+    assert not (runtime_dir / "bridge-v1.json").exists()
+    assert any(level == "warning" for level, _args in owner.logger.messages)
+
+
+@pytest.mark.asyncio
+async def test_bridge_start_cancellation_waits_for_start_then_stops_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    calls: list[str] = []
+    owner = _owner(module, calls)
+    start_entered = threading.Event()
+    release_start = threading.Event()
+
+    class _Bridge:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            calls.append("bridge.start")
+            start_entered.set()
+            assert release_start.wait(2)
+            calls.append("bridge.started")
+
+        def stop(self) -> bool:
+            calls.append("bridge.stop")
+            return True
+
+    monkeypatch.setattr(module, "KnowledgeDungeonPrivateBridge", _Bridge)
+    owner.data_path = lambda filename: tmp_path / filename
+    task = asyncio.create_task(owner._start_knowledge_dungeon_bridge(enabled=True))
+    assert await asyncio.to_thread(start_entered.wait, 1)
+    task.cancel()
+    await asyncio.sleep(0)
+    task.cancel()
+    release_start.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=2)
+
+    assert calls == ["bridge.start", "bridge.started", "bridge.stop"]
+    assert owner._knowledge_dungeon_bridge is None
 
 
 @pytest.mark.asyncio
@@ -462,6 +619,44 @@ async def test_startup_failure_cleans_partial_runtime_and_reports_stable_error(
         } <= set(calls)
     finally:
         await _cleanup_tasks(tasks)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_startup_finishes_bridge_cleanup_despite_repeat_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    calls: list[str] = []
+    owner = _owner(module, calls)
+    stop_entered = threading.Event()
+    release_stop = threading.Event()
+
+    class _Bridge:
+        def stop(self) -> bool:
+            calls.append("bridge.stop")
+            stop_entered.set()
+            assert release_stop.wait(2)
+            calls.append("bridge.stopped")
+            return True
+
+    owner._knowledge_dungeon_bridge = _Bridge()
+
+    async def cleanup() -> None:
+        await owner._stop_knowledge_dungeon_bridge()
+        calls.append("cleanup.done")
+
+    owner._cleanup_after_failed_startup = cleanup
+    cleanup_task = asyncio.create_task(owner._finish_cancelled_startup_cleanup())
+    assert await asyncio.to_thread(stop_entered.wait, 1)
+    cleanup_task.cancel()
+    await asyncio.sleep(0)
+    cleanup_task.cancel()
+    await asyncio.sleep(0)
+    release_stop.set()
+    await asyncio.wait_for(cleanup_task, timeout=2)
+
+    assert calls == ["bridge.stop", "bridge.stopped", "cleanup.done"]
+    assert owner._knowledge_dungeon_bridge is None
 
 
 @pytest.mark.asyncio

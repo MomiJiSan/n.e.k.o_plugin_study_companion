@@ -1,0 +1,75 @@
+{
+  "rendezvous": {
+    "protocol_version": 1,
+    "bridge_instance_id": "bridge-0123456789abcdef0123456789abcdef",
+    "generation": 1,
+    "port": 43117,
+    "launch_code": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "expires_at": 1900000000,
+    "owner_pid": 1234
+  },
+  "pair_request": {
+    "protocol_version": 1,
+    "bridge_instance_id": "bridge-0123456789abcdef0123456789abcdef",
+    "generation": 1,
+    "client_id": "client-0123456789abcdef0123456789abcdef",
+    "launch_code": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+  },
+  "pair_success": {
+    "ok": true,
+    "protocol_version": 1,
+    "bridge_instance_id": "bridge-0123456789abcdef0123456789abcdef",
+    "generation": 1,
+    "client_id": "client-0123456789abcdef0123456789abcdef",
+    "access_token": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+    "access_token_expires_in": 1800,
+    "session_idle_timeout": 1800,
+    "session_absolute_timeout": 43200
+  },
+  "domain_requests": {
+    "bootstrap": {
+      "path": "/v1/bootstrap",
+      "body": {
+        "bridge_protocol_version": 1
+      }
+    },
+    "create_run": {
+      "path": "/v1/runs/create",
+      "body": {
+        "bridge_protocol_version": 1,
+        "request_id": "request-fixed",
+        "subject_id": "math",
+        "scenario_id": "calculus_v0_1"
+      }
+    },
+    "get_run": {
+      "path": "/v1/runs/get",
+      "body": {
+        "bridge_protocol_version": 1,
+        "run_id": "run-0123456789abcdef01234567"
+      }
+    },
+    "perform_action": {
+      "path": "/v1/runs/action",
+      "body": {
+        "bridge_protocol_version": 1,
+        "run_id": "run-0123456789abcdef01234567",
+        "request_id": "request-fixed",
+        "expected_state_version": 1,
+        "action_id": "select_node:battle_1"
+      }
+    }
+  },
+  "domain_success": {
+    "ok": true,
+    "protocol_version": 1,
+    "result": {
+      "ok": true,
+      "category": "success",
+      "value": {
+        "bridge_protocol_version": 1
+      },
+      "error": null
+    }
+  }
+}
