@@ -48,6 +48,7 @@ from .entry_communication_tutor_events import _CommunicationTutorEventsMixin
 from .entry_document_analysis_jobs import _DocumentAnalysisJobsEntriesMixin
 from .entry_export_support import _ExportSupportMixin
 from .entry_goal_entries import _GoalEntriesMixin
+from .entry_knowledge_dungeon_local_app import _KnowledgeDungeonLocalAppMixin
 from .entry_knowledge_entries import _KnowledgeEntriesMixin
 from .entry_learning_plan_entries import _LearningPlanEntriesMixin
 from .entry_local_model_entries import _LocalModelEntriesMixin
@@ -240,6 +241,7 @@ class StudyCompanionPlugin(
     _GoalEntriesMixin,
     _CheckinEntriesMixin,
     _SupervisionEntriesMixin,
+    _KnowledgeDungeonLocalAppMixin,
     _KnowledgeEntriesMixin,
     _CognitiveEntriesMixin,
     _LearningPlanEntriesMixin,

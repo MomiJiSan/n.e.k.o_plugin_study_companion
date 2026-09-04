@@ -35,6 +35,7 @@ class RunState:
     run_id: str
     seed: int
     map_subject_id: str
+    owner_client_id: str = ""
     state_version: int = 0
     status: str = "not_started"
     phase: str = "not_started"
@@ -67,6 +68,8 @@ class RunState:
 
     def to_dict(self, *, include_command_log: bool = True) -> dict[str, Any]:
         result = asdict(self)
+        if not self.owner_client_id:
+            result.pop("owner_client_id", None)
         if not include_command_log:
             result.pop("command_log", None)
         return result

@@ -133,6 +133,7 @@ def _start_run(command: DungeonCommand) -> Transition:
         run_id=command.run_id,
         seed=seed,
         map_subject_id=map_subject_id,
+        owner_client_id=str(command.payload.get("owner_client_id") or ""),
         status="active",
         phase="map",
         current_node_id="entrance",

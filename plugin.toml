@@ -18,6 +18,16 @@ supported = ">=0.1.0,<0.3.0"
 [plugin.store]
 enabled = true
 
+[plugin.local_app]
+app_id = "knowledge_dungeon"
+scope = "study_companion:dungeon"
+
+[plugin.local_app.operations]
+"knowledge_dungeon.bootstrap" = "knowledge_dungeon.bootstrap"
+"knowledge_dungeon.create_run" = "knowledge_dungeon.create_run"
+"knowledge_dungeon.get_run" = "knowledge_dungeon.get_run"
+"knowledge_dungeon.perform_action" = "knowledge_dungeon.perform_action"
+
 [plugin_state]
 backend = "memory"
 
