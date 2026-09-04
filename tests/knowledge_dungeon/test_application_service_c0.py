@@ -4,6 +4,8 @@ from typing import Any
 
 import pytest
 
+# isort: split
+
 from knowledge_dungeon.application_service import (
     ApplicationServiceError,
     KnowledgeDungeonApplicationService,

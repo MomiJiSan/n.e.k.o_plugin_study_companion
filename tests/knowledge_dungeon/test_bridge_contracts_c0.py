@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+# isort: split
+
 from knowledge_dungeon.bridge_contracts import (
     BootstrapRequest,
     BridgeContractError,

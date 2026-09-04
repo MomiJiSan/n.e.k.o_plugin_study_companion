@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+# isort: split
+
 from knowledge_dungeon.application_service import KnowledgeDungeonApplicationService
 from knowledge_dungeon.bridge_contracts import TrustedInvocationContext
 from knowledge_dungeon.public_projection import PublicProjectionError, filter_public_events
