@@ -30,3 +30,19 @@ jobs:
 
       - name: Run Python test suite
         run: uv run --locked python -m pytest -q
+
+      - name: Run cognitive V2 acceptance
+        run: >
+          uv run --locked python -m tools.cognitive_v2_acceptance
+          --profile ci
+          --report-dir "${{ runner.temp }}/cognitive-acceptance"
+
+      - name: Upload cognitive V2 acceptance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognitive-v2-acceptance
+          path: |
+            ${{ runner.temp }}/cognitive-acceptance/cognitive-v2-acceptance.json
+            ${{ runner.temp }}/cognitive-acceptance/cognitive-v2-acceptance.md
+          if-no-files-found: warn
