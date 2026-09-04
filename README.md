@@ -76,7 +76,7 @@ uv run python -m plugin.neko_plugin_cli.cli check -r study_companion
 
 ```bash
 uv run python -m knowledge_dungeon.simulator --scenario calculus_v0_1
-uv run python -m knowledge_dungeon.fixture_exporter --output ..\N.E.K.O-Knowledge-Dungeon\fixtures\demo-sequence.zh-CN.json
+uv run python -m knowledge_dungeon.fixture_exporter --output ../N.E.K.O-Knowledge-Dungeon/fixtures/demo-sequence.zh-CN.json
 uv run python -m pytest -q tests/knowledge_dungeon
 ```
 
