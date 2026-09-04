@@ -671,7 +671,7 @@ class _BridgeState:
                     HTTPStatus.UNAUTHORIZED, "invalid_access_token", "access token is invalid"
                 )
             if (
-                now - session.created_at >= ACCESS_TOKEN_EXPIRES_IN
+                now - session.last_used_at >= ACCESS_TOKEN_EXPIRES_IN
                 or
                 now - session.last_used_at >= SESSION_IDLE_TIMEOUT
                 or now - session.created_at >= SESSION_ABSOLUTE_TIMEOUT
@@ -945,7 +945,9 @@ class KnowledgeDungeonPrivateBridge:
             if server is not None and thread is not None and thread.is_alive():
                 server.shutdown()
             if state is not None:
-                drained = state.wait_for_requests(max(0.0, deadline - time.monotonic()))
+                drained = state.wait_for_requests(
+                    max(0.0, deadline - time.monotonic())
+                ) and drained
                 state.clear_sessions()
             if server is not None:
                 drained = server.wait_for_workers(

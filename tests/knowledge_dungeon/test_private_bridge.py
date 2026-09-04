@@ -650,6 +650,46 @@ def test_expired_code_rotates_before_rejection(running_bridge) -> None:
     assert replacement["launch_code"] != expired["launch_code"]
 
 
+def test_active_session_uses_idle_and_absolute_expiration(running_bridge) -> None:
+    bridge = running_bridge
+    state = bridge._state  # noqa: SLF001 - controls the session clock
+    assert state is not None
+    fake_now = [100.0]
+    state._monotonic = lambda: fake_now[0]  # noqa: SLF001
+    record = _read_rendezvous(bridge.rendezvous_path)
+    _, paired = _post(record["port"], "/v1/pair", _pair_payload(record))
+
+    fake_now[0] += bridge_module.ACCESS_TOKEN_EXPIRES_IN - 1
+    status, first = _post(
+        record["port"],
+        "/v1/bootstrap",
+        {"bridge_protocol_version": 1},
+        token=paired["access_token"],
+    )
+    assert status == 200
+    assert first["ok"] is True
+
+    fake_now[0] += 2
+    status, active = _post(
+        record["port"],
+        "/v1/bootstrap",
+        {"bridge_protocol_version": 1},
+        token=paired["access_token"],
+    )
+    assert status == 200
+    assert active["ok"] is True
+
+    fake_now[0] = 100.0 + bridge_module.SESSION_ABSOLUTE_TIMEOUT
+    status, expired = _post(
+        record["port"],
+        "/v1/bootstrap",
+        {"bridge_protocol_version": 1},
+        token=paired["access_token"],
+    )
+    assert status == 401
+    assert expired["error"]["code"] == "access_token_expired"
+
+
 def test_background_renewal_rotates_before_expiry_without_revoking_session(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -983,6 +1023,29 @@ def test_stop_timeout_revokes_existing_session_while_domain_request_is_blocked(
     release.set()
     request_thread.join(2)
     assert not request_thread.is_alive()
+
+
+def test_stop_preserves_renewal_join_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bridge = KnowledgeDungeonPrivateBridge(
+        tmp_path / "dungeon.sqlite3",
+        runtime_dir=tmp_path / "runtime",
+    )
+    bridge.start()
+    renewal_thread = bridge._renewal_thread  # noqa: SLF001
+    original_join = bridge._join_if_started  # noqa: SLF001
+    assert renewal_thread is not None
+
+    def report_renewal_failure(thread: threading.Thread, timeout: float) -> bool:
+        joined = original_join(thread, timeout)
+        return False if thread is renewal_thread else joined
+
+    monkeypatch.setattr(bridge, "_join_if_started", report_renewal_failure)
+
+    assert bridge.stop() is False
+    assert not renewal_thread.is_alive()
 
 
 def test_concurrency_limit_rejects_excess_request_without_blocking(running_bridge) -> None:
