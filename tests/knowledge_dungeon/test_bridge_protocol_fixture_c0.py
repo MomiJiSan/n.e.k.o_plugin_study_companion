@@ -24,37 +24,22 @@ def test_protocol_compatibility_fixture_matches_authority_output() -> None:
     assert fixture["fixture_version"] == 1
     assert service.bootstrap(context) == fixture["bootstrap"]
     requests = fixture["requests"]
-    assert [request["operation"] for request in requests] == [
-        "create_run",
-        "get_run",
-        "perform_action",
-        "bootstrap",
-    ]
     assert [set(request) for request in requests] == [
-        {"operation", "bridge_protocol_version", "request_id", "subject_id", "scenario_id"},
-        {"operation", "bridge_protocol_version", "run_id"},
+        {"bridge_protocol_version", "request_id", "subject_id", "scenario_id"},
+        {"bridge_protocol_version", "run_id"},
         {
-            "operation",
             "bridge_protocol_version",
             "request_id",
             "run_id",
             "expected_state_version",
             "action_id",
         },
-        {"operation", "bridge_protocol_version"},
+        {"bridge_protocol_version"},
     ]
-    create_request = CreateRunRequest.from_mapping(
-        {key: value for key, value in requests[0].items() if key != "operation"}
-    )
-    GetRunRequest.from_mapping(
-        {key: value for key, value in requests[1].items() if key != "operation"}
-    )
-    PerformActionPayload.from_mapping(
-        {key: value for key, value in requests[2].items() if key != "operation"}
-    )
-    BootstrapRequest.from_mapping(
-        {key: value for key, value in requests[3].items() if key != "operation"}
-    )
+    create_request = CreateRunRequest.from_mapping(requests[0])
+    GetRunRequest.from_mapping(requests[1])
+    PerformActionPayload.from_mapping(requests[2])
+    BootstrapRequest.from_mapping(requests[3])
     created = service.create_run(
         context,
         create_request,
