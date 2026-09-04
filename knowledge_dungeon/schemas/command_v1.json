@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/command-v1.schema.json",
+  "title": "Knowledge Dungeon command envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "command_id", "run_id", "expected_state_version", "intent", "payload"],
+  "properties": {
+    "protocol_version": {"const": 1},
+    "command_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "expected_state_version": {"type": "integer", "minimum": 0},
+    "intent": {
+      "enum": [
+        "start_run",
+        "select_node",
+        "start_encounter",
+        "play_card",
+        "end_turn",
+        "choose_run_reward",
+        "leave_encounter",
+        "finish_run"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "not": {"required": ["attempt_id"]}
+    }
+  }
+}

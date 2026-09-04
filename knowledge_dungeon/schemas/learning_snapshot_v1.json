@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/learning-snapshot-v1.schema.json",
+  "title": "Knowledge Dungeon simulated learning snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["snapshot_id", "learner_id", "computed_at", "topics", "owned_card_ids", "versions"],
+  "properties": {
+    "snapshot_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "learner_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "computed_at": {"type": "string", "format": "date-time"},
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic_id", "subject_id", "mastery_bp", "mastered"],
+        "properties": {
+          "topic_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+          "subject_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+          "mastery_bp": {"type": "integer", "minimum": 0, "maximum": 10000},
+          "mastered": {"type": "boolean"}
+        }
+      }
+    },
+    "owned_card_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"}
+    },
+    "versions": {"$ref": "#/$defs/versions"}
+  },
+  "$defs": {
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "state_schema_version",
+        "content_pack_version",
+        "engine_version",
+        "card_policy_version",
+        "rng_algorithm"
+      ],
+      "properties": {
+        "protocol_version": {"const": 1},
+        "state_schema_version": {"const": 1},
+        "content_pack_version": {"type": "string", "minLength": 1},
+        "engine_version": {"type": "string", "minLength": 1},
+        "card_policy_version": {"type": "string", "minLength": 1},
+        "rng_algorithm": {"const": "pcg32-v1"}
+      }
+    }
+  }
+}
