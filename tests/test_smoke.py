@@ -305,7 +305,7 @@ def test_both_knowledge_map_uis_localize_internal_edge_values() -> None:
     assert "runKnowledgePracticeScopeAction(topicAction, topicScope)" in static_source
     assert "activatePracticeScope('explicit_topic')" in hosted_source
     assert "practiceComingSoonOpen" not in hosted_source
-    assert "./style.css?v=study-practice-answer-flow-20260903" in static_index
+    assert "./style.css?v=study-memory-editor-wide-20260904" in static_index
     assert "./knowledge-map.js?v=study-related-topics-20260903" in static_index
 
 
