@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from knowledge_dungeon.bridge_contracts import (
     BootstrapRequest,
     BridgeContractError,

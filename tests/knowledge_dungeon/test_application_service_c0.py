@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from knowledge_dungeon.application_service import (
     ApplicationServiceError,
     KnowledgeDungeonApplicationService,

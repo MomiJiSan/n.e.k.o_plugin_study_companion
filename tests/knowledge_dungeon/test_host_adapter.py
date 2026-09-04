@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from knowledge_dungeon.application_service import KnowledgeDungeonApplicationService
 from knowledge_dungeon.bridge_contracts import TrustedInvocationContext
 from knowledge_dungeon.host_adapter import KnowledgeDungeonHostAdapter
