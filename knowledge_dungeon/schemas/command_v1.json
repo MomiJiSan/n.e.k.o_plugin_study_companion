@@ -22,6 +22,9 @@
         "finish_run"
       ]
     },
-    "payload": {"type": "object"}
+    "payload": {
+      "type": "object",
+      "not": {"required": ["attempt_id"]}
+    }
   }
 }

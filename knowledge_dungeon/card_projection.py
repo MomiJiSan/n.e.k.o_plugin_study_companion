@@ -79,7 +79,12 @@ def calculate_effect_value(
     for value, name in values:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError(f"{name} must be a non-negative integer")
-    if base_value == 0 or freshness_multiplier_bp == 0 or subject_affinity_multiplier_bp == 0:
+    if (
+        base_value == 0
+        or freshness_multiplier_bp == 0
+        or subject_affinity_multiplier_bp == 0
+        or run_buff_multiplier_bp == 0
+    ):
         return 0
     denominator = FULL_MULTIPLIER_BP**3
     numerator = base_value * freshness_multiplier_bp * subject_affinity_multiplier_bp * run_buff_multiplier_bp
@@ -186,6 +191,7 @@ def project_cards(
 
     topics = {topic.topic_id: topic for topic in snapshot.topics}
     previously_owned = set(snapshot.owned_card_ids)
+    related_subject_pair_set = frozenset(related_subject_pairs)
     projected: list[ProjectedCard] = []
     newly_unlocked: list[str] = []
 
@@ -193,7 +199,7 @@ def project_cards(
         affinity = subject_multiplier_bp(
             definition.subject_id,
             map_subject_id,
-            related_subject_pairs=related_subject_pairs,
+            related_subject_pairs=related_subject_pair_set,
         )
         if definition.card_id == STARTER_CARD_ID:
             projected.append(

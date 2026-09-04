@@ -7,6 +7,7 @@ from knowledge_dungeon.engine import KnowledgeDungeonEngine
 
 def command(command_id: str, version: int, intent: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
+        "protocol_version": 1,
         "command_id": command_id,
         "run_id": "battle-test",
         "expected_state_version": version,
@@ -69,7 +70,7 @@ def started_encounter(*, subject: str = "math") -> tuple[KnowledgeDungeonEngine,
 
 
 def test_fading_cards_scale_damage_and_dormant_card_stays_owned() -> None:
-    engine, version = started_encounter()
+    engine, _ = started_encounter()
     state = engine.get_state("battle-test")
     assert state is not None
     assert "math.dormant" in state.cards
@@ -79,15 +80,14 @@ def test_fading_cards_scale_damage_and_dormant_card_stays_owned() -> None:
 
     expected_damage = {"math.active": 8, "math.light": 4, "math.heavy": 4}
     for card_id, damage in expected_damage.items():
-        if card_id not in state.hand:
-            continue
+        engine, version = started_encounter()
+        state = engine.get_state("battle-test")
+        assert state is not None
+        assert card_id in state.hand
         response = engine.dispatch(command(f"play-{card_id}", version, "play_card", {"card_id": card_id}))
         assert response["accepted"]
         event = next(event for event in response["events"] if event["type"] == "card_played")
         assert event["damage"] == damage
-        version = response["state_version"]
-        state = engine.get_state("battle-test")
-        assert state is not None
 
 
 def test_cross_subject_cards_deal_half_of_their_faded_value() -> None:

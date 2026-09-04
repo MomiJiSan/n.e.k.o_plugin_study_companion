@@ -11,6 +11,8 @@ _ENERGY_BY_TIER = {1: 1, 2: 1, 3: 2, 4: 2, 5: 3}
 
 
 def knowledge_damage_for_tier(difficulty_tier: int) -> int:
+    if isinstance(difficulty_tier, bool) or not isinstance(difficulty_tier, int):
+        raise ValueError("difficulty_tier must be an integer from 1 to 5")
     try:
         return _DAMAGE_BY_TIER[difficulty_tier]
     except (KeyError, TypeError) as exc:
@@ -18,6 +20,8 @@ def knowledge_damage_for_tier(difficulty_tier: int) -> int:
 
 
 def energy_for_tier(difficulty_tier: int) -> int:
+    if isinstance(difficulty_tier, bool) or not isinstance(difficulty_tier, int):
+        raise ValueError("difficulty_tier must be an integer from 1 to 5")
     try:
         return _ENERGY_BY_TIER[difficulty_tier]
     except (KeyError, TypeError) as exc:

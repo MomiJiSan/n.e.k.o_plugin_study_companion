@@ -7,11 +7,11 @@ from knowledge_dungeon.serializer import state_hash
 def test_command_log_replay_reconstructs_identical_state() -> None:
     engine = KnowledgeDungeonEngine()
     commands = [
-        {"command_id": "1", "run_id": "replay", "expected_state_version": 0, "intent": "start_run", "payload": {"seed": 42}},
-        {"command_id": "2", "run_id": "replay", "expected_state_version": 1, "intent": "select_node", "payload": {"node_id": "trap_1"}},
-        {"command_id": "3", "run_id": "replay", "expected_state_version": 2, "intent": "start_encounter", "payload": {}},
-        {"command_id": "4", "run_id": "replay", "expected_state_version": 3, "intent": "select_node", "payload": {"node_id": "rest_1"}},
-        {"command_id": "5", "run_id": "replay", "expected_state_version": 4, "intent": "start_encounter", "payload": {}},
+        {"protocol_version": 1, "command_id": "1", "run_id": "replay", "expected_state_version": 0, "intent": "start_run", "payload": {"seed": 42}},
+        {"protocol_version": 1, "command_id": "2", "run_id": "replay", "expected_state_version": 1, "intent": "select_node", "payload": {"node_id": "trap_1"}},
+        {"protocol_version": 1, "command_id": "3", "run_id": "replay", "expected_state_version": 2, "intent": "start_encounter", "payload": {}},
+        {"protocol_version": 1, "command_id": "4", "run_id": "replay", "expected_state_version": 3, "intent": "select_node", "payload": {"node_id": "rest_1"}},
+        {"protocol_version": 1, "command_id": "5", "run_id": "replay", "expected_state_version": 4, "intent": "start_encounter", "payload": {}},
     ]
     for command in commands:
         assert engine.dispatch(command)["accepted"]

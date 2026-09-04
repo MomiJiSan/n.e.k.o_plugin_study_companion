@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from threading import RLock
 from typing import Any, Iterable, Mapping
 
 from .commands import CommandValidationError, DungeonCommand, command_to_dict
@@ -16,12 +17,14 @@ class KnowledgeDungeonEngine:
     """Own in-memory v0.1 runs and enforce concurrency/idempotency rules."""
 
     def __init__(self) -> None:
+        self._lock = RLock()
         self._runs: dict[str, RunState] = {}
         self._response_cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     def get_state(self, run_id: str) -> RunState | None:
-        state = self._runs.get(run_id)
-        return deepcopy(state) if state is not None else None
+        with self._lock:
+            state = self._runs.get(run_id)
+            return deepcopy(state) if state is not None else None
 
     def dispatch(self, raw_command: DungeonCommand | Mapping[str, Any]) -> dict[str, Any]:
         try:
@@ -33,43 +36,45 @@ class KnowledgeDungeonEngine:
         except CommandValidationError as exc:
             return self._rejection(None, "invalid_command", str(exc))
 
-        cache_key = (command.run_id, command.command_id)
-        cached = self._response_cache.get(cache_key)
-        if cached is not None:
-            return deepcopy(cached)
+        with self._lock:
+            cache_key = (command.run_id, command.command_id)
+            cached = self._response_cache.get(cache_key)
+            if cached is not None:
+                return deepcopy(cached)
 
-        current = self._runs.get(command.run_id)
-        if current is not None and command.command_id in current.processed_command_ids:
-            # A state restored without the ephemeral response cache remains safe.
-            return self._acceptance(current, [], idempotent_replay=True)
-        actual_version = current.state_version if current is not None else 0
-        if command.expected_state_version != actual_version:
-            return self._rejection(
-                current,
-                "stale_state_version",
-                f"expected {command.expected_state_version}, actual {actual_version}",
-            )
-        if current is not None and current.run_id != command.run_id:
-            return self._rejection(current, "run_id_mismatch", "run_id does not match state")
+            current = self._runs.get(command.run_id)
+            if current is not None and command.command_id in current.processed_command_ids:
+                # A state restored without the ephemeral response cache remains safe.
+                return self._acceptance(current, [], idempotent_replay=True)
+            actual_version = current.state_version if current is not None else 0
+            if command.expected_state_version != actual_version:
+                return self._rejection(
+                    current,
+                    "stale_state_version",
+                    f"expected {command.expected_state_version}, actual {actual_version}",
+                )
+            if current is not None and current.run_id != command.run_id:
+                return self._rejection(current, "run_id_mismatch", "run_id does not match state")
 
-        try:
-            transition = reduce_command(current, command)
-        except ReducerError as exc:
-            return self._rejection(current, exc.code, str(exc))
+            try:
+                transition = reduce_command(current, command)
+            except ReducerError as exc:
+                return self._rejection(current, exc.code, str(exc))
 
-        next_state = transition.state
-        next_state.state_version = actual_version + 1
-        next_state.processed_command_ids.append(command.command_id)
-        next_state.command_log.append(command_to_dict(command))
-        self._runs[command.run_id] = next_state
-        response = self._acceptance(next_state, transition.events)
-        self._response_cache[cache_key] = deepcopy(response)
-        return response
+            next_state = transition.state
+            next_state.state_version = actual_version + 1
+            next_state.processed_command_ids.append(command.command_id)
+            next_state.command_log.append(command_to_dict(command))
+            self._runs[command.run_id] = next_state
+            response = self._acceptance(next_state, transition.events)
+            self._response_cache[cache_key] = deepcopy(response)
+            return response
 
     def restore_state(self, state: RunState) -> None:
-        if state.run_id in self._runs:
-            raise ValueError(f"run already exists: {state.run_id}")
-        self._runs[state.run_id] = deepcopy(state)
+        with self._lock:
+            if state.run_id in self._runs:
+                raise ValueError(f"run already exists: {state.run_id}")
+            self._runs[state.run_id] = deepcopy(state)
 
     @classmethod
     def replay(cls, commands: Iterable[DungeonCommand | Mapping[str, Any]]) -> "KnowledgeDungeonEngine":

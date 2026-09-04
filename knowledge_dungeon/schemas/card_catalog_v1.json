@@ -48,7 +48,24 @@
         "starter": {"type": "boolean"},
         "removable": {"type": "boolean"},
         "once_per_turn": {"type": "boolean"}
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "starter": {"const": true},
+            "subject_id": {"const": "neutral"},
+            "topic_id": {"type": "null"},
+            "difficulty_tier": {"const": 0}
+          }
+        },
+        {
+          "properties": {
+            "starter": {"const": false},
+            "topic_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+            "difficulty_tier": {"type": "integer", "minimum": 1, "maximum": 5}
+          }
+        }
+      ]
     }
   }
 }

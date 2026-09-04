@@ -15,7 +15,11 @@ def canonical_json(value: Any) -> str:
 
 
 def state_hash(state: RunState | Mapping[str, Any]) -> str:
-    value = state.to_dict(include_command_log=False) if isinstance(state, RunState) else dict(state)
+    if isinstance(state, RunState):
+        value = state.to_dict(include_command_log=False)
+    else:
+        value = dict(state)
+        value.pop("command_log", None)
     return canonical_sha256(value)
 
 

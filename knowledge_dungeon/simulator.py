@@ -21,6 +21,7 @@ def _command(
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
+        "protocol_version": 1,
         "command_id": command_id,
         "run_id": "calculus-v0-1-demo",
         "expected_state_version": version,

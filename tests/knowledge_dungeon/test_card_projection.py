@@ -109,12 +109,33 @@ def test_tier_budget_and_fixture_damage_are_fixed() -> None:
     assert [card.base_damage for card in MATH_CARD_CATALOG] == [3, 5, 8, 5]
 
 
+def test_tier_helpers_reject_bool_and_non_integer_values() -> None:
+    for helper in (knowledge_damage_for_tier, energy_for_tier):
+        for invalid_tier in (True, 1.0):
+            try:
+                helper(invalid_tier)  # type: ignore[arg-type]
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"{helper.__name__} accepted {invalid_tier!r}")
+
+
 def test_integer_effect_calculation_rounds_half_up_and_keeps_active_attack_minimum() -> None:
     assert calculate_effect_value(5, 8_000, 10_000) == 4
     assert calculate_effect_value(5, 5_000, 10_000) == 3
     assert calculate_effect_value(3, 5_000, 5_000) == 1
     assert calculate_effect_value(1, 5_000, 5_000) == 1
     assert calculate_effect_value(17, 0, 10_000) == 0
+    assert calculate_effect_value(17, 10_000, 10_000, 0) == 0
+
+
+def test_related_subject_generator_applies_to_every_projected_card() -> None:
+    related_pairs = (pair for pair in (frozenset(("math", "science")),))
+    projection = project_cards(learned_calculus_snapshot(), "science", related_subject_pairs=related_pairs)
+
+    math_cards = [card for card in projection.cards if card.definition.subject_id == "math"]
+    assert math_cards
+    assert {card.subject_multiplier_bp for card in math_cards} == {7_500}
 
 
 def test_contracts_are_immutable_and_canonical_serialization_is_stable() -> None:

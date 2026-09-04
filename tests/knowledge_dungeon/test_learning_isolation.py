@@ -8,6 +8,7 @@ from knowledge_dungeon.engine import KnowledgeDungeonEngine
 def test_v0_1_command_rejects_learning_attempt_identifier() -> None:
     response = KnowledgeDungeonEngine().dispatch(
         {
+            "protocol_version": 1,
             "command_id": "start",
             "run_id": "isolated",
             "expected_state_version": 0,

@@ -12,7 +12,7 @@ v0.1 的代码与本机开发运行验收通过。实现范围保持为“模拟
 - 新增固定数学卡牌目录、新用户/已学习用户快照和 `english_stub` 测试投影。
 - 新增确定性地图、战斗、奖励、幂等、状态版本、重放、序列化和状态哈希。
 - 新增 CLI 场景 `calculus_v0_1`。
-- 新增独立 Electron 工程 `C:\Users\ALEXGREENO\Desktop\CODE\N.E.K.O-Knowledge-Dungeon`。
+- 新增独立 Electron 工程（单独仓库，不在本仓库内）。
 - Electron 端包含安全 Main/Preload/Renderer 分层、React/PixiJS 界面、严格 MockBridge 回放、中文演示夹具和 Python 权威响应兼容样本。
 
 ## 验收结果
@@ -38,7 +38,7 @@ v0.1 的代码与本机开发运行验收通过。实现范围保持为“模拟
 
 ## 自动化结果
 
-- `uv run python -m pytest -q tests/knowledge_dungeon`：31 passed。
+- `uv run python -m pytest -q tests/knowledge_dungeon`：37 passed。
 - `uv run ruff check knowledge_dungeon tests/knowledge_dungeon`：通过。
 - Study Companion 全量回归：1042 passed、2 skipped、1 xfailed。
 - `uv run python -m knowledge_dungeon.simulator --scenario calculus_v0_1`：完整运行至 Boss，最终哈希 `956c6814ddb47b19e737f847573b08f75b163945d3fb7a4e1334d3afd1a13def`。
