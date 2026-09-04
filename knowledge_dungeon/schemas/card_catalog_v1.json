@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/card-catalog-v1.schema.json",
+  "title": "Knowledge Dungeon card catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["content_pack_version", "cards"],
+  "properties": {
+    "content_pack_version": {"type": "string", "minLength": 1},
+    "cards": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/card"}
+    }
+  },
+  "$defs": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "card_id",
+        "name",
+        "subject_id",
+        "topic_id",
+        "difficulty_tier",
+        "base_damage",
+        "energy_cost",
+        "rules_text",
+        "flavor_text",
+        "starter",
+        "removable",
+        "once_per_turn"
+      ],
+      "properties": {
+        "card_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "name": {"type": "string", "minLength": 1},
+        "subject_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "topic_id": {
+          "oneOf": [
+            {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+            {"type": "null"}
+          ]
+        },
+        "difficulty_tier": {"type": "integer", "minimum": 0, "maximum": 5},
+        "base_damage": {"type": "integer", "minimum": 1},
+        "energy_cost": {"type": "integer", "minimum": 0},
+        "rules_text": {"type": "string", "minLength": 1},
+        "flavor_text": {"type": "string", "minLength": 1},
+        "starter": {"type": "boolean"},
+        "removable": {"type": "boolean"},
+        "once_per_turn": {"type": "boolean"}
+      }
+    }
+  }
+}

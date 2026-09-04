@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/view-v1.schema.json",
+  "title": "Knowledge Dungeon response envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "accepted", "state_version", "view", "events", "state_hash"],
+  "properties": {
+    "protocol_version": {"const": 1},
+    "accepted": {"type": "boolean"},
+    "state_version": {"type": "integer", "minimum": 0},
+    "view": {
+      "oneOf": [
+        {"type": "object"},
+        {"type": "null"}
+      ]
+    },
+    "events": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "state_hash": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "error_code": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        {"type": "null"}
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "message": {"type": "string"}
+      }
+    }
+  }
+}
