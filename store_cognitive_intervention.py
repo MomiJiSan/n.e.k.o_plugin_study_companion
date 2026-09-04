@@ -270,7 +270,7 @@ def insert_cognitive_intervention_event(
                   AND current.model_version = ?
                   AND current.source_snapshot_id = ?
                   AND current.projected_generation = ?
-                  AND current.status = ?
+                  AND current.evidence_status = ?
                   AND current.probability = ?
                   AND current.source_attempt_id = ?
                   AND current.evidence_status = 'supported'
