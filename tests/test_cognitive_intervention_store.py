@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import sqlite3
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -188,6 +189,135 @@ def test_question_and_attempt_events_are_idempotent_and_dirty_once(
         assert store.get_cognitive_topic_projection_state(
             topic_id=TOPIC, model_version=MODEL
         )["requested_generation"] == 9
+    finally:
+        store.close()
+
+
+def test_transfer_question_accepts_supported_evidence_after_provisional_resolution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store = _load_store(monkeypatch, "_cognitive_intervention_transfer")
+    store = _store(tmp_path, Store)
+    try:
+        conn = store._require_conn()
+        conn.execute(
+            """
+            UPDATE cognitive_hypothesis_current
+            SET evidence_status = 'supported',
+                intervention_stage = 'provisionally_resolved',
+                status = 'provisionally_resolved'
+            WHERE hypothesis_id = ? AND model_version = ?
+            """,
+            (f"{TOPIC}:{CODE}", MODEL),
+        )
+        conn.commit()
+
+        transfer = _event(
+            "event-transfer-question",
+            "question_committed",
+            intent="transfer_check",
+        )
+        transfer["question_id"] = "question-transfer"
+        transfer["repair_strategy"] = "cross_form_transfer"
+        stored = store.record_cognitive_intervention_event(transfer)
+
+        assert stored["event_type"] == "question_committed"
+        assert stored["learning_intent"] == "transfer_check"
+        assert stored["hypothesis_target"]["status"] == "supported"
+        state = store.get_cognitive_topic_projection_state(
+            topic_id=TOPIC, model_version=MODEL
+        )
+        assert state is not None and state["requested_generation"] == 8
+        assert conn.execute(
+            "SELECT COUNT(*) FROM cognitive_monitoring_episodes"
+        ).fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM cognitive_learning_obligations"
+        ).fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    [
+        "snapshot",
+        "event_generation",
+        "queue_generation",
+        "source_attempt",
+        "suppress",
+        "delete",
+    ],
+)
+def test_transfer_question_rejects_stale_or_controlled_hypothesis(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mismatch: str
+) -> None:
+    Store = _load_store(monkeypatch, f"_cognitive_transfer_freshness_{mismatch}")
+    store = _store(tmp_path, Store)
+    try:
+        conn = store._require_conn()
+        conn.execute(
+            """
+            UPDATE cognitive_hypothesis_current
+            SET evidence_status = 'supported',
+                intervention_stage = 'provisionally_resolved',
+                status = 'provisionally_resolved'
+            WHERE hypothesis_id = ? AND model_version = ?
+            """,
+            (f"{TOPIC}:{CODE}", MODEL),
+        )
+        conn.commit()
+        transfer = _event(
+            f"event-transfer-{mismatch}",
+            "question_committed",
+            intent="transfer_check",
+        )
+        transfer["question_id"] = f"question-transfer-{mismatch}"
+        transfer["repair_strategy"] = "cross_form_transfer"
+        target = dict(transfer["hypothesis_target"])  # type: ignore[arg-type]
+        transfer["hypothesis_target"] = target
+
+        if mismatch == "snapshot":
+            target["source_snapshot_id"] = "stale-snapshot"
+        elif mismatch == "event_generation":
+            target["projection_generation"] = 6
+        elif mismatch == "queue_generation":
+            conn.execute(
+                """
+                UPDATE cognitive_topic_projection_queue
+                SET status = 'pending', requested_generation = 8
+                WHERE topic_id = ? AND model_version = ?
+                """,
+                (TOPIC, MODEL),
+            )
+            conn.commit()
+        elif mismatch == "source_attempt":
+            target["source_attempt_id"] = "stale-attempt"
+        elif mismatch == "suppress":
+            store.record_cognitive_user_control(
+                topic_id=TOPIC,
+                hypothesis_code=CODE,
+                action="suppress",
+                expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            )
+        else:
+            store.record_cognitive_user_control(
+                topic_id=TOPIC,
+                hypothesis_code=CODE,
+                action="delete",
+            )
+
+        before = store.get_cognitive_topic_projection_state(
+            topic_id=TOPIC, model_version=MODEL
+        )["requested_generation"]
+        with pytest.raises(ValueError, match="fresh supported hypothesis"):
+            store.record_cognitive_intervention_event(transfer)
+
+        assert store.list_cognitive_intervention_events() == []
+        after = store.get_cognitive_topic_projection_state(
+            topic_id=TOPIC, model_version=MODEL
+        )["requested_generation"]
+        assert after == before
     finally:
         store.close()
 
