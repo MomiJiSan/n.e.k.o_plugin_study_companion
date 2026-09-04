@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/bootstrap-v1.schema.json",
+  "title": "Knowledge Dungeon bootstrap v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bridge_protocol_version",
+    "engine_protocol_version",
+    "public_projection_version",
+    "application_service_version",
+    "scenarios",
+    "capabilities"
+  ],
+  "properties": {
+    "bridge_protocol_version": {"const": 1},
+    "engine_protocol_version": {"const": 1},
+    "public_projection_version": {"const": 1},
+    "application_service_version": {"const": "knowledge-dungeon-v0.2-c0"},
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario_id", "title", "map_subject_id", "content_status"],
+        "properties": {
+          "scenario_id": {"const": "calculus_v0_1"},
+          "title": {"type": "string", "minLength": 1},
+          "map_subject_id": {"const": "math"},
+          "content_status": {"const": "simulated"}
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id_only_submission",
+        "server_generated_run_id",
+        "server_generated_command_id",
+        "server_generated_seed",
+        "real_learning_data",
+        "learning_writeback"
+      ],
+      "properties": {
+        "action_id_only_submission": {"const": true},
+        "server_generated_run_id": {"const": true},
+        "server_generated_command_id": {"const": true},
+        "server_generated_seed": {"const": true},
+        "real_learning_data": {"const": false},
+        "learning_writeback": {"const": false}
+      }
+    }
+  }
+}

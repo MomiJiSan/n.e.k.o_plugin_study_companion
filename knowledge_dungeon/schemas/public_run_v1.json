@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neko.local/knowledge-dungeon/public-run-v1.schema.json",
+  "title": "Knowledge Dungeon public run projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bridge_protocol_version",
+    "engine_protocol_version",
+    "public_projection_version",
+    "application_service_version",
+    "scenario_id",
+    "state_version",
+    "state_hash",
+    "run",
+    "available_actions",
+    "events"
+  ],
+  "properties": {
+    "bridge_protocol_version": {"const": 1},
+    "engine_protocol_version": {"const": 1},
+    "public_projection_version": {"const": 1},
+    "application_service_version": {"const": "knowledge-dungeon-v0.2-c0"},
+    "scenario_id": {"const": "calculus_v0_1"},
+    "state_version": {"type": "integer", "minimum": 1},
+    "state_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "run": {"$ref": "#/$defs/run"},
+    "available_actions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/action"}
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"}
+    }
+  },
+  "$defs": {
+    "identifier": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "nullableIdentifier": {
+      "oneOf": [
+        {"$ref": "#/$defs/identifier"},
+        {"type": "null"}
+      ]
+    },
+    "identifierArray": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/identifier"}
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_id", "action_type", "label", "target_id"],
+      "properties": {
+        "action_id": {
+          "type": "string",
+          "pattern": "^(select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|play_card:[a-z0-9][a-z0-9._-]*|end_turn|choose_reward:[a-z0-9][a-z0-9._-]*|abandon_run|finish_run)$"
+        },
+        "action_type": {"$ref": "#/$defs/identifier"},
+        "label": {"type": "string", "minLength": 1},
+        "target_id": {"$ref": "#/$defs/nullableIdentifier"}
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "card_id",
+        "name",
+        "subject_id",
+        "base_damage",
+        "energy_cost",
+        "freshness_bps",
+        "lifecycle_state",
+        "rules_text",
+        "flavor_text",
+        "starter",
+        "available_in_run"
+      ],
+      "properties": {
+        "card_id": {"$ref": "#/$defs/identifier"},
+        "name": {"type": "string", "minLength": 1},
+        "subject_id": {"$ref": "#/$defs/identifier"},
+        "base_damage": {"type": "integer", "minimum": 0},
+        "energy_cost": {"type": "integer", "minimum": 0},
+        "freshness_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "lifecycle_state": {"enum": ["active", "fading_light", "fading_heavy", "dormant"]},
+        "rules_text": {"type": "string"},
+        "flavor_text": {"type": "string"},
+        "starter": {"type": "boolean"},
+        "available_in_run": {"type": "boolean"}
+      }
+    },
+    "enemy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enemy_id", "name", "max_hp", "hp", "attack", "boss"],
+      "properties": {
+        "enemy_id": {"$ref": "#/$defs/identifier"},
+        "name": {"type": "string", "minLength": 1},
+        "max_hp": {"type": "integer", "minimum": 1},
+        "hp": {"type": "integer", "minimum": 0},
+        "attack": {"type": "integer", "minimum": 0},
+        "boss": {"type": "boolean"}
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_version",
+        "state_schema_version",
+        "content_pack_version",
+        "engine_version",
+        "card_policy_version",
+        "rng_algorithm"
+      ],
+      "properties": {
+        "protocol_version": {"const": 1},
+        "state_schema_version": {"const": 1},
+        "content_pack_version": {"type": "string", "minLength": 1},
+        "engine_version": {"type": "string", "minLength": 1},
+        "card_policy_version": {"type": "string", "minLength": 1},
+        "rng_algorithm": {"const": "pcg32-v1"}
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "status",
+        "phase",
+        "map_subject_id",
+        "current_node_id",
+        "selected_node_id",
+        "available_node_ids",
+        "completed_node_ids",
+        "revealed_node_ids",
+        "player",
+        "turn",
+        "cards",
+        "hand",
+        "draw_pile_count",
+        "discard_pile_count",
+        "enemy",
+        "pending_rewards",
+        "run_modifiers",
+        "versions"
+      ],
+      "properties": {
+        "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{24}$"},
+        "status": {"enum": ["active", "boss_defeated", "completed", "failed", "abandoned"]},
+        "phase": {"enum": ["map", "encounter", "reward", "complete", "failed"]},
+        "map_subject_id": {"$ref": "#/$defs/identifier"},
+        "current_node_id": {"$ref": "#/$defs/nullableIdentifier"},
+        "selected_node_id": {"$ref": "#/$defs/nullableIdentifier"},
+        "available_node_ids": {"$ref": "#/$defs/identifierArray"},
+        "completed_node_ids": {"$ref": "#/$defs/identifierArray"},
+        "revealed_node_ids": {"$ref": "#/$defs/identifierArray"},
+        "player": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hp", "max_hp", "energy", "max_energy"],
+          "properties": {
+            "hp": {"type": "integer", "minimum": 0},
+            "max_hp": {"type": "integer", "minimum": 1},
+            "energy": {"type": "integer", "minimum": 0},
+            "max_energy": {"type": "integer", "minimum": 0}
+          }
+        },
+        "turn": {"type": "integer", "minimum": 0},
+        "cards": {"type": "array", "items": {"$ref": "#/$defs/card"}},
+        "hand": {"$ref": "#/$defs/identifierArray"},
+        "draw_pile_count": {"type": "integer", "minimum": 0},
+        "discard_pile_count": {"type": "integer", "minimum": 0},
+        "enemy": {
+          "oneOf": [
+            {"$ref": "#/$defs/enemy"},
+            {"type": "null"}
+          ]
+        },
+        "pending_rewards": {"$ref": "#/$defs/identifierArray"},
+        "run_modifiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["encounter_damage_bps", "next_encounter_damage_bps"],
+          "properties": {
+            "encounter_damage_bps": {"type": "integer", "minimum": 0},
+            "next_encounter_damage_bps": {"type": "integer", "minimum": 0}
+          }
+        },
+        "versions": {"$ref": "#/$defs/versions"}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "run_started",
+            "deck_frozen",
+            "node_selected",
+            "encounter_started",
+            "turn_started",
+            "card_played",
+            "enemy_damaged",
+            "encounter_won",
+            "run_reward_offered",
+            "run_reward_chosen",
+            "rest_completed",
+            "node_completed",
+            "trap_triggered",
+            "run_failed",
+            "enemy_attacked",
+            "boss_defeated",
+            "run_abandoned",
+            "run_finished"
+          ]
+        },
+        "run_id": {"$ref": "#/$defs/identifier"},
+        "active_card_ids": {"$ref": "#/$defs/identifierArray"},
+        "dormant_card_ids": {"$ref": "#/$defs/identifierArray"},
+        "node_id": {"$ref": "#/$defs/identifier"},
+        "enemy_id": {"$ref": "#/$defs/identifier"},
+        "boss": {"type": "boolean"},
+        "turn": {"type": "integer", "minimum": 1},
+        "drawn_card_ids": {"$ref": "#/$defs/identifierArray"},
+        "card_id": {"$ref": "#/$defs/identifier"},
+        "damage": {"type": "integer", "minimum": 0},
+        "freshness_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "subject_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "hp": {"type": "integer", "minimum": 0},
+        "reward_ids": {"$ref": "#/$defs/identifierArray"},
+        "reward_id": {"$ref": "#/$defs/identifier"},
+        "healed": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string", "minLength": 1},
+        "player_hp": {"type": "integer", "minimum": 0},
+        "permanent_reward": {"type": "null"},
+        "learning_fact_written": {"const": false}
+      }
+    }
+  }
+}
