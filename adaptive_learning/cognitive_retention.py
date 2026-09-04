@@ -37,6 +37,8 @@ class RetentionBlueprint:
     math_expression: str
     expected_answer: str
     diagnostic_signature: str
+    key_points: tuple[str, ...] = ()
+    solution_steps: tuple[str, ...] = ()
     blueprint_version: str = RETENTION_BLUEPRINT_VERSION
 
 
@@ -52,6 +54,14 @@ CHAIN_RULE_RETENTION_BLUEPRINT = RetentionBlueprint(
     diagnostic_signature=(
         "composition:exp(5*x-2)|outer:exp(5*x-2)|inner:5|retention:true"
     ),
+    key_points=(
+        "Differentiate the outer exponential function.",
+        "Multiply by the derivative of the inner affine expression.",
+    ),
+    solution_steps=(
+        "Keep the inner expression inside the exponential.",
+        "Multiply by the inner derivative.",
+    ),
 )
 
 CHAIN_RULE_RETENTION_BLUEPRINT_TRIG = RetentionBlueprint(
@@ -65,6 +75,14 @@ CHAIN_RULE_RETENTION_BLUEPRINT_TRIG = RetentionBlueprint(
     expected_answer="4*cos(4*x+1)",
     diagnostic_signature=(
         "composition:sin(4*x+1)|outer:cos(4*x+1)|inner:4|retention:true"
+    ),
+    key_points=(
+        "Differentiate the outer sine function to cosine.",
+        "Multiply by the derivative of the inner affine expression.",
+    ),
+    solution_steps=(
+        "Keep the inner expression inside the cosine function.",
+        "Multiply by the inner derivative.",
     ),
 )
 
@@ -311,15 +329,9 @@ def retention_question_payload(
         "answer": blueprint.expected_answer,
         "reference_answer": blueprint.expected_answer,
         "accepted_answers": [blueprint.expected_answer],
-        "key_points": [
-            "Differentiate the outer exponential function.",
-            "Multiply by the derivative of the inner affine expression.",
-        ],
+        "key_points": list(blueprint.key_points),
         "rubric": {"chain_rule_retention": 1.0},
-        "solution_steps": [
-            "Keep the inner expression inside the exponential.",
-            "Multiply by the inner derivative.",
-        ],
+        "solution_steps": list(blueprint.solution_steps),
         "math_equivalence_engine": {"enabled": False},
         "question_type": "math_reasoning",
         "difficulty": 3,

@@ -1397,6 +1397,7 @@ class _TutorQuestionEntriesMixin:
                 "claim_cognitive_obligations",
                 None,
             )
+            claimed_release: dict[str, Any] | None = None
             if callable(propose_retention) and callable(claim_obligations):
                 try:
                     raw_proposals = propose_retention()
@@ -1445,6 +1446,11 @@ class _TutorQuestionEntriesMixin:
                             claims = raw_claims if isinstance(raw_claims, list) else []
                             claim = claims[0] if len(claims) == 1 else None
                             if isinstance(claim, dict):
+                                claimed_release = {
+                                    "cognitive_obligation_id": obligation_id,
+                                    "cognitive_claim_token": claim.get("claim_token"),
+                                    "cognitive_claim_worker_id": worker_id,
+                                }
                                 prepared_retention = prepare_retention_question(
                                     retention_plan,
                                     selected_proposal,
@@ -1453,15 +1459,18 @@ class _TutorQuestionEntriesMixin:
                                 if prepared_retention is None:
                                     await _release_retention_claim_best_effort(
                                         self,
-                                        {
-                                            "cognitive_obligation_id": obligation_id,
-                                            "cognitive_claim_token": claim.get("claim_token"),
-                                            "cognitive_claim_worker_id": worker_id,
-                                        },
+                                        claimed_release,
                                     )
+                                    claimed_release = None
                                 else:
                                     plan = retention_plan
+                                    claimed_release = None
                 except Exception:
+                    if claimed_release is not None:
+                        await _release_retention_claim_best_effort(
+                            self,
+                            claimed_release,
+                        )
                     prepared_retention = None
                     plan = original_plan
             if expected_obligation_refs and prepared_retention is None:

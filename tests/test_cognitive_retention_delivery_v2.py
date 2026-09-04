@@ -192,6 +192,32 @@ def test_rescheduled_retention_rotates_to_an_unused_reviewed_family_and_group() 
     ) is None
 
 
+def test_rotated_retention_payload_uses_trigonometric_guidance() -> None:
+    proposal = _proposal(
+        previous_question_family_ids=("chain.exp-affine.retention",),
+        previous_independence_groups=("chain.exponential-affine",),
+    )
+    prepared = prepare_retention_question(_plan(proposal), proposal, _claim())
+    assert prepared is not None
+
+    payload = retention_question_payload(prepared, topic_id="college_chain_rule")
+
+    assert payload["question"] == "Differentiate sin(4x + 1)."
+    assert payload["key_points"] == [
+        "Differentiate the outer sine function to cosine.",
+        "Multiply by the derivative of the inner affine expression.",
+    ]
+    assert payload["solution_steps"] == [
+        "Keep the inner expression inside the cosine function.",
+        "Multiply by the inner derivative.",
+    ]
+    assert validate_retention_question_payload(
+        prepared,
+        payload,
+        topic_id="college_chain_rule",
+    ) == ()
+
+
 def test_non_retention_plan_cannot_bind_a_claim() -> None:
     proposal = _proposal()
     plan = replace(

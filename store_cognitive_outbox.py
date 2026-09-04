@@ -38,6 +38,7 @@ _FORBIDDEN_PAYLOAD_KEYS = frozenset(
         "expected_answer",
     }
 )
+_COGNITIVE_OUTBOX_MAX_RETRIES = 5
 
 
 def _identity_only(value: object) -> object:
@@ -791,14 +792,25 @@ def deliver_cognitive_outbox_inline(
         conn.execute(
             """
             UPDATE cognitive_outbox
-            SET status = 'failed', retry_count = retry_count + 1,
+            SET status = CASE
+                    WHEN retry_count + 1 >= ? THEN 'discarded'
+                    ELSE 'failed'
+                END,
+                retry_count = MIN(retry_count + 1, ?),
                 last_error = ?, lease_token = '', lease_expires_at = '',
                 updated_at = datetime('now')
             WHERE outbox_id = ?
               AND ((? = '' AND status != 'processing')
                    OR (status = 'processing' AND lease_token = ?))
             """,
-            (error, outbox_id, token, token),
+            (
+                _COGNITIVE_OUTBOX_MAX_RETRIES,
+                _COGNITIVE_OUTBOX_MAX_RETRIES,
+                error,
+                outbox_id,
+                token,
+                token,
+            ),
         )
         return {"recorded": False, "error": error}
     conn.execute(
@@ -866,11 +878,16 @@ def claim_cognitive_outbox(
                     OR (status = 'processing'
                         AND julianday(lease_expires_at) <= julianday('now'))
                 )
+                  AND retry_count < ?
                   AND (? = 1 OR operation != 'retention_disposition')
                 ORDER BY created_at, outbox_id
                 LIMIT ?
                 """,
-                (1 if include_retention else 0, safe_limit),
+                (
+                    _COGNITIVE_OUTBOX_MAX_RETRIES,
+                    1 if include_retention else 0,
+                    safe_limit,
+                ),
             ).fetchall()
             for row in rows:
                 outbox_id = str(row["outbox_id"])
@@ -885,8 +902,14 @@ def claim_cognitive_outbox(
                       AND (status IN ('pending', 'failed')
                            OR (status = 'processing'
                                AND julianday(lease_expires_at) <= julianday('now')))
+                      AND retry_count < ?
                     """,
-                    (token, f"+{safe_lease} seconds", outbox_id),
+                    (
+                        token,
+                        f"+{safe_lease} seconds",
+                        outbox_id,
+                        _COGNITIVE_OUTBOX_MAX_RETRIES,
+                    ),
                 )
                 if updated.rowcount != 1:
                     continue

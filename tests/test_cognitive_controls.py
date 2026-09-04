@@ -454,6 +454,57 @@ def test_open_additively_backfills_fact_roots_for_legacy_rows(
         reopened.close()
 
 
+def test_open_preserves_legacy_suppress_without_expiry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store = _load_store(monkeypatch, "_cognitive_legacy_suppress_migration")
+    store = _store(tmp_path, Store)
+    _write_attempt(store, "legacy-suppress")
+    _finish_extraction(store, "legacy-suppress")
+    claim = store.claim_cognitive_topic_projections(model_version=MODEL)[0]
+    store.complete_cognitive_topic_projection(
+        topic_id=TOPIC,
+        model_version=MODEL,
+        lease_token=claim["lease_token"],
+        claimed_generation=claim["claimed_generation"],
+        snapshots=[_snapshot("legacy-suppress")],
+    )
+    conn = store._require_conn()
+    conn.execute("DROP TRIGGER IF EXISTS trg_cognitive_control_expiry_validate")
+    conn.execute(
+        """
+        INSERT INTO cognitive_user_controls (
+            control_id, topic_id, hypothesis_code, action, expires_at
+        ) VALUES ('legacy-suppress', ?, ?, 'suppress', '')
+        """,
+        (TOPIC, CODE),
+    )
+    conn.commit()
+    store.close()
+
+    reopened = Store(tmp_path / "study.db", tmp_path / "seed.json", _Logger())
+    reopened.open()
+    try:
+        control = reopened.list_cognitive_user_controls(
+            topic_id=TOPIC,
+            hypothesis_code=CODE,
+            limit=1,
+        )[0]
+        assert control["action"] == "dismiss"
+        assert reopened.is_cognitive_hypothesis_suppressed(
+            topic_id=TOPIC,
+            hypothesis_code=CODE,
+        )
+        current = reopened.list_cognitive_hypothesis_current(
+            topic_id=TOPIC,
+            hypothesis_code=CODE,
+            model_version=MODEL,
+        )[0]
+        assert current["user_override"] == "dismissed"
+    finally:
+        reopened.close()
+
+
 def test_open_backfills_immutable_fact_for_legacy_expired_episode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

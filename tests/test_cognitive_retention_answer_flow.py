@@ -636,8 +636,9 @@ def test_uncertified_retention_is_only_ordinary_evidence(
     used_hint: bool,
     question_changes: dict[str, Any],
 ) -> None:
+    changed_key = next(iter(question_changes), "used_hint")
     store_module, _ = _runtime(
-        monkeypatch, f"_retention_uncertified_{len(question_changes)}_{used_hint}"
+        monkeypatch, f"_retention_uncertified_{changed_key}_{used_hint}"
     )
     store = _store(tmp_path, store_module.StudyStore)
     try:

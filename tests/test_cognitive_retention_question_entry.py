@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -23,6 +23,8 @@ def _subject(
     retention = importlib.import_module(
         f"{package}.adaptive_learning.cognitive_retention"
     )
+    test_now = datetime.now(timezone.utc)
+
     proposal = retention.build_retention_action_proposal(
         {
             "obligation_id": "obligation-1",
@@ -32,9 +34,9 @@ def _subject(
             "hypothesis_code": "omit_inner_derivative",
             "obligation_type": "retention",
             "status": "pending",
-            "not_before": "2026-09-03T00:00:00Z",
-            "due_by": "2026-09-04T00:00:00Z",
-            "eligibility_until": "2026-09-10T00:00:00Z",
+            "not_before": (test_now - timedelta(days=1)).isoformat(),
+            "due_by": (test_now - timedelta(hours=1)).isoformat(),
+            "eligibility_until": (test_now + timedelta(days=7)).isoformat(),
         },
         {
             "episode_id": "episode-1",
@@ -49,7 +51,7 @@ def _subject(
         },
         version_set="cognitive-v2.1-1",
         projection_current=True,
-        as_of=datetime(2026, 9, 4, 12, tzinfo=timezone.utc),
+        as_of=test_now,
     )
     assert proposal is not None
 
@@ -96,7 +98,9 @@ def _subject(
                     "claim_id": "claim-1",
                     "claim_token": "secret-token",
                     "worker_id": kwargs["worker_id"],
-                    "lease_expires_at": "2026-09-04T12:05:00Z",
+                    "lease_expires_at": (
+                        test_now + timedelta(minutes=5)
+                    ).isoformat(),
                 }
             ]
 
@@ -236,6 +240,33 @@ def test_retention_validation_failure_releases_claim_and_falls_back_once(
         return {**original_payload(*args, **kwargs), "answer": "tampered"}
 
     monkeypatch.setattr(entries, "retention_question_payload", tampered)
+
+    payload = asyncio.run(
+        subject._generate_question_payload(
+            source_text="Generate",
+            source="targeted_question",
+            targeted_context=context,
+        )
+    )
+
+    assert payload["question"] == "Ordinary question"
+    assert len(subject._store.claims) == 1
+    assert len(subject._store.releases) == 1
+    assert subject._store.releases[0]["claim_token"] == "secret-token"
+
+
+def test_retention_prepare_exception_releases_claim_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject, entries, context = _subject(
+        monkeypatch,
+        "_retention_question_prepare_exception",
+    )
+
+    def fail_prepare(*_args, **_kwargs):
+        raise RuntimeError("injected preparation failure")
+
+    monkeypatch.setattr(entries, "prepare_retention_question", fail_prepare)
 
     payload = asyncio.run(
         subject._generate_question_payload(

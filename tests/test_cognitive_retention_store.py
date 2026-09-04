@@ -405,6 +405,42 @@ def test_window_expiry_is_idempotent_and_creates_transfer_check(store: _Store) -
     ).fetchone()[0] == 1
 
 
+def test_window_expiry_skips_transfer_check_while_suppression_is_active(
+    store: _Store,
+) -> None:
+    _create(store)
+    expired_at = TRANSFER_AT + timedelta(days=7, microseconds=1)
+    store.conn.execute(
+        """
+        INSERT INTO cognitive_user_controls (
+            control_id, topic_id, hypothesis_code, action,
+            expires_at, root_fact_seq
+        ) VALUES ('active-suppress', ?, ?, 'suppress', ?, 1)
+        """,
+        (
+            TOPIC,
+            retention.ACTIVE_RETENTION_HYPOTHESIS,
+            _iso(expired_at + timedelta(hours=1)),
+        ),
+    )
+    store.conn.commit()
+    retention.record_cognitive_obligation_control(
+        store,
+        topic_id=TOPIC,
+        hypothesis_code=retention.ACTIVE_RETENTION_HYPOTHESIS,
+        action="suppress",
+        occurred_at=_iso(expired_at - timedelta(minutes=1)),
+    )
+
+    assert retention.expire_cognitive_monitoring_episodes(
+        store, as_of=_iso(expired_at)
+    ) == []
+    assert retention.list_cognitive_monitoring_episodes(store)[0]["status"] == "expired"
+    obligations = retention.list_cognitive_learning_obligations(store)
+    assert [item["obligation_type"] for item in obligations] == ["retention"]
+    assert obligations[0]["status"] == "cancelled"
+
+
 def test_user_controls_pause_resume_and_cancel_claimed_work(store: _Store) -> None:
     _create(store)
     due = TRANSFER_AT + timedelta(hours=24)

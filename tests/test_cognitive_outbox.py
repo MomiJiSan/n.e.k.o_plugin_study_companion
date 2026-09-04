@@ -96,6 +96,33 @@ def test_projection_validation_failure_preserves_answer_and_legacy_result_shape(
         store.close()
 
 
+def test_permanent_outbox_failure_is_discarded_at_retry_ceiling(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store_module, outbox_module, _ = _runtime(
+        monkeypatch, "_cognitive_outbox_retry_ceiling"
+    )
+    store = _store(tmp_path, store_module.StudyStore)
+    try:
+        _answer(
+            store,
+            "attempt-retry-ceiling",
+            enqueue_cognitive_projection=True,
+            cognitive_extractor_version="",
+            cognitive_model_version=MODEL,
+        )
+
+        for _ in range(outbox_module._COGNITIVE_OUTBOX_MAX_RETRIES - 1):
+            store.process_cognitive_outbox(limit=1)
+
+        discarded = store.list_cognitive_outbox(status="discarded")
+        assert len(discarded) == 1
+        assert discarded[0]["retry_count"] == outbox_module._COGNITIVE_OUTBOX_MAX_RETRIES
+        assert store.claim_cognitive_outbox(limit=1) == []
+    finally:
+        store.close()
+
+
 def test_expired_worker_is_fenced_after_lease_takeover(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

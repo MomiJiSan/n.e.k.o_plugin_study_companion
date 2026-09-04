@@ -550,6 +550,30 @@ def _expire_episodes(
     for raw in rows:
         episode = _row(raw)
         assert episode is not None
+        active_suppress = False
+        if episode["status"] == "paused":
+            active_suppress = (
+                conn.execute(
+                    """
+                    SELECT 1 FROM cognitive_user_controls controls
+                    WHERE controls.topic_id = ?
+                      AND controls.hypothesis_code = ?
+                      AND controls.action = 'suppress'
+                      AND controls.expires_at != ''
+                      AND julianday(controls.expires_at) > julianday(?)
+                      AND controls.rowid = (
+                          SELECT latest.rowid
+                          FROM cognitive_user_controls latest
+                          WHERE latest.topic_id = controls.topic_id
+                            AND latest.hypothesis_code = controls.hypothesis_code
+                          ORDER BY latest.root_fact_seq DESC, latest.rowid DESC
+                          LIMIT 1
+                      )
+                    """,
+                    (episode["topic_id"], episode["hypothesis_code"], as_of_text),
+                ).fetchone()
+                is not None
+            )
         active = conn.execute(
             """
             SELECT obligation_id, current_claim_id
@@ -587,19 +611,20 @@ def _expire_episodes(
             occurred_at=as_of_text,
         )
         episode = _episode_row(conn, str(episode["episode_id"]))
-        created.append(
-            _insert_obligation(
-                conn,
-                episode=episode,
-                obligation_type="transfer_check",
-                not_before=as_of,
-                due_by=as_of + RETENTION_DUE,
-                eligibility_until=as_of + RETENTION_ELIGIBILITY,
-                generation=1,
-                reason="monitoring_window_expired",
-                now=as_of,
+        if not active_suppress:
+            created.append(
+                _insert_obligation(
+                    conn,
+                    episode=episode,
+                    obligation_type="transfer_check",
+                    not_before=as_of,
+                    due_by=as_of + RETENTION_DUE,
+                    eligibility_until=as_of + RETENTION_ELIGIBILITY,
+                    generation=1,
+                    reason="monitoring_window_expired",
+                    now=as_of,
+                )
             )
-        )
         _mark_retention_projection_dirty(self, conn, episode)
     return created
 

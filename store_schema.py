@@ -921,6 +921,16 @@ def _init_db(self) -> None:
         "expires_at",
         "TEXT NOT NULL DEFAULT ''",
     )
+    # Before suppress controls became bounded, legacy rows had no expiry.
+    # Preserve their active, indefinite semantics using the established
+    # dismiss representation before the new insert validator is installed.
+    conn.execute(
+        """
+        UPDATE cognitive_user_controls
+        SET action = 'dismiss'
+        WHERE action = 'suppress' AND expires_at = ''
+        """
+    )
     for table in (
         "question_instances",
         "attempts",
