@@ -679,7 +679,24 @@ def test_active_session_uses_idle_and_absolute_expiration(running_bridge) -> Non
     assert status == 200
     assert active["ok"] is True
 
-    fake_now[0] = 100.0 + bridge_module.SESSION_ABSOLUTE_TIMEOUT
+    # Keep the session active all the way to the absolute boundary, so an
+    # idle-timeout check cannot accidentally make this assertion pass.
+    absolute_deadline = 100.0 + bridge_module.SESSION_ABSOLUTE_TIMEOUT
+    activity_interval = min(
+        bridge_module.ACCESS_TOKEN_EXPIRES_IN, bridge_module.SESSION_IDLE_TIMEOUT
+    ) / 2
+    while fake_now[0] < absolute_deadline - 1:
+        fake_now[0] = min(fake_now[0] + activity_interval, absolute_deadline - 1)
+        status, active = _post(
+            record["port"],
+            "/v1/bootstrap",
+            {"bridge_protocol_version": 1},
+            token=paired["access_token"],
+        )
+        assert status == 200
+        assert active["ok"] is True
+
+    fake_now[0] = absolute_deadline
     status, expired = _post(
         record["port"],
         "/v1/bootstrap",
@@ -688,6 +705,49 @@ def test_active_session_uses_idle_and_absolute_expiration(running_bridge) -> Non
     )
     assert status == 401
     assert expired["error"]["code"] == "access_token_expired"
+    assert state._sessions == {}  # noqa: SLF001 - expiry must revoke both indexes
+    assert state._client_tokens == {}  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("boundary_offset", "expected_status"),
+    [(-1, 200), (0, 401)],
+    ids=["before-idle-boundary", "at-idle-boundary"],
+)
+def test_session_expires_at_idle_boundary(
+    running_bridge,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary_offset: int,
+    expected_status: int,
+) -> None:
+    # Isolate the idle guard from the otherwise equal token lifetime guard.
+    monkeypatch.setattr(
+        bridge_module, "ACCESS_TOKEN_EXPIRES_IN", bridge_module.SESSION_IDLE_TIMEOUT * 2
+    )
+    state = running_bridge._state  # noqa: SLF001
+    assert state is not None
+    fake_now = [100.0]
+    state._monotonic = lambda: fake_now[0]  # noqa: SLF001
+    record = _read_rendezvous(running_bridge.rendezvous_path)
+    status, paired = _post(record["port"], "/v1/pair", _pair_payload(record))
+    assert status == 200
+    # Each parameter gets a fresh session: a successful boundary probe renews it.
+    fake_now[0] += bridge_module.SESSION_IDLE_TIMEOUT + boundary_offset
+    status, response = _post(
+        record["port"],
+        "/v1/bootstrap",
+        {"bridge_protocol_version": 1},
+        token=paired["access_token"],
+    )
+    assert status == expected_status
+    if expected_status == 200:
+        assert response["ok"] is True
+        assert paired["access_token"] in state._sessions  # noqa: SLF001
+        assert state._client_tokens[paired["client_id"]] == paired["access_token"]  # noqa: SLF001
+        return
+    assert response["error"]["code"] == "access_token_expired"
+    assert state._sessions == {}  # noqa: SLF001
+    assert state._client_tokens == {}  # noqa: SLF001
 
 
 def test_background_renewal_rotates_before_expiry_without_revoking_session(
