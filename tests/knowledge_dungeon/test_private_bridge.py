@@ -709,24 +709,43 @@ def test_active_session_uses_idle_and_absolute_expiration(running_bridge) -> Non
     assert state._client_tokens == {}  # noqa: SLF001
 
 
-def test_session_expires_at_idle_boundary(running_bridge) -> None:
+@pytest.mark.parametrize(
+    ("boundary_offset", "expected_status"),
+    [(-1, 200), (0, 401)],
+    ids=["before-idle-boundary", "at-idle-boundary"],
+)
+def test_session_expires_at_idle_boundary(
+    running_bridge,
+    monkeypatch: pytest.MonkeyPatch,
+    boundary_offset: int,
+    expected_status: int,
+) -> None:
+    # Isolate the idle guard from the otherwise equal token lifetime guard.
+    monkeypatch.setattr(
+        bridge_module, "ACCESS_TOKEN_EXPIRES_IN", bridge_module.SESSION_IDLE_TIMEOUT * 2
+    )
     state = running_bridge._state  # noqa: SLF001
     assert state is not None
     fake_now = [100.0]
     state._monotonic = lambda: fake_now[0]  # noqa: SLF001
     record = _read_rendezvous(running_bridge.rendezvous_path)
-    _, paired = _post(record["port"], "/v1/pair", _pair_payload(record))
-    fake_now[0] += min(
-        bridge_module.ACCESS_TOKEN_EXPIRES_IN, bridge_module.SESSION_IDLE_TIMEOUT
-    )
-    status, expired = _post(
+    status, paired = _post(record["port"], "/v1/pair", _pair_payload(record))
+    assert status == 200
+    # Each parameter gets a fresh session: a successful boundary probe renews it.
+    fake_now[0] += bridge_module.SESSION_IDLE_TIMEOUT + boundary_offset
+    status, response = _post(
         record["port"],
         "/v1/bootstrap",
         {"bridge_protocol_version": 1},
         token=paired["access_token"],
     )
-    assert status == 401
-    assert expired["error"]["code"] == "access_token_expired"
+    assert status == expected_status
+    if expected_status == 200:
+        assert response["ok"] is True
+        assert paired["access_token"] in state._sessions  # noqa: SLF001
+        assert state._client_tokens[paired["client_id"]] == paired["access_token"]  # noqa: SLF001
+        return
+    assert response["error"]["code"] == "access_token_expired"
     assert state._sessions == {}  # noqa: SLF001
     assert state._client_tokens == {}  # noqa: SLF001
 
