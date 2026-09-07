@@ -80,6 +80,49 @@ def test_targeted_question_contract_enforces_planned_difficulty_only_when_provid
     assert "planned_difficulty_mismatch" in planned.errors
 
 
+def test_question_validator_preserves_difficulty_assessment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(monkeypatch, "_question_validator_difficulty_test")
+    common = ModuleType(f"{package}.tutor_llm_agent_common")
+    common.Any = Any
+    common.SdkError = type("SdkError", (Exception,), {})
+    common.TutorReply = SimpleNamespace
+    common._as_str = lambda value: str(value or "")
+    monkeypatch.setitem(sys.modules, common.__name__, common)
+    validator = importlib.import_module(
+        f"{package}.tutor_llm_agent_question_validate"
+    )
+
+    accepted = validator._normalize_question_validation(
+        None,
+        {
+            "relevant": True,
+            "answer_supported": True,
+            "difficulty_appropriate": True,
+            "retry": False,
+            "reason": "The workload matches level 5.",
+        },
+        {},
+    )
+    rejected = validator._normalize_question_validation(
+        None,
+        {
+            "relevant": True,
+            "answer_supported": True,
+            "difficulty_appropriate": False,
+            "retry": True,
+            "reason": "The question only needs one direct rule.",
+        },
+        {},
+    )
+
+    assert accepted["difficulty_appropriate"] is True
+    assert accepted["retry"] is False
+    assert rejected["difficulty_appropriate"] is False
+    assert rejected["retry"] is True
+
+
 def test_target_topic_evidence_projection_is_the_single_seed_field_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

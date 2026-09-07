@@ -18,7 +18,7 @@ async def question_validate(self, *, context: dict[str, Any]) -> TutorReply:
 def _normalize_question_validation(
     self, raw: dict[str, Any], _context: dict[str, Any]
 ) -> dict[str, Any]:
-    for key in ("relevant", "answer_supported", "retry"):
+    for key in ("relevant", "answer_supported", "difficulty_appropriate", "retry"):
         if not isinstance(raw.get(key), bool):
             raise SdkError(f"question validation field {key} must be boolean")
     reason = _as_str(raw.get("reason")).strip()
@@ -26,12 +26,14 @@ def _normalize_question_validation(
         raise SdkError("question validation reason is required")
     relevant = bool(raw["relevant"])
     answer_supported = bool(raw["answer_supported"])
+    difficulty_appropriate = bool(raw["difficulty_appropriate"])
     retry = bool(raw["retry"])
-    if retry != (not relevant or not answer_supported):
+    if retry != (not relevant or not answer_supported or not difficulty_appropriate):
         raise SdkError("question validation fields are inconsistent")
     return {
         "relevant": relevant,
         "answer_supported": answer_supported,
+        "difficulty_appropriate": difficulty_appropriate,
         "retry": retry,
         "reason": reason[:400],
     }
@@ -41,6 +43,7 @@ def _fallback_question_validation(self, _context: dict[str, Any]) -> dict[str, A
     return {
         "relevant": False,
         "answer_supported": False,
+        "difficulty_appropriate": False,
         "retry": True,
         "reason": "Question validation was unavailable.",
     }
