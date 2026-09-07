@@ -804,6 +804,17 @@ class _TutorAnswerEntriesMixin:
                     dict(repaired_reply.payload or {}),
                     learner_answer=evaluation_learner_answer,
                 )
+                if not repaired_reply.degraded and not repaired_validation.valid:
+                    canonical_repaired_payload = canonicalize_evaluation(
+                        dict(repaired_reply.payload or {})
+                    )
+                    canonical_repaired_validation = validate_evaluation(
+                        canonical_repaired_payload,
+                        learner_answer=evaluation_learner_answer,
+                    )
+                    if canonical_repaired_validation.valid:
+                        repaired_reply.payload = canonical_repaired_payload
+                        repaired_validation = canonical_repaired_validation
                 if not repaired_reply.degraded and repaired_validation.valid:
                     reply = repaired_reply
                     tutor_context = repair_context

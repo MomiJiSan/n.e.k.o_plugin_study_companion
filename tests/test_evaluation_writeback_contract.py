@@ -805,6 +805,9 @@ async def _run_successful_repair_entry_test(
                     "verdict": "correct",
                     "score": 90,
                     "final_answer_correct": True,
+                    # The adapter can normalize a model's string score to an
+                    # integer while retaining the raw-shape diagnostic flag.
+                    "_evaluation_score_valid": False,
                     "feedback": "ok",
                 }
             )
