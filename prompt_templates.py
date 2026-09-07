@@ -157,7 +157,7 @@ STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS = (
     "4. The question's actual reasoning and solution workload must match that difficulty: "
     "1 = recall; 2 = one direct rule; 3 = two linked steps; 4 = multiple linked steps or combined methods; "
     "5 = sustained multi-stage reasoning with at least three dependent transformations or a nontrivial synthesis of methods. "
-    "For a calculus chain-rule question at level 5, require at least three nested differentiations or combine a multilevel composition with a product or quotient. "
+    "For a calculus chain-rule question at level 5, require at least three explicit nonlinear function layers (for example exp, log, trigonometric, inverse-trigonometric, or root layers; a simple power of x does not count as one of the three), or combine at least two such layers with a product or quotient. "
     "Do not raise difficulty by changing only the numeric label or by adding cosmetic notation.\n"
     "5. When generation_feedback reports a difficulty mismatch or the selection is a retry, generate a materially different structure at the requested level instead of paraphrasing the previous question.\n"
 )

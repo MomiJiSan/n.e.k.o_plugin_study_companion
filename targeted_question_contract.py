@@ -239,6 +239,12 @@ def validate_targeted_question(
         # The optional bound lets the server own the targeted difficulty while
         # retaining the legacy contract for every caller that does not plan it.
         errors.append("planned_difficulty_mismatch")
+    if (
+        expected_difficulty == 5
+        and _text(target_topic_id) == "college_chain_rule"
+        and not _level_five_chain_rule_structure(question)
+    ):
+        errors.append("difficulty_structure_mismatch")
     generated_target = _text(payload.get("target_topic_id"))
     if not generated_target or generated_target != _text(target_topic_id):
         errors.append("target_topic_mismatch")
@@ -275,6 +281,24 @@ def validate_targeted_question(
     if original_question and _normalized(original_question) == _normalized(question):
         errors.append("retry_copies_original_question")
     return TargetedQuestionValidation(valid=not errors, errors=tuple(errors))
+
+
+def _level_five_chain_rule_structure(question: str) -> bool:
+    """Require visible multilevel composition for a level-five chain-rule item."""
+
+    text = _text(question).lower()
+    function_layers = re.findall(
+        r"(?:\\(?:operatorname\{)?(?:arc)?(?:sin|cos|tan|cot|sec|csc)|"
+        r"\\(?:ln|log|exp|sqrt)|\b(?:arc)?(?:sin|cos|tan|cot|sec|csc|ln|log|exp|sqrt)\b|"
+        r"\be\s*\^)",
+        text,
+    )
+    if len(function_layers) >= 3:
+        return True
+    combined_method = bool(
+        re.search(r"\\(?:cdot|times)\b|\*|(?:乘积|乘法|商函数|quotient|product)", text)
+    )
+    return len(function_layers) >= 2 and combined_method
 
 
 def semantic_validation_passed(

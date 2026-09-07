@@ -99,5 +99,5 @@ def test_targeted_prompt_requires_real_level_five_complexity(
     )
 
     requirements = messages[1]["content"]
-    assert "at least three nested differentiations" in requirements
+    assert "at least three explicit nonlinear function layers" in requirements
     assert "Do not raise difficulty by changing only the numeric label" in requirements

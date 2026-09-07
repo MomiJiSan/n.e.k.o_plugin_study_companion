@@ -156,3 +156,32 @@ def test_high_difficulty_requires_positive_semantic_assessment() -> None:
         degraded=False,
         expected_difficulty=5,
     )
+
+
+def test_level_five_chain_rule_requires_visible_multilevel_structure() -> None:
+    shallow = _valid_payload(
+        question=r"Differentiate $\ln(\cos(x^2))$.",
+        difficulty=5,
+        target_topic_id="college_chain_rule",
+    )
+    nested = _valid_payload(
+        question=r"Differentiate $\ln(\sin(\exp(x^2+1)))$.",
+        difficulty=5,
+        target_topic_id="college_chain_rule",
+    )
+
+    shallow_result = validate_targeted_question(
+        shallow,
+        target_topic_id="college_chain_rule",
+        target_topic_name="Chain rule",
+        expected_difficulty=5,
+    )
+    nested_result = validate_targeted_question(
+        nested,
+        target_topic_id="college_chain_rule",
+        target_topic_name="Chain rule",
+        expected_difficulty=5,
+    )
+
+    assert "difficulty_structure_mismatch" in shallow_result.errors
+    assert nested_result.valid, nested_result.errors
