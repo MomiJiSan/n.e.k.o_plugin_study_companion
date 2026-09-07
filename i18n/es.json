@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "Reevaluar la transferencia anterior en desarrollo",
+    "entries.cognitive_dev_retest_transfer.description": "Con las herramientas de desarrollo activas, verificar el registro anterior fijado o generar una nueva pregunta de transferencia auditable.",
     "ui.status.preparing_ocr_selection": "Cambia al material de estudio. La selección de pantalla se abrirá en 2 segundos...",
     "ui.status.ocr_canceled": "Selección de pantalla cancelada",
     "ui.status.ocr_fallback_fullscreen": "La selección de pantalla no está disponible; se usó OCR de pantalla completa.",

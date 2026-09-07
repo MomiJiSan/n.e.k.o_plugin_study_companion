@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "Повторная проверка переноса для разработки",
+    "entries.cognitive_dev_retest_transfer.description": "При включённых средствах разработки проверить исходную запись или создать новую задачу переноса с журналом аудита.",
     "ui.status.preparing_ocr_selection": "Переключитесь на учебный материал. Выбор области экрана откроется через 2 секунды...",
     "ui.status.ocr_canceled": "Выбор области экрана отменён",
     "ui.status.ocr_fallback_fullscreen": "Выбор области экрана недоступен; использовано OCR всего экрана.",

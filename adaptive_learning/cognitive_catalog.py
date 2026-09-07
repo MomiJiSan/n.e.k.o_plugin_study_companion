@@ -500,6 +500,22 @@ CHAIN_RULE_QUESTION_BLUEPRINTS = (
         ),
         competing_hypothesis_codes=("differentiate_inner_incorrectly",),
     ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.omit-inner.cross-form-transfer.v2-retest",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="omit_inner_derivative",
+        learning_intent="transfer_check",
+        repair_strategy="cross_form_transfer",
+        question_family_id="chain.polynomial-power.cross-form-transfer",
+        question_text="Differentiate (x^2 + 3)^5.",
+        math_expression="d/dx (x^2+3)^5",
+        expected_answer="10*x*(x^2+3)^4",
+        diagnostic_signature=(
+            "composition:(x^2+3)^5|outer:5*(x^2+3)^4|inner:2*x|"
+            "transfer:trigonometric-to-polynomial-power"
+        ),
+        competing_hypothesis_codes=("differentiate_inner_incorrectly",),
+    ),
 )
 
 COGNITIVE_CATALOG_V1 = CognitiveCatalog(

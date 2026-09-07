@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "開発用の旧転移記録の再テスト",
+    "entries.cognitive_dev_retest_transfer.description": "開発ツールが有効な場合のみ、固定された旧記録を事前確認し、監査可能な転移問題を再出題します。",
     "ui.status.preparing_ocr_selection": "学習教材の画面に切り替えてください。2秒後に範囲選択を開始します...",
     "ui.status.ocr_canceled": "画面範囲の選択をキャンセルしました",
     "ui.status.ocr_fallback_fullscreen": "画面範囲選択を利用できないため、全画面 OCR を使用しました。",

@@ -82,7 +82,21 @@ def _normalize_evaluation(
     # The evaluator may explain its verdict, but it must never replace the
     # server-held expected answer with a model-generated reference answer.
     reference_answer = _as_str(context.get("expected_answer")).strip()
+    # Provenance belongs to this server-side rubric adapter, never to model
+    # output. Confidence is the model's reported certainty in its verdict,
+    # not the learner's score; absent/invalid values remain uncertified.
+    raw_confidence = raw.get("confidence")
+    confidence = (
+        float(raw_confidence)
+        if isinstance(raw_confidence, (int, float))
+        and not isinstance(raw_confidence, bool)
+        and 0.0 <= raw_confidence <= 1.0
+        else None
+    )
     return {
+        "evaluator_type": "llm_rubric",
+        "evaluator_version": "llm-rubric-v2",
+        "confidence": confidence,
         "verdict": verdict,
         "score": score,
         "error_type": error_type,

@@ -62,6 +62,7 @@ STUDY_QUESTION_GENERATE_EXAMPLE = {
 STUDY_ANSWER_EVALUATE_EXAMPLE = {
     "verdict": "partial",
     "score": 68,
+    "confidence": 0.85,
     "error_type": "incomplete",
     "feedback": "You identified the main idea, but one important step is missing.",
     "next_action": "Ask the learner to restate the missing step in one sentence.",
@@ -172,9 +173,11 @@ STUDY_ANSWER_EVALUATE_REQUIREMENTS = (
     "9. Do not return or replace reference_answer; the server retains the canonical expected answer.\n"
     "10. math_equivalence_engine.enabled must be false; do not claim symbolic equivalence verification.\n"
     "11. All learner-facing text fields, including feedback, next_action, covered_points, missing_points, misconceptions, and step_feedback, must use context.language.\n"
-    "11. Use expected_answer and current question as the reference, but do not invent facts.\n"
-    "12. When context.evaluation_correction is present, repair every listed contract violation and return one internally consistent evaluation.\n"
-    "13. Output must match this JSON structure:\n"
+    "12. Use expected_answer and current question as the reference, but do not invent facts.\n"
+    "13. When context.evaluation_correction is present, repair every listed contract violation and return one internally consistent evaluation.\n"
+    "14. confidence must be a number from 0.0 to 1.0 describing your certainty in the verdict given the available evidence, not the learner's score. Report uncertainty honestly; do not copy the example confidence.\n"
+    "15. Do not supply evaluator_type or evaluator_version; the server assigns evaluator provenance.\n"
+    "16. Output must match this JSON structure:\n"
 )
 
 STUDY_KNOWLEDGE_TRACK_SYSTEM_PROMPT = (

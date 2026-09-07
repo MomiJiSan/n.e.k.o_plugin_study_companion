@@ -257,6 +257,10 @@ def insert_cognitive_intervention_event(
             raise ValueError("cognitive intervention event identity collision")
     else:
         if item["event_type"] == "question_committed":
+            if (event.get("metadata") or {}).get("development_transfer_retest"):
+                from .store_cognitive_transfer_development import validate_transfer_retest_commit
+
+                validate_transfer_retest_commit(self, conn, event)
             current = conn.execute(
                 """
                 SELECT 1

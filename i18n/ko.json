@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "개발용 기존 전이 기록 재검사",
+    "entries.cognitive_dev_retest_transfer.description": "개발 도구가 활성화된 경우에만 고정된 기존 기록을 사전 검사하거나 감사 가능한 전이 문제를 다시 생성합니다.",
     "ui.status.preparing_ocr_selection": "학습 자료 화면으로 전환하세요. 2초 후 화면 영역 선택이 시작됩니다...",
     "ui.status.ocr_canceled": "화면 영역 선택을 취소했습니다",
     "ui.status.ocr_fallback_fullscreen": "화면 영역 선택을 사용할 수 없어 전체 화면 OCR을 사용했습니다.",

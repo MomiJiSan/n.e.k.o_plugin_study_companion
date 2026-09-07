@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "Retest Legacy Cognitive Transfer for Development",
+    "entries.cognitive_dev_retest_transfer.description": "Preflight or deliver an audited transfer retest for the frozen legacy source when development tools are enabled.",
     "ui.status.preparing_ocr_selection": "Switch to the learning material. Screen selection opens in 2 seconds...",
     "ui.status.ocr_canceled": "Screen selection canceled",
     "ui.status.ocr_fallback_fullscreen": "Screen selection unavailable; used full-screen OCR.",

@@ -30,6 +30,7 @@ from .adaptive_learning.cognitive_intervention import (
     hypothesis_ref_from_payload,
     hypothesis_ref_payload,
 )
+from .adaptive_learning.cognitive_question_validation import DiagnosticQuestionValidator
 from .adaptive_learning.cognitive_retention import (
     RETENTION_BLUEPRINT_VERSION,
     RETENTION_COGNITIVE_STRATEGY,
@@ -40,6 +41,7 @@ from .adaptive_learning.cognitive_retention import (
     retention_question_payload,
     validate_retention_question_payload,
 )
+from .adaptive_learning.cognitive_versions import get_cognitive_version_set
 from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import (
     apply_readiness_policy,
@@ -1161,6 +1163,12 @@ class _TutorQuestionEntriesMixin:
         targeted_context: dict[str, Any] | None = None,
         language: str = "",
     ) -> dict[str, Any]:
+        development_source = str((targeted_context or {}).get("_development_transfer_source") or "")
+        development_audit = {"metadata": {
+            "development_transfer_retest": True,
+            "legacy_source_attempt_id": development_source,
+            "reason": "legacy_evaluator_provenance_missing", "schema_version": 1,
+        }} if development_source else {}
         async with self._lock:
             previous_question = dict(getattr(self._state, "current_question", {}) or {})
             active_mode = self._state.active_mode
@@ -1438,7 +1446,7 @@ class _TutorQuestionEntriesMixin:
                             raw_claims = await asyncio.to_thread(
                                 claim_obligations,
                                 worker_id=worker_id,
-                                lease_seconds=300,
+                                lease_seconds=30 * 60,
                                 limit=1,
                                 obligation_types=("retention",),
                                 obligation_ids=(obligation_id,),
@@ -1487,10 +1495,17 @@ class _TutorQuestionEntriesMixin:
             )
             if callable(propose):
                 try:
-                    decision = cast(
-                        CognitivePolicyDecision,
-                        await asyncio.to_thread(propose, original_plan),
-                    )
+                    if development_source:
+                        from .store_cognitive_transfer_development import propose_transfer_retest
+
+                        decision = await asyncio.to_thread(
+                            propose_transfer_retest, self._store, original_plan, development_source,
+                        )
+                    else:
+                        decision = cast(
+                            CognitivePolicyDecision,
+                            await asyncio.to_thread(propose, original_plan),
+                        )
                     action_candidate = getattr(decision, "action_candidate", None)
                     if (
                         action_candidate is None
@@ -1541,6 +1556,10 @@ class _TutorQuestionEntriesMixin:
                         ),
                     )
                     candidate = prepare_cognitive_intervention(decision)
+                    if development_source:
+                        from .store_cognitive_transfer_development import bind_transfer_retest
+
+                        candidate = bind_transfer_retest(candidate, development_source)
                     if candidate is not None:
                         record_event = getattr(
                             getattr(self, "_store", None),
@@ -1552,7 +1571,7 @@ class _TutorQuestionEntriesMixin:
                         else:
                             await asyncio.to_thread(
                                 record_event,
-                                asdict(candidate.proposal_event),
+                                {**asdict(candidate.proposal_event), **development_audit},
                             )
                     if candidate is not None and candidate.active:
                         blueprint = candidate.blueprint
@@ -1599,12 +1618,16 @@ class _TutorQuestionEntriesMixin:
                 except Exception:
                     # Shadow/Active cognition is optional.  An unavailable
                     # reader, ledger, or blueprint yields the original plan.
+                    if development_source:
+                        raise
                     prepared_cognitive = None
                     plan = original_plan
                     cognitive_fields = _cognitive_question_fields(
                         None,
                         topic_id=selected_topic_id,
                     )
+        if development_source and prepared_cognitive is None:
+            raise SdkError("development transfer was not prepared", code="DEVELOPMENT_TRANSFER_BLOCKED")
         if prepared_retention is not None:
             retention_proposal = prepared_retention.proposal
             retention_blueprint = retention_proposal.blueprint
@@ -1743,17 +1766,6 @@ class _TutorQuestionEntriesMixin:
             if not targeted_context or generation.question is None:
                 return QuestionValidationResult(valid=True)
             candidate_payload = dict(generation.question.public_payload)
-            params = dict(targeted_context.get("question_params") or {})
-            structural = validate_targeted_question(
-                candidate_payload,
-                target_topic_id=selected_topic_id,
-                target_topic_name=selected_topic_name,
-                origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
-                expected_difficulty=planned_difficulty,
-            )
-            if not structural.valid:
-                validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
-                return QuestionValidationResult(valid=False, errors=tuple(structural.errors), raw_result=structural)
             if prepared_retention is not None:
                 retention_errors = validate_retention_question_payload(
                     prepared_retention,
@@ -1769,11 +1781,27 @@ class _TutorQuestionEntriesMixin:
                         errors=retention_errors,
                     )
                 return QuestionValidationResult(valid=True)
+            params = dict(targeted_context.get("question_params") or {})
+            structural = validate_targeted_question(
+                candidate_payload,
+                target_topic_id=selected_topic_id,
+                target_topic_name=selected_topic_name,
+                origin_wrong_question=dict(params.get("retry_wrong_question") or {}),
+                expected_difficulty=planned_difficulty,
+            )
+            if not structural.valid:
+                validation_failure = "Structural validation failed: " + ", ".join(structural.errors)
+                return QuestionValidationResult(valid=False, errors=tuple(structural.errors), raw_result=structural)
             if prepared_cognitive is not None:
+                hypothesis = prepared_cognitive.proposed_plan.hypothesis_target
+                versions = get_cognitive_version_set(hypothesis.model_version if hypothesis else "")
+                if versions is None:
+                    return QuestionValidationResult(valid=False, errors=("unsupported_cognitive_version",))
                 cognitive_validation = validate_reviewed_question(
                     prepared_cognitive,
                     generation.question,
                     repair_question_family_id=repair_question_family_id,
+                    validator=DiagnosticQuestionValidator(validator_version=versions.validator_version),
                 )
                 if not cognitive_validation.valid:
                     validation_failure = "Cognitive validation failed: " + ", ".join(cognitive_validation.errors)
@@ -1822,6 +1850,8 @@ class _TutorQuestionEntriesMixin:
                     self,
                     cognitive_fields,
                 )
+                if development_source:
+                    raise SdkError("development transfer validation failed", code="DEVELOPMENT_TRANSFER_BLOCKED") from exc
                 fallback_context = {
                     **targeted_context,
                     "_retention_fallback": True,
@@ -1877,6 +1907,8 @@ class _TutorQuestionEntriesMixin:
             ) from exc
         if prepared_cognitive is not None:
             if cognitive_validation is None or not cognitive_validation.valid or not cognitive_validation.validation_id:
+                if development_source:
+                    raise SdkError("development transfer validation failed", code="DEVELOPMENT_TRANSFER_BLOCKED")
                 fallback_context = {
                     **dict(targeted_context or {}),
                     "_cognitive_fallback": True,
@@ -1952,7 +1984,7 @@ class _TutorQuestionEntriesMixin:
                     raise RuntimeError("cognitive intervention ledger is unavailable")
                 await asyncio.to_thread(
                     record_event,
-                    asdict(committed_cognitive_event),
+                    {**asdict(committed_cognitive_event), **development_audit},
                 )
                 wake_projection = getattr(self, "_request_cognitive_projection", None)
                 if callable(wake_projection):
@@ -1963,6 +1995,8 @@ class _TutorQuestionEntriesMixin:
                         # generation prevents stale Active reads meanwhile.
                         pass
             except Exception:
+                if development_source:
+                    raise
                 fallback_context = {
                     **dict(targeted_context or {}),
                     "_cognitive_fallback": True,

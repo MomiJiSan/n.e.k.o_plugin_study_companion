@@ -24,6 +24,7 @@ from .adaptive_learning.cognitive_policy import (
 )
 from .adaptive_learning.cognitive_projection import CognitiveProjector
 from .adaptive_learning.cognitive_retention import (
+    RETENTION_COGNITIVE_STRATEGY,
     RetentionActionProposal,
     build_retention_action_proposal,
 )
@@ -1323,7 +1324,17 @@ class KnowledgeTracker:
             if cognitive_eligible and self._cognitive_topic_enabled(topic_id)
             else None
         )
-        if cognitive_attempt_event is None:
+        binding = question_payload.get("target_binding")
+        binding_strategy = (
+            str(binding.get("cognitive_strategy") or "").strip()
+            if isinstance(binding, dict)
+            else ""
+        )
+        is_retention = RETENTION_COGNITIVE_STRATEGY in {
+            str(question_payload.get("cognitive_strategy") or "").strip(),
+            binding_strategy,
+        }
+        if cognitive_attempt_event is None and not is_retention:
             question_payload = _without_cognitive_question_provenance(
                 question_payload
             )

@@ -474,6 +474,92 @@ def test_source_mismatch_and_stale_projection_fail_closed(
     assert _logical_dump(prepared_fixture.store) == stale_baseline
 
 
+def test_existing_open_episode_accepts_newer_transfer_than_projection_source(
+    monkeypatch: pytest.MonkeyPatch, prepared_fixture: _Fixture
+) -> None:
+    monkeypatch.setenv(DEV_ENV, "1")
+    store = prepared_fixture.store
+    conn = store._require_conn()
+    projected_source = prepared_fixture.source_attempt_id
+    newer_source = "attempt-transfer-retest"
+    conn.execute(
+        """
+        INSERT INTO attempts (
+            attempt_id, question_id, session_id, topic_id, user_answer,
+            mode, response_time_ms, used_hint, submitted_at
+        )
+        SELECT ?, question_id, session_id, topic_id, user_answer,
+               mode, response_time_ms, used_hint, submitted_at
+        FROM attempts WHERE attempt_id = ?
+        """,
+        (newer_source, projected_source),
+    )
+    conn.execute(
+        """
+        INSERT INTO evaluations (
+            attempt_id, evaluation_json, evaluator_type, evaluator_version,
+            confidence, fallback_reason, created_at
+        )
+        SELECT ?, evaluation_json, evaluator_type, evaluator_version,
+               confidence, fallback_reason, created_at
+        FROM evaluations WHERE attempt_id = ?
+        """,
+        (newer_source, projected_source),
+    )
+    payload = dict(_transfer_outbox(store, projected_source)["payload"])
+    payload.update(
+        {
+            "attempt_id": newer_source,
+            "event_id": "event-transfer-retest",
+            "retention_episode_requested": True,
+        }
+    )
+    conn.execute(
+        """
+        INSERT INTO cognitive_outbox (
+            outbox_id, attempt_id, event_id, operation, payload_json, status
+        ) VALUES (?, ?, ?, 'intervention_event', ?, 'done')
+        """,
+        (
+            "outbox-transfer-retest",
+            newer_source,
+            payload["event_id"],
+            store._json_dumps(payload),
+        ),
+    )
+    prepared_fixture.runtime.development._insert_requested_transfer_episode(
+        store, conn, payload
+    )
+    conn.commit()
+
+    projected = conn.execute(
+        """SELECT source_attempt_id FROM cognitive_hypothesis_current
+        WHERE topic_id = ? AND hypothesis_code = ? AND model_version = ?""",
+        (TOPIC, HYPOTHESIS_CODE, MODEL),
+    ).fetchone()
+    assert projected["source_attempt_id"] == projected_source
+
+    preview = _call(
+        prepared_fixture,
+        apply=False,
+        expected_source_attempt_id=newer_source,
+    )
+    result = _call(
+        prepared_fixture,
+        apply=True,
+        expected_source_attempt_id=newer_source,
+    )
+
+    assert preview["status"] == "ready"
+    assert preview["source_attempt_id"] == newer_source
+    assert result["status"] == "prepared"
+    assert result["source_attempt_id"] == newer_source
+    episode = store.list_cognitive_monitoring_episodes()[0]
+    obligation = store.list_cognitive_learning_obligations()[0]
+    assert episode["source_attempt_id"] == newer_source
+    assert obligation["reason"] == "development_time_override"
+
+
 @pytest.mark.parametrize("mutation", ["hint", "verdict", "version", "blueprint"])
 def test_canonical_transfer_provenance_tampering_is_rejected(
     monkeypatch: pytest.MonkeyPatch,

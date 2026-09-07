@@ -466,14 +466,45 @@ def _inspect(
         conn,
         topic_id=topic_id,
         hypothesis_code=hypothesis_code,
-        expected_source_attempt_id=expected_source_attempt_id,
+        expected_source_attempt_id="",
         model_version=configured_model_version,
     )
     hypothesis_id = str(current["hypothesis_id"])
     model_version = str(current["model_version"])
-    source_attempt_id = str(current["source_attempt_id"] or "").strip()
-    if not source_attempt_id:
+    projected_source_attempt_id = str(
+        current["source_attempt_id"] or ""
+    ).strip()
+    if not projected_source_attempt_id:
         raise _PreparationBlocked("transfer_not_certified")
+    source_attempt_id = (
+        expected_source_attempt_id or projected_source_attempt_id
+    )
+    if source_attempt_id != projected_source_attempt_id:
+        episode_id = _stable_id(
+            "cognitive-episode",
+            hypothesis_id,
+            model_version,
+            source_attempt_id,
+        )
+        episode = conn.execute(
+            """
+            SELECT 1 FROM cognitive_monitoring_episodes
+            WHERE episode_id = ? AND hypothesis_id = ?
+              AND topic_id = ? AND hypothesis_code = ?
+              AND model_version = ? AND source_attempt_id = ?
+              AND status = 'open'
+            """,
+            (
+                episode_id,
+                hypothesis_id,
+                topic_id,
+                hypothesis_code,
+                model_version,
+                source_attempt_id,
+            ),
+        ).fetchone()
+        if episode is None:
+            raise _PreparationBlocked("source_attempt_mismatch")
     payload, fact = _completed_transfer_payload(
         store,
         conn,

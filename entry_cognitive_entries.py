@@ -298,6 +298,37 @@ async def _abandon_current_intervention(
 
 
 class _CognitiveEntriesMixin:
+    @plugin_entry(
+        id="study_cognitive_dev_retest_transfer",
+        name=tr("entries.cognitive_dev_retest_transfer.name", default="Retest Legacy Cognitive Transfer for Development"),
+        description=tr("entries.cognitive_dev_retest_transfer.description", default="Preflight or deliver an audited transfer retest for the frozen legacy source when development tools are enabled."),
+        input_schema={
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "topic_id": {"type": "string"}, "hypothesis_code": {"type": "string"},
+                "expected_source_attempt_id": {"type": "string"},
+                "apply": {"type": "boolean", "default": False},
+                "confirmation": {"type": "string", "default": ""},
+            },
+            "required": ["topic_id", "hypothesis_code"],
+        },
+        timeout=70.0,
+        llm_result_fields=["enabled", "status", "reason_code", "source_attempt_id", "question_id", "attempt_id", "learning_intent"],
+    )
+    async def study_cognitive_dev_retest_transfer(
+        self, topic_id: str = "", hypothesis_code: str = "",
+        expected_source_attempt_id: str = "", apply: bool = False,
+        confirmation: str = "", **_,
+    ):
+        from .entry_cognitive_transfer_development import retest_transfer
+
+        return Ok(await retest_transfer(
+            self, topic_id=str(topic_id or "").strip(),
+            hypothesis_code=str(hypothesis_code or "").strip(),
+            expected_source_attempt_id=str(expected_source_attempt_id or "").strip(),
+            apply=apply, confirmation=confirmation,
+        ))
+
     @ui.action()
     @plugin_entry(
         id="study_cognitive_evidence",

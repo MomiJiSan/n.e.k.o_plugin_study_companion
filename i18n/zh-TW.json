@@ -1,4 +1,6 @@
 {
+    "entries.cognitive_dev_retest_transfer.name": "開發態舊遷移複測",
+    "entries.cognitive_dev_retest_transfer.description": "僅在開發工具啟用時，預檢或為凍結的舊遷移記錄產生可稽核的新遷移題。",
     "ui.status.preparing_ocr_selection": "請切換到學習材料頁面，2 秒後開始螢幕選區...",
     "ui.status.ocr_canceled": "已取消螢幕選區",
     "ui.status.ocr_fallback_fullscreen": "螢幕選區不可用，已改用全螢幕 OCR。",

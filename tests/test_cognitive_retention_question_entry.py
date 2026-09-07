@@ -182,6 +182,7 @@ def test_enabled_retention_claims_after_planner_and_delivers_reviewed_question(
     assert payload["question"] == "Differentiate exp(5x - 2)."
     assert subject._agent.generated == 0
     assert subject._store.claims[0]["obligation_ids"] == ("obligation-1",)
+    assert subject._store.claims[0]["lease_seconds"] == 30 * 60
     assert subject.private_payload is not None
     assert subject.private_payload["cognitive_episode_id"] == "episode-1"
     assert subject.private_payload["cognitive_obligation_id"] == "obligation-1"
@@ -203,6 +204,30 @@ def test_enabled_retention_claims_after_planner_and_delivers_reviewed_question(
         "obligation_refs",
         "cognitive_strategy",
     }.intersection(payload)
+
+
+def test_retention_blueprint_is_not_rejected_by_ordinary_planned_difficulty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject, _, context = _subject(
+        monkeypatch,
+        "_retention_question_fixed_difficulty",
+    )
+    context["difficulty"] = 2
+    context["question_params"]["suggested_difficulty"] = 2
+
+    payload = asyncio.run(
+        subject._generate_question_payload(
+            source_text="Generate",
+            source="targeted_question",
+            targeted_context=context,
+        )
+    )
+
+    assert payload["question"] == "Differentiate exp(5x - 2)."
+    assert payload["difficulty"] == 3
+    assert subject._agent.generated == 0
+    assert subject._store.releases == []
 
 
 def test_switch_off_or_stale_expected_obligation_falls_back_without_claim(

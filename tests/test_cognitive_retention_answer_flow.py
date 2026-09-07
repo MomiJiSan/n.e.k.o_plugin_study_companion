@@ -517,6 +517,65 @@ def test_transfer_without_valid_evaluator_provenance_keeps_ordinary_answer(
         store.close()
 
 
+def test_tracker_preserves_retention_provenance_and_enqueues_disposition(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store_module, _ = _runtime(monkeypatch, "_retention_tracker_answer")
+    store = _store(tmp_path, store_module.StudyStore)
+    try:
+        created, claim = _claimed_retention(store)
+        tracker_module = importlib.import_module(
+            f"{store_module.__package__}.knowledge_tracker"
+        )
+        tracker = tracker_module.KnowledgeTracker(
+            store,
+            logger=_Logger(),
+            cognitive_config={
+                "projection_enabled": True,
+                "read_mode": "active",
+                "intent_policy": "on",
+                "retention_enabled": True,
+                "version_set": MODEL,
+                "model_version": MODEL,
+                "supported_topics": [TOPIC],
+            },
+            cognitive_extractor=_UnusedExtractor(),
+        )
+
+        tracker.on_answer(
+            topic_id=TOPIC,
+            question=_question(created, claim),
+            user_answer="5*exp(5*x-2)",
+            eval_result={
+                "verdict": "correct",
+                "score": 100,
+                "evaluator_type": "llm_rubric",
+                "evaluator_version": "llm-rubric-v2",
+                "confidence": 1.0,
+            },
+            mode="companion",
+            session_id="retention-answer",
+            response_time_ms=120,
+            used_hint=False,
+            require_existing_topic=True,
+            attempt_id="retention-through-tracker",
+        )
+
+        fact = store.get_attempt_fact("retention-through-tracker")
+        assert fact is not None
+        assert fact["question"]["cognitive_strategy"] == STRATEGY
+        assert fact["question"]["cognitive_claim_token"] == claim["claim_token"]
+        retention_rows = [
+            row
+            for row in store.list_cognitive_outbox()
+            if row["operation"] == "retention_disposition"
+        ]
+        assert len(retention_rows) == 1
+        assert retention_rows[0]["attempt_id"] == "retention-through-tracker"
+    finally:
+        store.close()
+
+
 def test_wrong_waits_for_extraction_then_relapses_on_target_support(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
