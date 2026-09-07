@@ -4,6 +4,8 @@ from dataclasses import fields
 from datetime import datetime, timezone
 from typing import Any
 
+import pytest
+
 from adaptive_learning.cognitive_policy import (
     CognitiveIntentPolicy,
     question_plan_ownership_fingerprint,
@@ -261,6 +263,24 @@ def test_active_supported_omit_inner_derivative_applies_topic_preserving_probe()
     for item in fields(plan):
         if item.name not in {"learning_intent", "hypothesis_target", "repair_strategy"}:
             assert getattr(decision.effective_plan, item.name) == getattr(plan, item.name)
+
+
+@pytest.mark.parametrize("last_outcome", ["not_confirmed", "abandoned"])
+def test_active_does_not_repeat_a_completed_probe_without_new_support(
+    last_outcome: str,
+) -> None:
+    plan = _plan()
+    hypothesis = _hypothesis(
+        intervention_stage="idle",
+        last_intent="misconception_probe",
+        last_outcome=last_outcome,
+    )
+
+    decision = CognitiveIntentPolicy(mode="on").decorate(plan, _view(hypothesis))
+
+    assert decision.applied is False
+    assert decision.effective_plan is plan
+    assert decision.fallback_reason == "no_cognitive_action"
 
 
 def test_active_rejects_hypothesized_and_non_enabled_hypotheses() -> None:

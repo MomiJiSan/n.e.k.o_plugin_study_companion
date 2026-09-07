@@ -279,6 +279,11 @@ def _next_intent(item: LearnerCognitiveHypothesis) -> LearningIntent | None:
     last_intent = item.last_intent
     last_outcome = item.last_outcome.lower()
     if stage == "idle":
+        if last_intent == "misconception_probe" and last_outcome in {
+            "not_confirmed",
+            "abandoned",
+        }:
+            return None
         return "misconception_probe"
     if stage == "probing":
         if last_intent == "misconception_probe" and last_outcome in _POSITIVE_OUTCOMES:

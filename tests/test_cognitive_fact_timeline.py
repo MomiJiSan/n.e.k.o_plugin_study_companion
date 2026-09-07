@@ -228,6 +228,56 @@ def test_single_reducer_keeps_new_relapse_after_older_transfer() -> None:
     assert rebuilt[-1]["source_attempt_id"] == "relapse"
 
 
+def test_new_support_rearms_a_probe_after_not_confirmed() -> None:
+    facts = [
+        _fact(1, "evidence", _evidence("support-1")),
+        _fact(2, "evidence", _evidence("support-2")),
+        _fact(
+            3,
+            "intervention",
+            _event(
+                "question_committed",
+                "misconception_probe",
+                "probe",
+                question_id="probe-question",
+            ),
+        ),
+        _fact(
+            4,
+            "intervention",
+            _event(
+                "attempt_committed",
+                "misconception_probe",
+                "probe",
+                question_id="probe-question",
+                attempt_id="probe-attempt",
+                verdict="correct",
+            ),
+        ),
+    ]
+
+    not_confirmed = project_cognitive_fact_timeline(
+        facts,
+        topic_id=TOPIC,
+        model_version=MODEL,
+        computed_at="2026-09-03T12:00:00Z",
+    )
+    assert not_confirmed[-1]["intervention_stage"] == "idle"
+    assert not_confirmed[-1]["last_outcome"] == "not_confirmed"
+
+    facts.append(_fact(5, "evidence", _evidence("new-support")))
+    rearmed = project_cognitive_fact_timeline(
+        facts,
+        topic_id=TOPIC,
+        model_version=MODEL,
+        computed_at="2026-09-03T12:00:00Z",
+    )
+
+    assert rearmed[-1]["intervention_stage"] == "idle"
+    assert rearmed[-1]["last_intent"] == ""
+    assert rearmed[-1]["last_outcome"] == ""
+
+
 @pytest.mark.parametrize(
     ("disposition", "expected_status", "expected_stage"),
     [

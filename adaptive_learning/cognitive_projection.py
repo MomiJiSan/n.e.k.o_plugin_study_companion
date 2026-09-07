@@ -1272,6 +1272,16 @@ def _project_one_cognitive_timeline(
                     int(state.get("relapse_count") or 0),
                     int(previous.get("relapse_count") or 0),
                 )
+                if (
+                    direction == "support"
+                    and previous_stage == "idle"
+                    and str(previous.get("last_intent") or "").strip()
+                    == "misconception_probe"
+                    and str(previous.get("last_outcome") or "").strip()
+                    in {"not_confirmed", "abandoned"}
+                ):
+                    state["last_intent"] = ""
+                    state["last_outcome"] = ""
                 if direction == "support" and previous_stage in {
                     "monitored",
                     "resolved",
