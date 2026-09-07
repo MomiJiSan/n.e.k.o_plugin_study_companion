@@ -1846,7 +1846,11 @@ class _TutorQuestionEntriesMixin:
                     canonical_relations=canonical_relations,
                 ),
             )
-            if not semantic_validation_passed(dict(validation_reply.payload or {}), degraded=validation_reply.degraded):
+            if not semantic_validation_passed(
+                dict(validation_reply.payload or {}),
+                degraded=validation_reply.degraded,
+                expected_difficulty=planned_difficulty,
+            ):
                 validation_failure = "Semantic validation failed: " + str(
                     (validation_reply.payload or {}).get("reason") or validation_reply.diagnostic or "retry"
                 )

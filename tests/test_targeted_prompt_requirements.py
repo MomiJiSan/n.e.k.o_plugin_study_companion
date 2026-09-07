@@ -81,3 +81,23 @@ def test_ordinary_question_prompt_keeps_base_requirements_unchanged(
 
     assert messages == expected
     assert "Additional requirements for targeted questions:" not in messages[1]["content"]
+
+
+def test_targeted_prompt_requires_real_level_five_complexity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompts = _load_prompts(monkeypatch, "_targeted_level_five_requirements_test")
+
+    messages = prompts.build_question_generate_messages(
+        text="Generate one adaptive practice question.",
+        language="zh-CN",
+        context={
+            "targeted_question": True,
+            "selected_topic_id": "college_chain_rule",
+            "knowledge_question_params": {"suggested_difficulty": 5},
+        },
+    )
+
+    requirements = messages[1]["content"]
+    assert "at least three nested differentiations" in requirements
+    assert "Do not raise difficulty by changing only the numeric label" in requirements

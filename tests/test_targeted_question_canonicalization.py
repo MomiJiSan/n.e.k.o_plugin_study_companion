@@ -7,6 +7,7 @@ import pytest
 
 _contract = importlib.import_module("targeted_question_contract")
 canonicalize_targeted_question = _contract.canonicalize_targeted_question
+semantic_validation_passed = _contract.semantic_validation_passed
 validate_targeted_question = _contract.validate_targeted_question
 
 
@@ -138,3 +139,20 @@ def test_canonicalization_rejects_an_invalid_server_plan(
             target_topic_id="target",
             planned_difficulty=planned_difficulty,  # type: ignore[arg-type]
         )
+
+
+def test_high_difficulty_requires_positive_semantic_assessment() -> None:
+    base = {"relevant": True, "answer_supported": True, "retry": False}
+
+    assert semantic_validation_passed(base, degraded=False, expected_difficulty=3)
+    assert not semantic_validation_passed(base, degraded=False, expected_difficulty=5)
+    assert not semantic_validation_passed(
+        {**base, "difficulty_appropriate": False},
+        degraded=False,
+        expected_difficulty=5,
+    )
+    assert semantic_validation_passed(
+        {**base, "difficulty_appropriate": True},
+        degraded=False,
+        expected_difficulty=5,
+    )

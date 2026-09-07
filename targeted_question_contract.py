@@ -277,10 +277,22 @@ def validate_targeted_question(
     return TargetedQuestionValidation(valid=not errors, errors=tuple(errors))
 
 
-def semantic_validation_passed(payload: dict[str, Any], *, degraded: bool) -> bool:
+def semantic_validation_passed(
+    payload: dict[str, Any],
+    *,
+    degraded: bool,
+    expected_difficulty: int | None = None,
+) -> bool:
+    difficulty_assessment = payload.get("difficulty_appropriate")
+    difficulty_passed = (
+        difficulty_assessment is True
+        if isinstance(expected_difficulty, int) and expected_difficulty >= 4
+        else difficulty_assessment is not False
+    )
     return (
         not degraded
         and payload.get("relevant") is True
         and payload.get("answer_supported") is True
+        and difficulty_passed
         and payload.get("retry") is False
     )

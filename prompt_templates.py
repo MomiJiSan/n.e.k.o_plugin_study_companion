@@ -104,6 +104,7 @@ STUDY_QUESTION_GENERATE_SYSTEM_PROMPT = (
 STUDY_QUESTION_VALIDATE_EXAMPLE = {
     "relevant": True,
     "answer_supported": True,
+    "difficulty_appropriate": True,
     "retry": False,
     "reason": "The question and reference answer directly assess the target topic.",
 }
@@ -119,9 +120,10 @@ STUDY_QUESTION_VALIDATE_REQUIREMENTS = (
     "Requirements:\n"
     "1. relevant: true only when the question directly assesses the target topic and its wording is clear with sufficient information to answer.\n"
     "2. answer_supported: true only when the reference answer, accepted answers, key points, rubric, and solution steps are mutually consistent and supported by the target metadata or necessary relations.\n"
-    "3. retry: true when either check fails or the evidence is insufficient.\n"
-    "4. reason: one concise reason without adding new facts.\n"
-    "5. Output must match this JSON structure:\n"
+    "3. difficulty_appropriate: true only when the reasoning and solution workload actually match difficulty on this scale: 1 recall; 2 one direct rule; 3 two linked steps; 4 multiple linked steps or combined methods; 5 sustained multi-stage reasoning, such as at least three dependent transformations or a nontrivial synthesis of methods. A hard-looking expression or a numeric label alone is insufficient.\n"
+    "4. retry: true when any check fails or the evidence is insufficient.\n"
+    "5. reason: one concise reason without adding new facts.\n"
+    "6. Output must match this JSON structure:\n"
 )
 
 STUDY_QUESTION_GENERATE_REQUIREMENTS = (
@@ -152,6 +154,12 @@ STUDY_TARGETED_QUESTION_GENERATE_REQUIREMENTS = (
     "and each item must be at most 500 characters.\n"
     "3. difficulty must exactly copy "
     "context.knowledge_question_params.suggested_difficulty.\n"
+    "4. The question's actual reasoning and solution workload must match that difficulty: "
+    "1 = recall; 2 = one direct rule; 3 = two linked steps; 4 = multiple linked steps or combined methods; "
+    "5 = sustained multi-stage reasoning with at least three dependent transformations or a nontrivial synthesis of methods. "
+    "For a calculus chain-rule question at level 5, require at least three nested differentiations or combine a multilevel composition with a product or quotient. "
+    "Do not raise difficulty by changing only the numeric label or by adding cosmetic notation.\n"
+    "5. When generation_feedback reports a difficulty mismatch or the selection is a retry, generate a materially different structure at the requested level instead of paraphrasing the previous question.\n"
 )
 
 STUDY_ANSWER_EVALUATE_SYSTEM_PROMPT = (
