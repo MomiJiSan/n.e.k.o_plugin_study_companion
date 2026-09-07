@@ -509,9 +509,9 @@ def test_structured_practice_errors_are_preserved_and_localized() -> None:
 def test_static_assets_cache_bust_mastery_status_changes() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     assert "./knowledge-map.js?v=study-related-topics-20260903" in index
-    assert "./style.css?v=study-memory-editor-wide-20260904" in index
+    assert "./style.css?v=practice-difficulty-selector-20260907" in index
     assert "./local-models-controller.js" not in index
-    assert "./main.js?v=practice-i18n-cancel-20260903" in index
+    assert "./main.js?v=practice-difficulty-selector-20260907" in index
 
 
 def test_generated_questions_use_math_rendering_in_static_and_hosted_ui() -> None:

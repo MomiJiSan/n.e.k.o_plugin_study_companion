@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-
 from adaptive_learning.cognitive_policy import (
     CognitiveIntentPolicy,
     question_plan_ownership_fingerprint,
