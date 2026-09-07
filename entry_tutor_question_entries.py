@@ -101,6 +101,31 @@ IMAGE_ONLY_QUESTION_PROMPT_ZH_CN = "请根据这张图片生成一道学习题�
 IMAGE_ONLY_QUESTION_PROMPT_ZH_TW = "請根據這張圖片生成一道學習題。"
 
 
+def _apply_requested_difficulty(
+    targeted_context: dict[str, Any],
+    requested_difficulty: int | None,
+) -> dict[str, Any]:
+    if requested_difficulty is None:
+        return targeted_context
+    if (
+        isinstance(requested_difficulty, bool)
+        or not isinstance(requested_difficulty, int)
+        or not 1 <= requested_difficulty <= 5
+    ):
+        raise SdkError(
+            "requested difficulty must be an integer from 1 to 5",
+            code="INVALID_DIFFICULTY",
+        )
+    question_params = dict(targeted_context.get("question_params") or {})
+    question_params["suggested_difficulty"] = requested_difficulty
+    question_params["planned_difficulty"] = requested_difficulty
+    return {
+        **targeted_context,
+        "difficulty": requested_difficulty,
+        "question_params": question_params,
+    }
+
+
 def _with_question_generation_reservation(function):
     """Reserve before any entry-path reads of ``_lock``-protected state."""
 
@@ -2275,6 +2300,11 @@ class _TutorQuestionEntriesMixin:
             "type": "object",
             "properties": {
                 "selection_context_id": {"type": "string", "default": ""},
+                "requested_difficulty": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                },
                 "locale": {"type": "string", "maxLength": 16, "default": ""},
             },
         },
@@ -2298,6 +2328,7 @@ class _TutorQuestionEntriesMixin:
     async def study_generate_targeted_question(
         self,
         selection_context_id: str = "",
+        requested_difficulty: int | None = None,
         locale: str = "",
         **_,
     ):
@@ -2315,6 +2346,10 @@ class _TutorQuestionEntriesMixin:
                     if pending_context_id
                     else pending_context
                 )
+            targeted_context = _apply_requested_difficulty(
+                targeted_context,
+                requested_difficulty,
+            )
             if targeted_context.get("selection_reason") == "no_data":
                 return Err(
                     SdkError(

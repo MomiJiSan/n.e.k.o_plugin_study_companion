@@ -748,6 +748,32 @@ def _load_entries(monkeypatch: pytest.MonkeyPatch, package: str):
     return importlib.import_module(f"{package}.entry_tutor_question_entries"), SdkError
 
 
+def test_requested_difficulty_overrides_the_server_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries, sdk_error = _load_entries(monkeypatch, "_requested_difficulty_test")
+    original = {
+        "difficulty": 2,
+        "question_params": {
+            "suggested_difficulty": 2,
+            "planned_difficulty": 2,
+            "prompt_guidance": "Keep the existing guidance.",
+        },
+    }
+
+    overridden = entries._apply_requested_difficulty(original, 5)
+
+    assert overridden["difficulty"] == 5
+    assert overridden["question_params"]["suggested_difficulty"] == 5
+    assert overridden["question_params"]["planned_difficulty"] == 5
+    assert overridden["question_params"]["prompt_guidance"] == "Keep the existing guidance."
+    assert original["difficulty"] == 2
+    assert original["question_params"]["planned_difficulty"] == 2
+    with pytest.raises(sdk_error) as caught:
+        entries._apply_requested_difficulty(original, 6)
+    assert caught.value.code == "INVALID_DIFFICULTY"
+
+
 def test_unscoped_selection_refocuses_on_retry_with_complete_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

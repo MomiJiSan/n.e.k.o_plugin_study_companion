@@ -229,6 +229,17 @@
                 </div>
               </div>
               <div class="action-row">
+                <label class="practice-difficulty-control">
+                  <span data-i18n="ui.practice.difficulty_label">Difficulty</span>
+                  <select id="questionDifficultySelect" data-i18n-aria-label="ui.practice.difficulty_label" aria-label="Difficulty">
+                    <option value="" data-i18n="ui.practice.difficulty_auto">Auto</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                  </select>
+                </label>
                 <button id="generateQuestionBtn" class="button button-primary" type="button" data-i18n="ui.button.generate_question">Generate Question</button>
               </div>
               <article class="question-card" aria-live="polite">

@@ -1292,6 +1292,25 @@ pre,
   margin-top: 10px;
 }
 
+.practice-difficulty-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.practice-difficulty-control select {
+  min-height: 36px;
+  padding: 0 28px 0 10px;
+  border: 1px solid rgba(23, 86, 61, 0.24);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font: inherit;
+}
+
 .study-document-drop-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding: 8px; border-radius: var(--radius-sm); transition: background-color 120ms ease, box-shadow 120ms ease; }
 .study-document-drop-zone[data-dragging="true"] { background: rgba(47, 125, 87, 0.10); box-shadow: 0 0 0 3px rgba(47, 125, 87, 0.22); }
 .study-document-drop-zone > span { color: var(--muted); font-size: 13px; }

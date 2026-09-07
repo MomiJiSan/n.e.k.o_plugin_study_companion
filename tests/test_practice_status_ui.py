@@ -102,6 +102,27 @@ def test_empty_practice_state_i18n_contract_is_complete_in_all_locales() -> None
         assert all(str(locale[key]).strip() for key in required), locale_path.name
 
 
+def test_practice_difficulty_override_is_available_in_both_uis() -> None:
+    markup = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    static = (ROOT / "static" / "main.js").read_text(encoding="utf-8") + markup
+    hosted = (ROOT / "surfaces" / "study_panel.tsx").read_text(encoding="utf-8")
+
+    assert 'id="questionDifficultySelect"' in markup
+    assert '<option value="5">5</option>' in markup
+    for source in (static, hosted):
+        assert "requested_difficulty" in source
+        assert "ui.practice.difficulty_label" in source
+        assert "ui.practice.difficulty_auto" in source
+
+    required = {
+        "ui.practice.difficulty_label",
+        "ui.practice.difficulty_auto",
+    }
+    for locale_path in sorted((ROOT / "i18n").glob("*.json")):
+        locale = json.loads(locale_path.read_text(encoding="utf-8"))
+        assert not required - locale.keys(), locale_path.name
+
+
 def test_both_knowledge_maps_use_stage_wide_subject_facets_and_subject_scoped_pages() -> None:
     hosted = (ROOT / "surfaces" / "knowledge_map.tsx").read_text(encoding="utf-8")
     static_map = (ROOT / "static" / "knowledge-map.js").read_text(encoding="utf-8")

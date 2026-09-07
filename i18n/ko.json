@@ -169,6 +169,8 @@
     "ui.practice.reason.blocked_diagnostic":  "선행 지식 진단",
     "ui.practice.empty_question":  "Generate a practice question to begin.",
     "ui.practice.difficulty_fmt":  "Difficulty {difficulty}",
+    "ui.practice.difficulty_label":  "난이도",
+    "ui.practice.difficulty_auto":  "자동",
     "ui.practice.new_attempt":  "New attempt",
     "ui.practice.feedback_title":  "Feedback",
     "ui.practice.mastery_delta_fmt":  "Mastery {before} -> {after}",

@@ -1195,6 +1195,7 @@ export default function StudyPanel(props: PluginSurfaceProps) {
   const [text, setText] = useState('');
   const [question, setQuestion] = useState('');
   const [questionContext, setQuestionContext] = useState<QuestionContext | null>(null);
+  const [requestedDifficulty, setRequestedDifficulty] = useState<number | null>(null);
   const [activePracticeScope, setActivePracticeScope] = useState<PracticeScope | null>(null);
   const [practiceScopeReviewing, setPracticeScopeReviewing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<GeneratedQuestion | null>(null);
@@ -2889,7 +2890,10 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         props.api,
         'study_generate_targeted_question',
         props.locale,
-        { selection_context_id: selectionContextId },
+        {
+          selection_context_id: selectionContextId,
+          ...(requestedDifficulty === null ? {} : { requested_difficulty: requestedDifficulty }),
+        },
         controller.signal,
       );
       let data;
@@ -3724,6 +3728,23 @@ export default function StudyPanel(props: PluginSurfaceProps) {
         <div className="study-panel__paste-error" role="alert">{textPasteError}</div>
       ) : null}
       <div className="study-panel__actions">
+        <label>
+          <span>{t('ui.practice.difficulty_label', 'Difficulty')}</span>
+          <select
+            aria-label={t('ui.practice.difficulty_label', 'Difficulty')}
+            value={requestedDifficulty ?? ''}
+            disabled={interactionBusy}
+            onChange={(event) => {
+              const value = Number(event.target.value || 0);
+              setRequestedDifficulty(value >= 1 && value <= 5 ? value : null);
+            }}
+          >
+            <option value="">{t('ui.practice.difficulty_auto', 'Auto')}</option>
+            {[1, 2, 3, 4, 5].map((difficulty) => (
+              <option key={difficulty} value={difficulty}>{difficulty}</option>
+            ))}
+          </select>
+        </label>
         <button
           ref={generateButtonRef}
           type="button"

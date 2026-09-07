@@ -64,6 +64,7 @@ const saveOcrQuestionBtn = $id('saveOcrQuestionBtn');
 const undoOcrQuestionBtn = $id('undoOcrQuestionBtn');
 const clearOcrQuestionsBtn = $id('clearOcrQuestionsBtn');
 const generateQuestionBtn = $id('generateQuestionBtn');
+const questionDifficultySelect = $id('questionDifficultySelect');
 const baselineAssessmentBtn = $id('baselineAssessmentBtn');
 const explainBtn = $id('explainBtn');
 const evaluateAnswerBtn = $id('evaluateAnswerBtn');
@@ -3081,9 +3082,14 @@ async function generateQuestion(preferredNextStep = null) {
     throw new Error(t('ui.error.no_targeted_question_data', 'Not enough study records to generate a practice question yet.'));
   }
   setStatus(t('ui.status.generating_question', 'Generating question...'));
-  const requestQuestion = (selectionContextId) => callPlugin('study_generate_targeted_question', {
-    selection_context_id: selectionContextId,
-  });
+  const selectedDifficulty = Number(questionDifficultySelect?.value || 0);
+  const requestQuestion = (selectionContextId) => {
+    const args = { selection_context_id: selectionContextId };
+    if (Number.isInteger(selectedDifficulty) && selectedDifficulty >= 1 && selectedDifficulty <= 5) {
+      args.requested_difficulty = selectedDifficulty;
+    }
+    return callPlugin('study_generate_targeted_question', args);
+  };
   let data;
   try {
     data = await requestQuestion(context.selection_context_id);

@@ -169,6 +169,8 @@
     "ui.practice.reason.blocked_diagnostic":  "Diagnóstico de pré-requisitos",
     "ui.practice.empty_question":  "Generate a practice question to begin.",
     "ui.practice.difficulty_fmt":  "Difficulty {difficulty}",
+    "ui.practice.difficulty_label":  "Dificuldade",
+    "ui.practice.difficulty_auto":  "Automática",
     "ui.practice.new_attempt":  "New attempt",
     "ui.practice.feedback_title":  "Feedback",
     "ui.practice.mastery_delta_fmt":  "Mastery {before} -> {after}",
