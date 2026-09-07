@@ -6,6 +6,8 @@ from typing import Any
 
 import pytest
 
+# isort: split
+
 from adaptive_learning.cognitive_policy import (
     CognitiveIntentPolicy,
     question_plan_ownership_fingerprint,
