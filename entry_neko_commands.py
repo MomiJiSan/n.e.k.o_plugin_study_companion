@@ -197,7 +197,12 @@ class _NekoCommandsMixin:
                 self._dispatch_neko_command_messages(delta, loop)
 
             watcher.subscribe(on="add")(_on_messages_added)
-            watcher.start()
+            # The host watcher currently exposes a synchronous lifecycle API.
+            # Calling it from the plugin command loop is rejected because the
+            # subscribe request would block the same loop that receives its
+            # response. Keep the watcher bound to this owner loop, but perform
+            # the blocking handshake in a worker thread.
+            await asyncio.to_thread(watcher.start)
         except Exception as exc:
             self.logger.warning(
                 "startup: failed to subscribe {} via messages bus: {}",
@@ -266,7 +271,7 @@ class _NekoCommandsMixin:
             stop = getattr(watcher, "stop", None)
             if callable(stop):
                 try:
-                    stop()
+                    await asyncio.to_thread(stop)
                 except Exception as exc:
                     self.logger.warning(
                         "shutdown: failed to stop {} messages bus watcher: {}",
