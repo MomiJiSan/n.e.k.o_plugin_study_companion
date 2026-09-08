@@ -120,6 +120,7 @@ def _exposure(
         "difficulty_bucket": "medium",
         "strategy_family": "compare_correct_wrong_steps",
         "comparison_scope_id": "chain.omit-inner.repair",
+        "comparison_family_id": "chain.omit-inner.repair.v1",
         "baseline": True,
         "strategy_determined_before_commit": True,
         "provenance_complete": True,
@@ -217,6 +218,54 @@ def test_schema_is_additive_and_contains_no_answer_prompt_or_token_columns() -> 
         } & tables
     finally:
         store.close()
+
+
+def test_schema_migrates_pre_comparison_family_exposures_without_guessing() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        """
+        CREATE TABLE cognitive_strategy_exposures (
+            exposure_id TEXT PRIMARY KEY,
+            topic_id TEXT NOT NULL,
+            hypothesis_code TEXT NOT NULL,
+            question_family_id TEXT NOT NULL,
+            difficulty_bucket TEXT NOT NULL DEFAULT '',
+            root_fact_seq INTEGER NOT NULL,
+            source_id TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO cognitive_strategy_exposures(
+            exposure_id, topic_id, hypothesis_code, question_family_id,
+            difficulty_bucket, root_fact_seq, source_id
+        ) VALUES ('old-exposure', 'calculus.chain_rule',
+                  'omit_inner_derivative', 'chain.legacy', 'medium', 1,
+                  'old-source')
+        """
+    )
+
+    strategy.create_cognitive_strategy_schema(connection)
+
+    columns = {
+        str(row["name"])
+        for row in connection.execute(
+            "PRAGMA table_info(cognitive_strategy_exposures)"
+        ).fetchall()
+    }
+    migrated = connection.execute(
+        """
+        SELECT comparison_family_id
+        FROM cognitive_strategy_exposures
+        WHERE exposure_id = 'old-exposure'
+        """
+    ).fetchone()
+    assert "comparison_family_id" in columns
+    assert migrated is not None
+    assert migrated["comparison_family_id"] == ""
+    connection.close()
 
 
 def test_exposure_requires_committed_provenance_and_is_immutable_idempotent() -> None:
@@ -460,6 +509,7 @@ def test_capture_links_repair_transfer_episode_and_retention_append_only() -> No
                 question_family_id="chain.cross-form.transfer",
                 strategy_family="alternate_representation",
                 comparison_scope_id="chain.omit-inner.transfer",
+                comparison_family_id="chain.omit-inner.transfer.v1",
                 source_id=transfer_question,
             ),
         )
@@ -655,6 +705,7 @@ def test_committed_replacement_links_new_exposure_without_rewriting_old_history(
                         "difficulty_bucket": "3",
                         "strategy_family": "complete_steps",
                         "comparison_scope_id": "chain.omit-inner.repair",
+                        "comparison_family_id": "chain.omit-inner.repair.v1",
                         "baseline": True,
                         "answer_window_expires_at": "2026-09-09T11:00:00Z",
                     },

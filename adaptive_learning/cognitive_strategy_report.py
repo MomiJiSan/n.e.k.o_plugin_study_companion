@@ -16,12 +16,12 @@ from datetime import datetime, timezone
 from fractions import Fraction
 from typing import Any, cast
 
-REPORT_VERSION = "cognitive-strategy-report-v1"
+REPORT_VERSION = "cognitive-strategy-report-v2"
 ENDPOINTS = ("immediate", "transfer", "retention")
 STRATUM_FIELDS = (
     "topic_id",
     "hypothesis_id",
-    "question_family_id",
+    "comparison_family_id",
     "difficulty_bucket",
     "hint_state",
     "version_set_id",
@@ -221,6 +221,12 @@ def _catalog_entry_matches(
         return False
     if _text(entry.get("hypothesis_code")) not in {"", _hypothesis(record)}:
         return False
+    entry_comparison_family = _text(entry.get("comparison_family_id"))
+    if (
+        not entry_comparison_family
+        or entry_comparison_family != _text(record.get("comparison_family_id"))
+    ):
+        return False
     scope = entry.get("comparison_scope", entry.get("scope", {}))
     if isinstance(scope, Mapping):
         for field, expected in scope.items():
@@ -275,6 +281,7 @@ def _base_reasons(
         "strategy_version",
         "topic_id",
         "question_family_id",
+        "comparison_family_id",
         "learner_id",
     )
     if (
@@ -476,7 +483,7 @@ def _stratum(record: Mapping[str, Any], version_set_id: str) -> tuple[str, ...]:
     return (
         _text(record.get("topic_id")),
         _hypothesis(record),
-        _text(record.get("question_family_id")),
+        _text(record.get("comparison_family_id")),
         _text(record.get("difficulty_bucket", record.get("difficulty"))),
         _hint_state(record),
         version_set_id,

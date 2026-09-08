@@ -39,6 +39,7 @@ def test_active_delivery_freezes_reviewed_strategy_only_when_shadow_enabled(
         "difficulty_bucket": "3",
         "strategy_family": "complete_steps",
         "comparison_scope_id": "chain.omit-inner.repair",
+        "comparison_family_id": "chain.omit-inner.repair.v1",
         "baseline": True,
         "eligible_for_repair_attribution": True,
         "answer_window_expires_at": enabled_commit["metadata"][

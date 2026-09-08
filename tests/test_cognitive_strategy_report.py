@@ -32,6 +32,7 @@ def _catalog() -> list[dict[str, object]]:
             "catalog_version": CATALOG_VERSION,
             "version_set_id": VERSION_SET_ID,
             "baseline": True,
+            "comparison_family_id": "chain.omit-inner.repair.v1",
         },
         {
             "strategy_id": "fill_step",
@@ -39,6 +40,7 @@ def _catalog() -> list[dict[str, object]]:
             "catalog_version": CATALOG_VERSION,
             "version_set_id": VERSION_SET_ID,
             "baseline": False,
+            "comparison_family_id": "chain.omit-inner.repair.v1",
         },
     ]
 
@@ -67,6 +69,7 @@ def _exposure(
         "hypothesis_id": "omit_inner_derivative",
         "episode_id": f"episode-{index:03d}",
         "question_family_id": "chain.common",
+        "comparison_family_id": "chain.omit-inner.repair.v1",
         "difficulty_bucket": "2",
         "hint_state": "none",
         "strategy_id": strategy_id,
@@ -154,6 +157,42 @@ def test_report_is_replay_stable_and_compares_each_endpoint_separately() -> None
         assert first["endpoints"][endpoint]["aggregate_comparisons"][0][
             "effect"
         ]["value"] == 0.25
+
+
+def test_comparison_family_groups_reviewed_strategies_across_delivery_families() -> None:
+    baseline = [_exposure(index, success=index < 10) for index in range(20)]
+    alternate = [
+        _exposure(index + 30, strategy_id="fill_step", success=index < 15)
+        for index in range(20)
+    ]
+    for exposure in baseline:
+        exposure["question_family_id"] = "chain.cos-cube.fill-factor"
+    for exposure in alternate:
+        exposure["question_family_id"] = "chain.sin-power.minimal-change"
+
+    report = build_cognitive_strategy_report(_snapshot(baseline + alternate))
+
+    immediate = report["endpoints"]["immediate"]
+    assert len(immediate["strata"]) == 1
+    assert immediate["strata"][0]["stratum"]["comparison_family_id"] == (
+        "chain.omit-inner.repair.v1"
+    )
+    assert immediate["strata"][0]["comparison_status"] == "comparable"
+    assert immediate["strata"][0]["comparisons"][0]["effect"]["value"] == 0.25
+
+
+def test_missing_comparison_family_is_excluded_without_retroactive_guessing() -> None:
+    exposure = _exposure(1)
+    exposure["comparison_family_id"] = ""
+
+    report = build_cognitive_strategy_report(_snapshot([exposure]))
+
+    for endpoint in ("immediate", "transfer", "retention"):
+        payload = report["endpoints"][endpoint]
+        assert payload["status_counts"]["excluded"] == 1
+        assert payload["exclusion_reason_counts"]["incomplete_chain"] == 1
+        assert payload["exclusion_reason_counts"]["invalid_catalog"] == 1
+        assert payload["strata"] == []
 
 
 def test_under_twenty_is_insufficient_and_missing_has_sensitivity_bounds() -> None:
@@ -278,33 +317,34 @@ def test_cli_reads_database_in_query_only_mode_and_freezes_snapshot(tmp_path: Pa
             return connection
 
     exposure_payload = {
-            "event_type": "question_committed",
-            "question_id": "question-database-report",
-            "strategy_id": "chain.omit-inner.complete-steps",
-            "strategy_version": "v1",
-            "catalog_version": "cognitive-strategy-catalog-v1",
-            "version_set_id": VERSION_SET_ID,
-            "question_purpose": "repair",
-            "topic_id": "calculus.chain_rule",
-            "learner_id": "local",
-            "hypothesis_id": "calculus.chain_rule:omit_inner_derivative",
-            "hypothesis_code": "omit_inner_derivative",
-            "decision_id": "decision-database-report",
-            "blueprint_id": "chain.omit-inner.fill-factor.v1",
-            "diagnostic_validation_id": "validation-database-report",
-            "policy_version": "cognitive-intent-policy-v2",
-            "validator_version": "cognitive-question-validator-v2.1-1",
-            "question_family_id": "chain.common",
-            "difficulty_bucket": "3",
-            "strategy_family": "complete_steps",
-            "comparison_scope_id": "chain.omit-inner.repair",
-            "baseline": True,
-            "strategy_determined_before_commit": True,
-            "provenance_complete": True,
-            "source_id": "question-database-report",
-            "root_fact_seq": 1,
-            "occurred_at": "2026-09-08T08:00:00Z",
-            "answer_window_expires_at": "2026-09-09T08:00:00Z",
+        "event_type": "question_committed",
+        "question_id": "question-database-report",
+        "strategy_id": "chain.omit-inner.complete-steps",
+        "strategy_version": "v1",
+        "catalog_version": "cognitive-strategy-catalog-v1",
+        "version_set_id": VERSION_SET_ID,
+        "question_purpose": "repair",
+        "topic_id": "calculus.chain_rule",
+        "learner_id": "local",
+        "hypothesis_id": "calculus.chain_rule:omit_inner_derivative",
+        "hypothesis_code": "omit_inner_derivative",
+        "decision_id": "decision-database-report",
+        "blueprint_id": "chain.omit-inner.fill-factor.v1",
+        "diagnostic_validation_id": "validation-database-report",
+        "policy_version": "cognitive-intent-policy-v2",
+        "validator_version": "cognitive-question-validator-v2.1-1",
+        "question_family_id": "chain.common",
+        "comparison_family_id": "chain.omit-inner.repair.v1",
+        "difficulty_bucket": "3",
+        "strategy_family": "complete_steps",
+        "comparison_scope_id": "chain.omit-inner.repair",
+        "baseline": True,
+        "strategy_determined_before_commit": True,
+        "provenance_complete": True,
+        "source_id": "question-database-report",
+        "root_fact_seq": 1,
+        "occurred_at": "2026-09-08T08:00:00Z",
+        "answer_window_expires_at": "2026-09-09T08:00:00Z",
     }
     exposure = insert_cognitive_strategy_exposure(
         _Store(),
