@@ -204,6 +204,106 @@ def test_cognitive_settings_replace_the_running_tracker(
     assert owner.cognitive_wake_calls == 1
 
 
+def test_strategy_collection_health_distinguishes_disabled_idle_and_collecting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(monkeypatch, "_strategy_collection_health")
+    entries = _load_status_entries(monkeypatch, package_name, models)
+    summary = {
+        "exposure_count": 0,
+        "repair_exposure_count": 0,
+        "baseline_repair_exposure_count": 0,
+        "alternate_repair_exposure_count": 0,
+        "fact_count": 0,
+        "latest_exposure_root_fact_seq": 0,
+        "latest_fact_root_fact_seq": 0,
+        "latest_exposure_at": "",
+        "latest_fact_at": "",
+        "repair_strategies": [],
+    }
+    owner = SimpleNamespace(
+        _cfg=models.StudyConfig(),
+        _store=SimpleNamespace(
+            get_cognitive_strategy_collection_summary=lambda: dict(summary)
+        ),
+        logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    disabled = entries._cognitive_strategy_collection_health_payload(owner)
+    assert disabled["status"] == "disabled"
+    assert disabled["enabled"] is False
+
+    owner._cfg = models.StudyConfig(
+        cognitive=models.CognitiveConfig(
+            projection_enabled=True,
+            read_mode="active",
+            intent_policy="on",
+            strategy_shadow_enabled=True,
+            strategy_rotation_enabled=True,
+        )
+    )
+    idle = entries._cognitive_strategy_collection_health_payload(owner)
+    assert idle["status"] == "idle"
+    assert idle["enabled"] is True
+    assert idle["strategies_meeting_minimum"] == 0
+
+    summary.update(
+        exposure_count=41,
+        repair_exposure_count=40,
+        baseline_repair_exposure_count=20,
+        alternate_repair_exposure_count=20,
+        fact_count=160,
+        repair_strategies=[
+            {
+                "strategy_id": "baseline",
+                "strategy_version": "v1",
+                "baseline": True,
+                "exposure_count": 20,
+            },
+            {
+                "strategy_id": "alternate",
+                "strategy_version": "v1",
+                "baseline": False,
+                "exposure_count": 20,
+            },
+        ],
+    )
+    collecting = entries._cognitive_strategy_collection_health_payload(owner)
+    assert collecting["status"] == "collecting"
+    assert collecting["strategies_meeting_minimum"] == 2
+
+
+def test_strategy_collection_health_fails_closed_without_leaking_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(monkeypatch, "_strategy_collection_degraded")
+    entries = _load_status_entries(monkeypatch, package_name, models)
+
+    def fail() -> None:
+        raise RuntimeError("database path and secret answer")
+
+    owner = SimpleNamespace(
+        _cfg=models.StudyConfig(),
+        _store=SimpleNamespace(get_cognitive_strategy_collection_summary=fail),
+        logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    payload = entries._cognitive_strategy_collection_health_payload(owner)
+
+    assert payload == {
+        "status": "degraded",
+        "enabled": False,
+        "gates": {
+            "projection_enabled": False,
+            "active_read_mode": False,
+            "intent_policy_on": False,
+            "shadow_enabled": False,
+            "rotation_enabled": False,
+        },
+        "error": "strategy_ledger_unavailable",
+    }
+
+
 def test_cognitive_setting_is_in_the_runtime_column_and_localized() -> None:
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     main = (ROOT / "static" / "main.js").read_text(encoding="utf-8")

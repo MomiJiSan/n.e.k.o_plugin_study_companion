@@ -1105,6 +1105,110 @@ def list_cognitive_strategy_facts(
     return [_row_dict(row) or {} for row in rows]
 
 
+def get_cognitive_strategy_collection_summary(self: object) -> dict[str, Any]:
+    """Return answer-free collection counts for operational health checks."""
+
+    conn = _read_conn(self)
+    has_cutoffs = conn.execute(
+        """
+        SELECT 1 FROM sqlite_master
+        WHERE type = 'table' AND name = 'cognitive_delete_cutoffs'
+        """
+    ).fetchone()
+    cutoff_join = (
+        """
+        LEFT JOIN cognitive_delete_cutoffs cutoffs
+          ON cutoffs.topic_id = exposures.topic_id
+         AND cutoffs.hypothesis_code = exposures.hypothesis_code
+        """
+        if has_cutoffs
+        else ""
+    )
+    visible_exposure = (
+        "exposures.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)"
+        if has_cutoffs
+        else "1 = 1"
+    )
+    visible_fact = (
+        "facts.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0) "
+        "AND exposures.root_fact_seq > COALESCE(cutoffs.delete_cutoff_seq, 0)"
+        if has_cutoffs
+        else "1 = 1"
+    )
+    exposure = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS exposure_count,
+            COALESCE(SUM(CASE WHEN exposures.question_purpose = 'repair' THEN 1 ELSE 0 END), 0)
+                AS repair_exposure_count,
+            COALESCE(SUM(CASE WHEN exposures.question_purpose = 'repair'
+                              AND exposures.baseline = 1 THEN 1 ELSE 0 END), 0)
+                AS baseline_repair_exposure_count,
+            COALESCE(SUM(CASE WHEN exposures.question_purpose = 'repair'
+                              AND exposures.baseline = 0 THEN 1 ELSE 0 END), 0)
+                AS alternate_repair_exposure_count,
+            COALESCE(MAX(exposures.root_fact_seq), 0) AS latest_exposure_root_fact_seq,
+            COALESCE(MAX(exposures.occurred_at), '') AS latest_exposure_at
+        FROM cognitive_strategy_exposures exposures
+        {cutoff_join}
+        WHERE {visible_exposure}
+        """
+    ).fetchone()
+    facts = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS fact_count,
+            COALESCE(MAX(facts.root_fact_seq), 0) AS latest_fact_root_fact_seq,
+            COALESCE(MAX(facts.occurred_at), '') AS latest_fact_at
+        FROM cognitive_strategy_exposure_facts facts
+        JOIN cognitive_strategy_exposures exposures
+          ON exposures.exposure_id = facts.exposure_id
+        {cutoff_join}
+        WHERE {visible_fact}
+        """
+    ).fetchone()
+    strategies = conn.execute(
+        f"""
+        SELECT exposures.strategy_id, exposures.strategy_version,
+               exposures.baseline, COUNT(*) AS exposure_count
+        FROM cognitive_strategy_exposures exposures
+        {cutoff_join}
+        WHERE exposures.question_purpose = 'repair'
+          AND {visible_exposure}
+        GROUP BY exposures.strategy_id, exposures.strategy_version, exposures.baseline
+        ORDER BY exposures.baseline DESC, exposures.strategy_id, exposures.strategy_version
+        """
+    ).fetchall()
+    exposure = exposure or {}
+    facts = facts or {}
+    return {
+        "exposure_count": int(exposure["exposure_count"] or 0),
+        "repair_exposure_count": int(exposure["repair_exposure_count"] or 0),
+        "baseline_repair_exposure_count": int(
+            exposure["baseline_repair_exposure_count"] or 0
+        ),
+        "alternate_repair_exposure_count": int(
+            exposure["alternate_repair_exposure_count"] or 0
+        ),
+        "fact_count": int(facts["fact_count"] or 0),
+        "latest_exposure_root_fact_seq": int(
+            exposure["latest_exposure_root_fact_seq"] or 0
+        ),
+        "latest_fact_root_fact_seq": int(facts["latest_fact_root_fact_seq"] or 0),
+        "latest_exposure_at": str(exposure["latest_exposure_at"] or ""),
+        "latest_fact_at": str(facts["latest_fact_at"] or ""),
+        "repair_strategies": [
+            {
+                "strategy_id": str(row["strategy_id"]),
+                "strategy_version": str(row["strategy_version"]),
+                "baseline": bool(row["baseline"]),
+                "exposure_count": int(row["exposure_count"]),
+            }
+            for row in strategies
+        ],
+    }
+
+
 def get_cognitive_strategy_exposure_snapshot(
     self: object,
     exposure_id: str,
@@ -1607,6 +1711,7 @@ __all__ = [
     "compute_cognitive_strategy_exposure_id",
     "create_cognitive_strategy_schema",
     "get_cognitive_strategy_exposure_snapshot",
+    "get_cognitive_strategy_collection_summary",
     "insert_cognitive_strategy_exposure",
     "insert_cognitive_strategy_fact",
     "list_cognitive_strategy_exposures",

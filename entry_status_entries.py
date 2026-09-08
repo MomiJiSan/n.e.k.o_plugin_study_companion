@@ -46,7 +46,7 @@ def _settings_config_payload(config: StudyConfig) -> dict:
     }
 
 
-def _communication_status_payload(owner) -> dict[str, bool | int]:
+def _communication_status_payload(owner) -> dict[str, object]:
     config = owner._cfg.communication
     bus = getattr(owner, "_event_bus", None)
     transport = getattr(owner, "_neko_command_transport", None)
@@ -60,9 +60,60 @@ def _communication_status_payload(owner) -> dict[str, bool | int]:
         "command_subscription_active": bool(
             watcher is not None or (transport is not None and handler is not None)
         ),
+        "command_subscription_status": str(
+            getattr(owner, "_neko_command_subscription_status", "inactive")
+        ),
+        "command_subscription_error": str(
+            getattr(owner, "_neko_command_subscription_error", "")
+        ),
         "command_worker_active": bool(worker is not None and not worker.done()),
         "events_emitted": int(bus.emit_count if bus is not None else 0),
         "events_blocked": int(bus.block_count if bus is not None else 0),
+    }
+
+
+def _cognitive_strategy_collection_health_payload(owner) -> dict[str, object]:
+    config = owner._cfg.cognitive
+    gates = {
+        "projection_enabled": bool(config.projection_enabled),
+        "active_read_mode": config.read_mode == "active",
+        "intent_policy_on": config.intent_policy == "on",
+        "shadow_enabled": bool(config.strategy_shadow_enabled),
+        "rotation_enabled": bool(config.strategy_rotation_enabled),
+    }
+    enabled = all(
+        gates[key]
+        for key in (
+            "projection_enabled",
+            "active_read_mode",
+            "intent_policy_on",
+            "shadow_enabled",
+        )
+    )
+    try:
+        summary = owner._store.get_cognitive_strategy_collection_summary()
+    except Exception as exc:
+        owner.logger.warning("cognitive strategy collection health unavailable: {}", exc)
+        return {
+            "status": "degraded",
+            "enabled": enabled,
+            "gates": gates,
+            "error": "strategy_ledger_unavailable",
+        }
+    exposure_count = int(summary.get("exposure_count") or 0)
+    strategies = list(summary.get("repair_strategies") or [])
+    minimum = 20
+    return {
+        "status": "disabled" if not enabled else "collecting" if exposure_count else "idle",
+        "enabled": enabled,
+        "gates": gates,
+        **summary,
+        "minimum_exposures_per_strategy": minimum,
+        "strategies_meeting_minimum": sum(
+            int(item.get("exposure_count") or 0) >= minimum
+            for item in strategies
+            if isinstance(item, dict)
+        ),
     }
 
 
@@ -221,9 +272,10 @@ class _StatusEntriesMixin:
     async def _close_communication_runtime(self, event_bus) -> None:
         first_error: BaseException | None = None
         for cleanup in (
-            event_bus.close,
+            self._cancel_neko_command_subscription_task,
             self._unsubscribe_neko_commands,
             self._cancel_command_worker,
+            event_bus.close,
         ):
             try:
                 await cleanup()
@@ -244,8 +296,8 @@ class _StatusEntriesMixin:
             event_bus = StudyEventBus(plugin_ctx=self.ctx)
             self._event_bus = event_bus
             try:
-                await self._subscribe_neko_commands()
                 self._start_command_worker()
+                self._schedule_neko_command_subscription()
                 self._start_review_due_task()
             except BaseException:
                 if self._event_bus is event_bus:
@@ -603,6 +655,8 @@ class _StatusEntriesMixin:
             "solution_narration_enabled",
             "available",
             "command_subscription_active",
+            "command_subscription_status",
+            "command_subscription_error",
             "command_worker_active",
             "events_emitted",
             "events_blocked",
@@ -610,6 +664,38 @@ class _StatusEntriesMixin:
     )
     async def study_neko_communication_status(self, **_):
         return Ok(_communication_status_payload(self))
+
+    @plugin_entry(
+        id="study_cognitive_strategy_collection_health",
+        name=tr(
+            "entries.cognitive_strategy_collection_health.name",
+            default="Cognitive Strategy Collection Health",
+        ),
+        description=tr(
+            "entries.cognitive_strategy_collection_health.description",
+            default="Return answer-free V3 strategy collection health and exposure counts.",
+        ),
+        input_schema={"type": "object", "properties": {}},
+        llm_result_fields=[
+            "status",
+            "enabled",
+            "gates",
+            "exposure_count",
+            "repair_exposure_count",
+            "baseline_repair_exposure_count",
+            "alternate_repair_exposure_count",
+            "fact_count",
+            "repair_strategies",
+            "minimum_exposures_per_strategy",
+            "strategies_meeting_minimum",
+            "error",
+        ],
+    )
+    async def study_cognitive_strategy_collection_health(self, **_):
+        payload = await asyncio.to_thread(
+            _cognitive_strategy_collection_health_payload, self
+        )
+        return Ok(payload)
 
     @ui.action()
     @plugin_entry(

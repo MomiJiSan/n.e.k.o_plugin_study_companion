@@ -404,6 +404,9 @@ def _owner(module: ModuleType, calls: list[str]):
     async def unsubscribe() -> None:
         calls.append("commands.unsubscribe")
 
+    async def cancel_subscription() -> None:
+        calls.append("commands.subscription.cancel")
+
     async def cancel_pomodoro() -> None:
         calls.append("pomodoro.cancel")
 
@@ -411,11 +414,34 @@ def _owner(module: ModuleType, calls: list[str]):
         calls.append("local_model.shutdown")
 
     owner._unsubscribe_neko_commands = unsubscribe
+    owner._cancel_neko_command_subscription_task = cancel_subscription
     owner._cancel_pomodoro_watcher = cancel_pomodoro
     owner._shutdown_local_model_manager = shutdown_local_model
     owner.clear_list_actions = lambda: calls.append("actions.clear")
     owner.unregister_dynamic_entry = lambda entry_id: calls.append(f"entry.unregister:{entry_id}")
     return owner
+
+
+@pytest.mark.asyncio
+async def test_command_loop_start_owns_downlink_dependent_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    owner = _owner(module, [])
+    calls: list[str] = []
+    owner._start_review_due_task = lambda: calls.append("review.start")
+    owner._start_command_worker = lambda: calls.append("commands.worker.start")
+    owner._schedule_neko_command_subscription = lambda: calls.append(
+        "commands.subscription.schedule"
+    )
+
+    await owner._on_command_loop_start()
+
+    assert calls == [
+        "review.start",
+        "commands.worker.start",
+        "commands.subscription.schedule",
+    ]
 
 
 @pytest.mark.asyncio
