@@ -193,6 +193,30 @@ def test_question_and_attempt_events_are_idempotent_and_dirty_once(
         store.close()
 
 
+def test_intervention_reader_can_bound_results_from_the_newest_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    Store = _load_store(monkeypatch, "_cognitive_intervention_newest_first")
+    store = _store(tmp_path, Store)
+    try:
+        older = _event("event-older", "intent_proposed")
+        newer = {
+            **_event("event-newer", "intent_proposed"),
+            "created_at": "2026-09-02T09:00:00Z",
+        }
+        store.record_cognitive_intervention_event(older)
+        store.record_cognitive_intervention_event(newer)
+
+        assert store.list_cognitive_intervention_events(limit=1)[0][
+            "event_id"
+        ] == "event-older"
+        assert store.list_cognitive_intervention_events(
+            newest_first=True, limit=1
+        )[0]["event_id"] == "event-newer"
+    finally:
+        store.close()
+
+
 def test_transfer_question_accepts_supported_evidence_after_provisional_resolution(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

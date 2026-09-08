@@ -466,6 +466,7 @@ class CognitiveConfig:
     ui_enabled: bool = False
     retention_enabled: bool = False
     strategy_shadow_enabled: bool = False
+    strategy_rotation_enabled: bool = False
     knowledge_graph_enabled: bool = True
     version_set: str = DEFAULT_COGNITIVE_VERSION_SET
     # Deprecated compatibility input/output. New code selects the projection
@@ -495,6 +496,11 @@ class CognitiveConfig:
         self.strategy_shadow_enabled = (
             self.strategy_shadow_enabled
             if isinstance(self.strategy_shadow_enabled, bool)
+            else False
+        )
+        self.strategy_rotation_enabled = (
+            self.strategy_rotation_enabled
+            if isinstance(self.strategy_rotation_enabled, bool)
             else False
         )
         self.knowledge_graph_enabled = (
@@ -527,6 +533,7 @@ class CognitiveConfig:
             self.ui_enabled = False
             self.retention_enabled = False
             self.strategy_shadow_enabled = False
+            self.strategy_rotation_enabled = False
         if not isinstance(self.supported_topics, (list, tuple)):
             self.supported_topics = ()
         else:
@@ -557,6 +564,7 @@ def build_cognitive_config(raw: Mapping[str, Any]) -> CognitiveConfig:
         ui_enabled=cognitive.get("ui_enabled", False),
         retention_enabled=cognitive.get("retention_enabled", False),
         strategy_shadow_enabled=cognitive.get("strategy_shadow_enabled", False),
+        strategy_rotation_enabled=cognitive.get("strategy_rotation_enabled", False),
         knowledge_graph_enabled=cognitive.get("knowledge_graph_enabled", True),
         version_set=cognitive.get(
             "version_set",

@@ -118,6 +118,7 @@ class CognitiveProjectionStore(Protocol):
         decision_id: str | None = None,
         model_version: str | None = None,
         event_types: Sequence[str] | None = None,
+        newest_first: bool = False,
         limit: int = 200,
     ) -> list[dict[str, Any]]: ...
 

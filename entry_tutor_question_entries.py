@@ -44,6 +44,9 @@ from .adaptive_learning.cognitive_retention import (
 from .adaptive_learning.cognitive_strategy_catalog import (
     COGNITIVE_STRATEGY_CATALOG_V1,
 )
+from .adaptive_learning.cognitive_strategy_rotation import (
+    apply_guarded_strategy_rotation,
+)
 from .adaptive_learning.cognitive_versions import get_cognitive_version_set
 from .adaptive_learning.learner_state import tracker_list_mastery
 from .adaptive_learning.planner import (
@@ -235,6 +238,48 @@ def _v3_strategy_exposure_metadata(
         "eligible_for_repair_attribution": entry.eligible_for_repair_attribution,
         "answer_window_expires_at": answer_window_expires_at,
     }
+
+
+def _retry_strategy_rotation_assignment(
+    decision: CognitivePolicyDecision,
+    events: object,
+) -> dict[str, object] | None:
+    """Return the latest failed repair's verified assignment, if any."""
+
+    hypothesis = decision.selected_hypothesis
+    if hypothesis is None or not isinstance(events, list):
+        return None
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_hypothesis = event.get("hypothesis_target")
+        if (
+            not isinstance(event_hypothesis, dict)
+            or str(event_hypothesis.get("hypothesis_id") or "").strip()
+            != hypothesis.hypothesis_id
+        ):
+            continue
+        if (
+            str(event.get("learning_intent") or "").strip()
+            != "misconception_repair"
+            or str(event.get("evaluation_verdict") or "").strip()
+            not in {"partial", "wrong", "dont_know"}
+        ):
+            return None
+        metadata = event.get("metadata")
+        assignment = (
+            metadata.get("strategy_rotation_assignment")
+            if isinstance(metadata, dict)
+            else None
+        )
+        if not isinstance(assignment, dict):
+            return None
+        if str(event.get("repair_strategy") or "").strip() != str(
+            assignment.get("repair_strategy") or ""
+        ).strip():
+            return None
+        return dict(assignment)
+    return None
 
 
 async def _record_cognitive_abandonment_best_effort(
@@ -1465,6 +1510,7 @@ class _TutorQuestionEntriesMixin:
         plan = original_plan
         prepared_retention: PreparedRetentionQuestion | None = None
         prepared_cognitive: PreparedCognitiveIntervention | None = None
+        strategy_rotation_metadata: dict[str, object] = {}
         cognitive_validation = None
         repair_question_family_id = ""
         cognitive_fallback = bool(
@@ -1592,6 +1638,58 @@ class _TutorQuestionEntriesMixin:
                             CognitivePolicyDecision,
                             await asyncio.to_thread(propose, original_plan),
                         )
+                    if not development_source:
+                        tracker = getattr(self, "_knowledge_tracker", None)
+                        try:
+                            rotation_enabled = bool(
+                                getattr(
+                                    tracker,
+                                    "cognitive_strategy_rotation_enabled",
+                                    False,
+                                )
+                            )
+                            retry_assignment = None
+                            hypothesis = decision.selected_hypothesis
+                            if rotation_enabled and hypothesis is not None:
+                                list_events = getattr(
+                                    getattr(self, "_store", None),
+                                    "list_cognitive_intervention_events",
+                                    None,
+                                )
+                                if not callable(list_events):
+                                    raise RuntimeError(
+                                        "cognitive intervention reader is unavailable"
+                                    )
+                                raw_prior_events = await asyncio.to_thread(
+                                    list_events,
+                                    topic_id=hypothesis.topic_id,
+                                    hypothesis_code=hypothesis.code,
+                                    model_version=hypothesis.model_version,
+                                    event_types=("attempt_committed",),
+                                    newest_first=True,
+                                    limit=200,
+                                )
+                                retry_assignment = (
+                                    _retry_strategy_rotation_assignment(
+                                        decision,
+                                        raw_prior_events,
+                                    )
+                                )
+                            decision, rotation_assignment = (
+                                apply_guarded_strategy_rotation(
+                                    decision,
+                                    enabled=rotation_enabled,
+                                    retry_assignment=retry_assignment,
+                                )
+                            )
+                            if rotation_assignment.applied:
+                                strategy_rotation_metadata = (
+                                    rotation_assignment.to_metadata()
+                                )
+                        except Exception:
+                            # Rotation is optional.  Its failure must retain
+                            # the already accepted V2.1 baseline decision.
+                            strategy_rotation_metadata = {}
                     action_candidate = getattr(decision, "action_candidate", None)
                     if (
                         action_candidate is None
@@ -1655,9 +1753,21 @@ class _TutorQuestionEntriesMixin:
                         if not callable(record_event):
                             candidate = None
                         else:
+                            proposal_payload = {
+                                **asdict(candidate.proposal_event),
+                                **development_audit,
+                            }
+                            if strategy_rotation_metadata:
+                                proposal_metadata = dict(
+                                    proposal_payload.get("metadata") or {}
+                                )
+                                proposal_metadata["strategy_rotation_assignment"] = (
+                                    strategy_rotation_metadata
+                                )
+                                proposal_payload["metadata"] = proposal_metadata
                             await asyncio.to_thread(
                                 record_event,
-                                {**asdict(candidate.proposal_event), **development_audit},
+                                proposal_payload,
                             )
                     if candidate is not None and candidate.active:
                         blueprint = candidate.blueprint
@@ -2078,13 +2188,18 @@ class _TutorQuestionEntriesMixin:
                     prepared_cognitive,
                     committed_at=str(event_payload.get("created_at") or ""),
                 )
-                if strategy_metadata:
+                if strategy_metadata or strategy_rotation_metadata:
                     event_metadata = dict(event_payload.get("metadata") or {})
                     if replacement_for_question_id:
                         event_metadata["replacement_for_question_id"] = (
                             replacement_for_question_id
                         )
-                    event_metadata["strategy_exposure"] = strategy_metadata
+                    if strategy_metadata:
+                        event_metadata["strategy_exposure"] = strategy_metadata
+                    if strategy_rotation_metadata:
+                        event_metadata["strategy_rotation_assignment"] = (
+                            strategy_rotation_metadata
+                        )
                     event_payload["metadata"] = event_metadata
                 await asyncio.to_thread(
                     record_event,

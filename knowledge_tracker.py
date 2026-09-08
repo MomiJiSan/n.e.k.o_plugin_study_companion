@@ -727,6 +727,13 @@ class KnowledgeTracker:
             )
             is True
         )
+        self._cognitive_strategy_rotation_enabled = bool(
+            self._cognitive_strategy_shadow_enabled
+            and _cognitive_config_value(
+                cognitive_config, "strategy_rotation_enabled", False
+            )
+            is True
+        )
         self._cognitive_state_reader = (
             CognitiveStateReader(store, model_version=cognitive_model_version)
             if self._cognitive_projection_enabled
@@ -829,6 +836,12 @@ class KnowledgeTracker:
         """Whether V3 may record delivered-strategy facts for offline analysis."""
 
         return self._cognitive_strategy_shadow_enabled
+
+    @property
+    def cognitive_strategy_rotation_enabled(self) -> bool:
+        """Whether V3 may rotate the one frozen repair comparison scope."""
+
+        return self._cognitive_strategy_rotation_enabled
 
     async def project_cognitive_pending(self, *, limit: int = 100) -> dict[str, Any]:
         projector = self._cognitive_projector
