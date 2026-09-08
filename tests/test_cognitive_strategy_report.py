@@ -17,6 +17,7 @@ from store_cognitive_strategy import (
     insert_cognitive_strategy_fact,
 )
 
+# isort: split
 from tools.cognitive_strategy_report import main
 
 CATALOG_VERSION = "strategy-catalog-v1"
