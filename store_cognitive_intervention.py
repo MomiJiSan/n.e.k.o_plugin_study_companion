@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .store_cognitive import _mark_topic_dirty
+from .store_cognitive_strategy import capture_cognitive_strategy_intervention
 from .store_common import sqlite3
 
 _EVENT_TYPES = frozenset(
@@ -180,6 +181,7 @@ def _row_to_event(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         session_id = ""
     return {
         "event_seq": int(row["event_seq"]),
+        "root_fact_seq": int(row["root_fact_seq"]),
         "event_id": str(row["event_id"]),
         "event_type": str(row["event_type"]),
         "decision_id": str(row["decision_id"]),
@@ -431,6 +433,19 @@ def insert_cognitive_intervention_event(
     result = _row_to_event(self, row)
     if result is None:
         raise RuntimeError("cognitive intervention event write failed")
+    conn.execute("SAVEPOINT cognitive_strategy_shadow")
+    try:
+        result["strategy_shadow"] = capture_cognitive_strategy_intervention(
+            self, conn, result
+        )
+        conn.execute("RELEASE SAVEPOINT cognitive_strategy_shadow")
+    except Exception as exc:
+        conn.execute("ROLLBACK TO SAVEPOINT cognitive_strategy_shadow")
+        conn.execute("RELEASE SAVEPOINT cognitive_strategy_shadow")
+        result["strategy_shadow"] = {
+            "recorded": False,
+            "reason": f"strategy_shadow_write_failed:{type(exc).__name__}",
+        }
     return result
 
 

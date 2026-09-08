@@ -90,6 +90,16 @@ from .store_cognitive_retention import (
     record_cognitive_obligation_control,
     release_cognitive_obligation_claim,
 )
+from .store_cognitive_strategy import (
+    build_cognitive_strategy_report_snapshot,
+    get_cognitive_strategy_exposure_snapshot,
+    list_cognitive_strategy_exposures,
+    list_cognitive_strategy_facts,
+    rebuild_cognitive_strategy_from_persisted_sources,
+    rebuild_cognitive_strategy_ledger,
+    record_cognitive_strategy_exposure,
+    record_cognitive_strategy_fact,
+)
 from .store_fsrs import (
     append_mastery_snapshot,
     append_review_log,
@@ -1924,6 +1934,14 @@ StudyStore.record_cognitive_obligation_control = record_cognitive_obligation_con
 StudyStore.apply_cognitive_obligation_control = apply_cognitive_obligation_control  # type: ignore[method-assign]
 StudyStore.list_cognitive_monitoring_episodes = list_cognitive_monitoring_episodes  # type: ignore[method-assign]
 StudyStore.list_cognitive_learning_obligations = list_cognitive_learning_obligations  # type: ignore[method-assign]
+StudyStore.record_cognitive_strategy_exposure = record_cognitive_strategy_exposure  # type: ignore[method-assign]
+StudyStore.record_cognitive_strategy_fact = record_cognitive_strategy_fact  # type: ignore[method-assign]
+StudyStore.list_cognitive_strategy_exposures = list_cognitive_strategy_exposures  # type: ignore[method-assign]
+StudyStore.list_cognitive_strategy_facts = list_cognitive_strategy_facts  # type: ignore[method-assign]
+StudyStore.get_cognitive_strategy_exposure_snapshot = get_cognitive_strategy_exposure_snapshot  # type: ignore[method-assign]
+StudyStore.rebuild_cognitive_strategy_ledger = rebuild_cognitive_strategy_ledger  # type: ignore[method-assign]
+StudyStore.rebuild_cognitive_strategy_from_persisted_sources = rebuild_cognitive_strategy_from_persisted_sources  # type: ignore[method-assign]
+StudyStore.build_cognitive_strategy_report_snapshot = build_cognitive_strategy_report_snapshot  # type: ignore[method-assign]
 StudyStore.list_mastery_projection_queue = list_mastery_projection_queue  # type: ignore[method-assign]
 StudyStore.claim_mastery_projections = claim_mastery_projections  # type: ignore[method-assign]
 StudyStore.mark_mastery_projection_failed = mark_mastery_projection_failed  # type: ignore[method-assign]

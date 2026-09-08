@@ -704,6 +704,9 @@ class KnowledgeTracker:
         else:
             effective_intent_mode = requested_intent_mode
         self._cognitive_model_version = cognitive_model_version
+        self._cognitive_version_set_id = (
+            cognitive_version_set.name if cognitive_version_set is not None else ""
+        )
         self._cognitive_extractor_version = cognitive_extractor_version
         self._cognitive_intent_mode = effective_intent_mode
         self._cognitive_retention_enabled = bool(
@@ -712,6 +715,15 @@ class KnowledgeTracker:
             and effective_intent_mode == "on"
             and _cognitive_config_value(
                 cognitive_config, "retention_enabled", False
+            )
+            is True
+        )
+        self._cognitive_strategy_shadow_enabled = bool(
+            self._cognitive_projection_enabled
+            and self._cognitive_read_mode == "active"
+            and effective_intent_mode == "on"
+            and _cognitive_config_value(
+                cognitive_config, "strategy_shadow_enabled", False
             )
             is True
         )
@@ -811,6 +823,12 @@ class KnowledgeTracker:
     @property
     def cognitive_projection_enabled(self) -> bool:
         return self._cognitive_projection_enabled and self._cognitive_projector is not None
+
+    @property
+    def cognitive_strategy_shadow_enabled(self) -> bool:
+        """Whether V3 may record delivered-strategy facts for offline analysis."""
+
+        return self._cognitive_strategy_shadow_enabled
 
     async def project_cognitive_pending(self, *, limit: int = 100) -> dict[str, Any]:
         projector = self._cognitive_projector

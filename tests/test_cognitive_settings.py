@@ -98,6 +98,7 @@ def test_cognitive_settings_round_trip_all_runtime_modes(
             "intent_policy": "shadow",
             "ui_enabled": False,
             "retention_enabled": False,
+            "strategy_shadow_enabled": False,
             "knowledge_graph_enabled": True,
             "version_set": "cognitive-v2.1-1",
             "model_version": "cognitive-v2.1-1",

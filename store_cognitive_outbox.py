@@ -27,6 +27,10 @@ from .store_cognitive_retention import (
     apply_cognitive_retention_disposition,
     insert_certified_transfer_episode,
 )
+from .store_cognitive_strategy import (
+    capture_cognitive_strategy_episode,
+    capture_cognitive_strategy_retention,
+)
 from .store_common import sqlite3
 
 _FORBIDDEN_PAYLOAD_KEYS = frozenset(
@@ -418,6 +422,46 @@ def _apply_retention_delivery(
             metadata=metadata,
             _connection=conn,
         )
+        interval_row = conn.execute(
+            """
+            SELECT (julianday(?) - julianday(opened_at)) * 24.0 AS interval_hours
+            FROM cognitive_monitoring_episodes WHERE episode_id = ?
+            """,
+            (str(attempt["submitted_at"] or ""), str(context["episode_id"])),
+        ).fetchone()
+        interval_hours = (
+            None
+            if interval_row is None or interval_row["interval_hours"] is None
+            else float(interval_row["interval_hours"])
+        )
+        independence_errors = {
+            "transfer_question_family_reused",
+            "retention_question_family_reused",
+            "independence_group_reused",
+        }
+        conn.execute("SAVEPOINT cognitive_strategy_retention")
+        try:
+            capture_cognitive_strategy_retention(
+                self,
+                conn,
+                episode_id=str(context["episode_id"]),
+                attempt_id=attempt_id,
+                outcome=validation.disposition,
+                occurred_at=str(attempt["submitted_at"] or ""),
+                evaluator_type=str(attempt["evaluator_type"] or ""),
+                evaluator_version=str(attempt["evaluator_version"] or ""),
+                evaluator_confidence=confidence,
+                used_hint=used_hint,
+                certified=validation.certified,
+                interval_hours=interval_hours,
+                independent_family=not bool(
+                    independence_errors.intersection(validation.reasons)
+                ),
+            )
+            conn.execute("RELEASE SAVEPOINT cognitive_strategy_retention")
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT cognitive_strategy_retention")
+            conn.execute("RELEASE SAVEPOINT cognitive_strategy_retention")
     except ValueError as exc:
         if any(
             marker in str(exc)
@@ -553,7 +597,7 @@ def _insert_requested_transfer_episode(
         for key, expected in expected_question_fields.items()
     ):
         raise ValueError("retention transfer question provenance is detached")
-    insert_certified_transfer_episode(
+    monitoring = insert_certified_transfer_episode(
         self,
         conn,
         {
@@ -573,6 +617,19 @@ def _insert_requested_transfer_episode(
             "evaluator_confidence": evaluator_confidence,
         },
     )
+    conn.execute("SAVEPOINT cognitive_strategy_episode")
+    try:
+        capture_cognitive_strategy_episode(
+            self,
+            conn,
+            transfer_attempt_id=attempt_id,
+            episode_id=str(monitoring["episode"]["episode_id"]),
+            occurred_at=str(fact["submitted_at"] or ""),
+        )
+        conn.execute("RELEASE SAVEPOINT cognitive_strategy_episode")
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT cognitive_strategy_episode")
+        conn.execute("RELEASE SAVEPOINT cognitive_strategy_episode")
 
 
 def _stale_intervention_reason(
