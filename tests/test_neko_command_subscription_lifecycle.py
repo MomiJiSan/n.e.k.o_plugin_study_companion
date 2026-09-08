@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -71,15 +72,33 @@ class _Watcher:
     def __init__(self) -> None:
         self.started = False
         self.stopped = False
+        self.start_thread_id: int | None = None
+        self.stop_thread_id: int | None = None
+        self.start_had_running_loop: bool | None = None
+        self.stop_had_running_loop: bool | None = None
 
     def subscribe(self, **_kwargs):
         return lambda callback: callback
 
     def start(self) -> None:
         self.started = True
+        self.start_thread_id = threading.get_ident()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.start_had_running_loop = False
+        else:
+            self.start_had_running_loop = True
 
     def stop(self) -> None:
         self.stopped = True
+        self.stop_thread_id = threading.get_ident()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.stop_had_running_loop = False
+        else:
+            self.stop_had_running_loop = True
 
 
 class _Messages:
@@ -108,6 +127,7 @@ async def test_subscription_is_deferred_and_reports_messages_bus_health(
             return None
 
     owner = Owner()
+    owner_thread_id = threading.get_ident()
     owner.ctx = SimpleNamespace(bus=SimpleNamespace(messages=Bus()))
     owner.logger = _Logger()
     owner._neko_command_transport = None
@@ -126,9 +146,36 @@ async def test_subscription_is_deferred_and_reports_messages_bus_health(
 
     assert get_called.is_set()
     assert watcher.started is True
+    assert watcher.start_thread_id != owner_thread_id
+    assert watcher.start_had_running_loop is False
     assert owner._neko_command_subscription_status == "messages_bus"
     assert owner._neko_command_subscription_error == ""
     assert owner._neko_command_subscription_task is None
+
+
+@pytest.mark.asyncio
+async def test_watcher_stop_is_offloaded_from_the_owner_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_commands(monkeypatch, "_stopped_neko_subscription")
+    watcher = _Watcher()
+
+    class Owner(module._NekoCommandsMixin):
+        pass
+
+    owner = Owner()
+    owner_thread_id = threading.get_ident()
+    owner.logger = _Logger()
+    owner._neko_command_watcher = watcher
+    owner._neko_command_transport = None
+    owner._neko_command_handler = None
+
+    await owner._unsubscribe_neko_commands()
+
+    assert watcher.stopped is True
+    assert watcher.stop_thread_id != owner_thread_id
+    assert watcher.stop_had_running_loop is False
+    assert owner._neko_command_watcher is None
 
 
 @pytest.mark.asyncio
