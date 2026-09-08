@@ -7,6 +7,7 @@ from .adaptive_learning.cognitive_versions import (
     supported_cognitive_version_sets,
 )
 from .store_cognitive_retention import create_cognitive_retention_schema
+from .store_cognitive_strategy import create_cognitive_strategy_schema
 from .store_common import (
     STORE_CONFIG,
     STORE_STATE,
@@ -984,6 +985,7 @@ def _init_db(self) -> None:
     )
     _ensure_cognitive_outbox_schema(conn)
     create_cognitive_retention_schema(conn)
+    create_cognitive_strategy_schema(conn)
     # Older development databases may already contain terminal episode rows
     # from before lifecycle facts were introduced.  Preserve those expiries as
     # immutable cognitive facts instead of rebuilding from mutable episode

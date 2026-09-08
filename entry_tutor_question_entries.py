@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import asdict, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from types import SimpleNamespace
 from typing import cast
@@ -40,6 +40,9 @@ from .adaptive_learning.cognitive_retention import (
     prepare_retention_question,
     retention_question_payload,
     validate_retention_question_payload,
+)
+from .adaptive_learning.cognitive_strategy_catalog import (
+    COGNITIVE_STRATEGY_CATALOG_V1,
 )
 from .adaptive_learning.cognitive_versions import get_cognitive_version_set
 from .adaptive_learning.learner_state import tracker_list_mastery
@@ -153,6 +156,7 @@ def _with_question_generation_reservation(function):
 
 
 TARGETED_SELECTION_TTL_SECONDS = 10 * 60
+COGNITIVE_STRATEGY_ANSWER_WINDOW = timedelta(hours=24)
 TARGETED_HINT_MAX_CHARS = 240
 TARGETED_GENERATION_TIMEOUT_SECONDS = 125.0
 _COGNITIVE_QUESTION_INTENTS = frozenset({"misconception_probe", "misconception_repair", "transfer_check"})
@@ -178,6 +182,59 @@ def _warn_cognitive_abandonment(owner: Any, message: str, *args: Any) -> None:
             warning(message, *args)
         except Exception:
             pass
+
+
+def _v3_strategy_exposure_metadata(
+    owner: Any,
+    prepared: PreparedCognitiveIntervention,
+    *,
+    committed_at: str,
+) -> dict[str, object]:
+    """Freeze reviewed strategy provenance without influencing delivery."""
+
+    tracker = getattr(owner, "_knowledge_tracker", None)
+    if not bool(getattr(tracker, "cognitive_strategy_shadow_enabled", False)):
+        return {}
+    blueprint = prepared.blueprint
+    hypothesis = prepared.proposed_plan.hypothesis_target
+    if blueprint is None or hypothesis is None:
+        return {}
+    entry = COGNITIVE_STRATEGY_CATALOG_V1.resolve_reviewed(
+        topic_id=prepared.proposed_plan.target_topic.id,
+        hypothesis_code=hypothesis.code,
+        learning_intent=prepared.proposed_plan.learning_intent,
+        repair_strategy=prepared.proposed_plan.repair_strategy,
+        blueprint_id=blueprint.blueprint_id,
+    )
+    version_set_id = str(
+        getattr(tracker, "_cognitive_version_set_id", "") or ""
+    ).strip()
+    if entry is None or not version_set_id:
+        return {}
+    try:
+        committed_time = datetime.fromisoformat(
+            str(committed_at or "").replace("Z", "+00:00")
+        )
+    except ValueError:
+        return {}
+    if committed_time.tzinfo is None:
+        committed_time = committed_time.replace(tzinfo=timezone.utc)
+    answer_window_expires_at = (
+        committed_time.astimezone(timezone.utc) + COGNITIVE_STRATEGY_ANSWER_WINDOW
+    ).isoformat().replace("+00:00", "Z")
+    return {
+        "strategy_id": entry.strategy_id,
+        "strategy_version": entry.strategy_version,
+        "catalog_version": entry.catalog_version,
+        "version_set_id": version_set_id,
+        "question_purpose": entry.measurement_purpose,
+        "difficulty_bucket": str(prepared.proposed_plan.difficulty or ""),
+        "strategy_family": entry.strategy_family,
+        "comparison_scope_id": entry.comparison_scope_id,
+        "baseline": entry.baseline,
+        "eligible_for_repair_attribution": entry.eligible_for_repair_attribution,
+        "answer_window_expires_at": answer_window_expires_at,
+    }
 
 
 async def _record_cognitive_abandonment_best_effort(
@@ -1209,6 +1266,7 @@ class _TutorQuestionEntriesMixin:
             previous_binding.get("cognitive_hypothesis_target"),
             topic_id=previous_topic,
         )
+        replacement_for_question_id = ""
         previous_retention_release_failed = False
         if (
             not previous_question.get("attempt_evaluated")
@@ -1239,6 +1297,9 @@ class _TutorQuestionEntriesMixin:
                     "the previous cognitive intervention could not be safely abandoned",
                     code="COGNITIVE_INTERVENTION_ABANDON_FAILED",
                 )
+            replacement_for_question_id = str(
+                previous_question.get("question_id") or ""
+            ).strip()
         question_type_mapping = None
         extra_context = {
             "source": source,
@@ -2011,9 +2072,23 @@ class _TutorQuestionEntriesMixin:
                 )
                 if not callable(record_event):
                     raise RuntimeError("cognitive intervention ledger is unavailable")
+                event_payload = {**asdict(committed_cognitive_event), **development_audit}
+                strategy_metadata = _v3_strategy_exposure_metadata(
+                    self,
+                    prepared_cognitive,
+                    committed_at=str(event_payload.get("created_at") or ""),
+                )
+                if strategy_metadata:
+                    event_metadata = dict(event_payload.get("metadata") or {})
+                    if replacement_for_question_id:
+                        event_metadata["replacement_for_question_id"] = (
+                            replacement_for_question_id
+                        )
+                    event_metadata["strategy_exposure"] = strategy_metadata
+                    event_payload["metadata"] = event_metadata
                 await asyncio.to_thread(
                     record_event,
-                    {**asdict(committed_cognitive_event), **development_audit},
+                    event_payload,
                 )
                 wake_projection = getattr(self, "_request_cognitive_projection", None)
                 if callable(wake_projection):

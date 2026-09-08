@@ -177,6 +177,120 @@ def _tracker(Tracker: type[Any], store: Any):
     )
 
 
+def test_v3_shadow_records_reviewed_exposure_and_attempt_without_changing_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store_module, tracker_module = _load_runtime(
+        monkeypatch, "_cognitive_v3_strategy_capture"
+    )
+    store = _open_store(tmp_path, store_module.StudyStore)
+    try:
+        question = _question_event()
+        question["metadata"] = {
+            "strategy_exposure": {
+                "strategy_id": "chain.omit-inner.complete-steps",
+                "strategy_version": "v1",
+                "catalog_version": "cognitive-strategy-catalog-v1",
+                "version_set_id": "cognitive-v1",
+                "question_purpose": "repair",
+                "difficulty_bucket": "3",
+                "strategy_family": "complete_steps",
+                "comparison_scope_id": "chain.omit-inner.repair",
+                "baseline": True,
+                "answer_window_expires_at": "2026-09-03T08:00:00Z",
+            }
+        }
+        committed = store.record_cognitive_intervention_event(question)
+        assert committed["strategy_shadow"]["recorded"] is True
+
+        result = _submit(
+            _tracker(tracker_module.KnowledgeTracker, store),
+            attempt_id="attempt-v3-shadow",
+        )
+        assert result["topic_id"] == TOPIC
+        exposures = store.list_cognitive_strategy_exposures()
+        facts = store.list_cognitive_strategy_facts()
+        assert len(exposures) == 1
+        assert exposures[0]["strategy_id"] == "chain.omit-inner.complete-steps"
+        assert [(item["fact_type"], item["outcome"]) for item in facts] == [
+            ("attempt", "correct")
+        ], store.list_cognitive_intervention_events(decision_id="decision-1")
+        snapshot = store.build_cognitive_strategy_report_snapshot(
+            catalog_version="cognitive-strategy-catalog-v1",
+            version_set_id="cognitive-v1",
+        )
+        assert snapshot["exposures"][0]["outcomes"]["immediate"]["success"] is True
+        before_rebuild = {"exposures": exposures, "facts": facts}
+        assert store.rebuild_cognitive_strategy_from_persisted_sources() == {
+            "exposures": 1,
+            "facts": 1,
+        }
+        assert {
+            "exposures": store.list_cognitive_strategy_exposures(),
+            "facts": store.list_cognitive_strategy_facts(),
+        } == before_rebuild
+    finally:
+        store.close()
+
+
+def test_v3_shadow_failure_isolated_from_question_and_answer_commits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store_module, tracker_module = _load_runtime(
+        monkeypatch, "_cognitive_v3_strategy_failure_isolation"
+    )
+    intervention_module = importlib.import_module(
+        f"{store_module.__package__}.store_cognitive_intervention"
+    )
+
+    def fail_shadow(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("injected V3-only failure")
+
+    monkeypatch.setattr(
+        intervention_module, "capture_cognitive_strategy_intervention", fail_shadow
+    )
+    store = _open_store(tmp_path, store_module.StudyStore)
+    try:
+        question = _question_event()
+        question["metadata"] = {
+            "strategy_exposure": {
+                "strategy_id": "chain.omit-inner.complete-steps",
+                "strategy_version": "v1",
+                "catalog_version": "cognitive-strategy-catalog-v1",
+                "version_set_id": "cognitive-v1",
+                "question_purpose": "repair",
+                "difficulty_bucket": "3",
+                "strategy_family": "complete_steps",
+                "comparison_scope_id": "chain.omit-inner.repair",
+                "baseline": True,
+                "answer_window_expires_at": "2026-09-03T08:00:00Z",
+            }
+        }
+        committed = store.record_cognitive_intervention_event(question)
+        assert committed["strategy_shadow"] == {
+            "recorded": False,
+            "reason": "strategy_shadow_write_failed:RuntimeError",
+        }
+
+        result = _submit(
+            _tracker(tracker_module.KnowledgeTracker, store),
+            attempt_id="attempt-v3-shadow-failure",
+        )
+
+        assert result["topic_id"] == TOPIC
+        _assert_ordinary_answer_committed(store, "attempt-v3-shadow-failure", cognitive=True)
+        assert [
+            event["event_type"]
+            for event in store.list_cognitive_intervention_events(
+                decision_id="decision-1"
+            )
+        ] == ["question_committed", "attempt_committed"]
+        assert store.list_cognitive_strategy_exposures() == []
+        assert store.list_cognitive_strategy_facts() == []
+    finally:
+        store.close()
+
+
 def _submit(tracker: Any, *, attempt_id: str, decision_id: str = "decision-1"):
     return tracker.on_answer(
         topic_id=TOPIC,
@@ -187,6 +301,7 @@ def _submit(tracker: Any, *, attempt_id: str, decision_id: str = "decision-1"):
             "score": 100,
             "evaluator_type": "deterministic",
             "evaluator_version": "integration-test-v1",
+            "confidence": 1.0,
         },
         mode="companion",
         session_id="session-intervention",
@@ -209,7 +324,7 @@ def _assert_ordinary_answer_committed(
     assert fact["evaluation_metadata"] == {
         "evaluator_type": "deterministic",
         "evaluator_version": "integration-test-v1",
-        "confidence": None,
+        "confidence": 1.0,
         "fallback_reason": "",
     }
     if not cognitive:
@@ -251,6 +366,8 @@ def test_tracker_builds_attempt_event_from_persisted_question_and_commits_atomic
         assert attempt_event["repair_strategy"] == committed["repair_strategy"]
         assert attempt_event["hypothesis_target"] == committed["hypothesis_target"]
         assert attempt_event["binding"] == committed["binding"]
+        assert store.list_cognitive_strategy_exposures() == []
+        assert store.list_cognitive_strategy_facts() == []
     finally:
         store.close()
 
