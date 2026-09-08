@@ -82,6 +82,7 @@ intent_policy = "off" # off / shadow / on
 ui_enabled = false
 retention_enabled = false
 strategy_shadow_enabled = false
+strategy_rotation_enabled = false
 knowledge_graph_enabled = true
 version_set = "cognitive-v2.1-1"
 model_version = "cognitive-v2.1-1"

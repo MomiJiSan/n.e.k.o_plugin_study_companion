@@ -472,6 +472,7 @@ def list_cognitive_intervention_events(
     decision_id: str | None = None,
     model_version: str | None = None,
     event_types: Sequence[str] | None = None,
+    newest_first: bool = False,
     limit: int = 200,
 ) -> list[dict[str, Any]]:
     clauses: list[str] = []
@@ -498,13 +499,14 @@ def list_cognitive_intervention_events(
         params.extend(requested_types)
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     params.append(max(1, int(limit)))
+    order = "DESC" if newest_first is True else "ASC"
     rows = self._require_read_conn().execute(
         f"""
         SELECT events.*, attempts.session_id AS attempt_session_id
         FROM cognitive_intervention_events events
         LEFT JOIN attempts ON attempts.attempt_id = events.attempt_id
         {where}
-        ORDER BY events.occurred_at, events.event_seq
+        ORDER BY events.occurred_at {order}, events.event_seq {order}
         LIMIT ?
         """,
         params,

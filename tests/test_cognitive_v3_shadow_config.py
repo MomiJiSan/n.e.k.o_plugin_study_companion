@@ -57,3 +57,34 @@ def test_strategy_shadow_fails_closed_for_invalid_values_and_version_sets(
         version_set="unknown-version-set",
     )
     assert invalid_version.strategy_shadow_enabled is False
+
+
+def test_strategy_rotation_defaults_off_and_requires_a_strict_boolean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models = _models(monkeypatch)
+    assert models.CognitiveConfig().strategy_rotation_enabled is False
+
+    enabled = models.build_cognitive_config(
+        {"cognitive": {"strategy_rotation_enabled": True}}
+    )
+    invalid = models.CognitiveConfig(strategy_rotation_enabled="yes")  # type: ignore[arg-type]
+
+    assert enabled.strategy_rotation_enabled is True
+    assert invalid.strategy_rotation_enabled is False
+
+
+def test_strategy_rotation_fails_closed_for_unknown_version_sets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models = _models(monkeypatch)
+    invalid_version = models.CognitiveConfig(
+        projection_enabled=True,
+        read_mode="active",
+        intent_policy="on",
+        strategy_shadow_enabled=True,
+        strategy_rotation_enabled=True,
+        version_set="unknown-version-set",
+    )
+
+    assert invalid_version.strategy_rotation_enabled is False
