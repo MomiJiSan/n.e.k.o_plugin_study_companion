@@ -64,6 +64,7 @@ class CognitiveStrategyEntry:
     measurement_purpose: MeasurementPurpose
     repair_strategy: RepairStrategy
     comparison_scope_id: str
+    comparison_family_id: str
     baseline: bool
     blueprint_ids: tuple[str, ...]
     review_provenance: str
@@ -138,6 +139,7 @@ class CognitiveStrategyCatalog:
                     entry.topic_id,
                     entry.hypothesis_code,
                     entry.measurement_purpose,
+                    entry.comparison_family_id,
                 )
                 for entry in scoped_entries
             }
@@ -172,6 +174,7 @@ class CognitiveStrategyCatalog:
             entry.hypothesis_code,
             entry.measurement_purpose,
             entry.comparison_scope_id,
+            entry.comparison_family_id,
             0 if entry.baseline else 1,
             entry.strategy_id,
             entry.strategy_version,
@@ -200,6 +203,8 @@ class CognitiveStrategyCatalog:
             raise ValueError("strategy hypothesis_code must be a stable identifier")
         if not _IDENTIFIER.fullmatch(entry.comparison_scope_id):
             raise ValueError("comparison_scope_id must be a stable identifier")
+        if not _IDENTIFIER.fullmatch(entry.comparison_family_id):
+            raise ValueError("comparison_family_id must be a stable identifier")
         if not entry.review_provenance.strip():
             raise ValueError("manual review provenance is required")
         if not isinstance(entry.baseline, bool) or not isinstance(
@@ -322,6 +327,7 @@ COGNITIVE_STRATEGY_ENTRIES_V1 = (
         measurement_purpose="probe",
         repair_strategy="compare_steps",
         comparison_scope_id="chain.omit-inner.probe",
+        comparison_family_id="chain.omit-inner.probe.v1",
         baseline=False,
         blueprint_ids=("chain.omit-inner.compare-steps.v1",),
         review_provenance=_PROVENANCE,
@@ -339,6 +345,7 @@ COGNITIVE_STRATEGY_ENTRIES_V1 = (
         measurement_purpose="repair",
         repair_strategy="complete_inner_derivative",
         comparison_scope_id="chain.omit-inner.repair",
+        comparison_family_id="chain.omit-inner.repair.v1",
         baseline=True,
         blueprint_ids=("chain.omit-inner.fill-factor.v1",),
         review_provenance=_PROVENANCE,
@@ -356,6 +363,7 @@ COGNITIVE_STRATEGY_ENTRIES_V1 = (
         measurement_purpose="repair",
         repair_strategy="minimal_change",
         comparison_scope_id="chain.omit-inner.repair",
+        comparison_family_id="chain.omit-inner.repair.v1",
         baseline=False,
         blueprint_ids=("chain.omit-inner.minimal-change.v1",),
         review_provenance=_PROVENANCE,
@@ -373,6 +381,7 @@ COGNITIVE_STRATEGY_ENTRIES_V1 = (
         measurement_purpose="probe",
         repair_strategy="structure_classification",
         comparison_scope_id="chain.omit-inner.probe",
+        comparison_family_id="chain.omit-inner.probe.v1",
         baseline=True,
         blueprint_ids=("chain.omit-inner.classify-structure.v1",),
         review_provenance=_PROVENANCE,
@@ -390,6 +399,7 @@ COGNITIVE_STRATEGY_ENTRIES_V1 = (
         measurement_purpose="transfer",
         repair_strategy="cross_form_transfer",
         comparison_scope_id="chain.omit-inner.transfer",
+        comparison_family_id="chain.omit-inner.transfer.v1",
         baseline=True,
         blueprint_ids=(
             "chain.omit-inner.cross-form-transfer.v1",

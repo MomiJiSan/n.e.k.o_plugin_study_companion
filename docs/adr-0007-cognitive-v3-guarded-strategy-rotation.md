@@ -1,6 +1,6 @@
 # ADR-0007: V3 guarded repair strategy rotation
 
-- Status: Accepted; implemented pending merge
+- Status: Accepted; implemented
 - Date: 2026-09-08
 - Scope: `calculus.chain_rule / omit_inner_derivative / misconception_repair`
 
@@ -55,6 +55,22 @@ online personalization.
 The selected variant and a SHA-256 assignment-key digest are appended to both
 `intent_proposed` and `question_committed` metadata.  The actual delivered
 blueprint continues to determine the immutable V3 strategy exposure identity.
+
+## Comparison-family closure
+
+The two reviewed repair variants intentionally use different delivered
+question families.  The immutable `question_family_id` therefore remains the
+identity of the question actually delivered, while the catalog freezes
+`comparison_family_id = chain.omit-inner.repair.v1` for both variants.  Offline
+report v2 uses that reviewed comparison family, together with topic,
+hypothesis, difficulty bucket, hint state and version set, to form a common
+comparison stratum.
+
+Every strategy in one comparison scope must declare the same non-empty
+comparison family.  A pre-amendment exposure with no frozen comparison family
+is excluded as incomplete/invalid catalog data; it is never retroactively
+guessed from its strategy or blueprint.  This field is report-only metadata and
+does not grant delivery permission or connect the report to Planner or Coach.
 
 ## Rollback
 

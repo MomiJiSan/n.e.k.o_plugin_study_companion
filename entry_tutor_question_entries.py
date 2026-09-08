@@ -234,6 +234,7 @@ def _v3_strategy_exposure_metadata(
         "difficulty_bucket": str(prepared.proposed_plan.difficulty or ""),
         "strategy_family": entry.strategy_family,
         "comparison_scope_id": entry.comparison_scope_id,
+        "comparison_family_id": entry.comparison_family_id,
         "baseline": entry.baseline,
         "eligible_for_repair_attribution": entry.eligible_for_repair_attribution,
         "answer_window_expires_at": answer_window_expires_at,

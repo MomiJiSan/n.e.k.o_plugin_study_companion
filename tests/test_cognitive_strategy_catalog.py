@@ -163,6 +163,18 @@ def test_catalog_rejects_purpose_or_reviewed_blueprint_mismatches() -> None:
         _catalog(wrong_binding)
 
 
+def test_catalog_rejects_mixed_comparison_families_within_one_scope() -> None:
+    mixed_family = tuple(
+        replace(entry, comparison_family_id="chain.omit-inner.other-repair.v1")
+        if entry.strategy_id == "chain.omit-inner.minimal-change"
+        else entry
+        for entry in COGNITIVE_STRATEGY_ENTRIES_V1
+    )
+
+    with pytest.raises(ValueError, match="mixes incompatible dimensions"):
+        _catalog(mixed_family)
+
+
 def test_catalog_and_entries_do_not_expose_mutation() -> None:
     entry = COGNITIVE_STRATEGY_CATALOG_V1.entries()[0]
 

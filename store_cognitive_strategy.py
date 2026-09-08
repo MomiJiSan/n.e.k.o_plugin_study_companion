@@ -170,6 +170,7 @@ def create_cognitive_strategy_schema(conn: sqlite3.Connection) -> None:
             policy_version TEXT NOT NULL,
             validator_version TEXT NOT NULL,
             question_family_id TEXT NOT NULL,
+            comparison_family_id TEXT NOT NULL DEFAULT '',
             difficulty_bucket TEXT NOT NULL DEFAULT '',
             strategy_family TEXT NOT NULL,
             comparison_scope_id TEXT NOT NULL,
@@ -187,6 +188,15 @@ def create_cognitive_strategy_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    exposure_columns = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(cognitive_strategy_exposures)")
+    }
+    if "comparison_family_id" not in exposure_columns:
+        conn.execute(
+            "ALTER TABLE cognitive_strategy_exposures "
+            "ADD COLUMN comparison_family_id TEXT NOT NULL DEFAULT ''"
+        )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS cognitive_strategy_exposure_facts (
@@ -252,6 +262,15 @@ def create_cognitive_strategy_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE INDEX IF NOT EXISTS idx_cognitive_strategy_exposures_comparison
+        ON cognitive_strategy_exposures(
+            topic_id, hypothesis_code, comparison_family_id,
+            difficulty_bucket, root_fact_seq
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_cognitive_strategy_facts_order
         ON cognitive_strategy_exposure_facts(
             exposure_id, root_fact_seq, source_id, fact_id
@@ -304,6 +323,11 @@ def _normalize_exposure(event: Mapping[str, Any]) -> dict[str, Any]:
         "question_family_id": _required_text(
             event.get("question_family_id"), "question_family_id"
         ),
+        # Empty is accepted only for replaying pre-PR2.1 source facts.  The
+        # reporter excludes those rows instead of guessing a comparison family.
+        "comparison_family_id": str(
+            event.get("comparison_family_id") or ""
+        ).strip(),
         "difficulty_bucket": str(event.get("difficulty_bucket") or "").strip(),
         "strategy_family": _required_text(
             event.get("strategy_family"), "strategy_family"
@@ -600,6 +624,9 @@ def capture_cognitive_strategy_intervention(
             ).strip(),
             "question_family_id": str(
                 event.get("question_family_id") or ""
+            ).strip(),
+            "comparison_family_id": str(
+                strategy.get("comparison_family_id") or ""
             ).strip(),
             "difficulty_bucket": str(
                 strategy.get("difficulty_bucket") or ""
@@ -1516,12 +1543,13 @@ def build_cognitive_strategy_report_snapshot(
                 if episode
                 else "",
                 "question_family_id": str(exposure["question_family_id"]),
+                "comparison_family_id": str(exposure["comparison_family_id"]),
                 "difficulty_bucket": str(exposure["difficulty_bucket"]),
                 "hint_state": hint_state,
-            "strategy_id": str(exposure["strategy_id"]),
-            "strategy_version": str(exposure["strategy_version"]),
-            "question_purpose": str(exposure["question_purpose"]),
-            "comparison_scope_id": str(exposure["comparison_scope_id"]),
+                "strategy_id": str(exposure["strategy_id"]),
+                "strategy_version": str(exposure["strategy_version"]),
+                "question_purpose": str(exposure["question_purpose"]),
+                "comparison_scope_id": str(exposure["comparison_scope_id"]),
                 "catalog_version": str(exposure["catalog_version"]),
                 "version_set_id": str(exposure["version_set_id"]),
                 "question_committed": True,
@@ -1554,6 +1582,7 @@ def build_cognitive_strategy_report_snapshot(
             "catalog_version": entry.catalog_version,
             "version_set_id": versions,
             "baseline": entry.baseline,
+            "comparison_family_id": entry.comparison_family_id,
         }
         for entry in COGNITIVE_STRATEGY_CATALOG_V1.entries(
             measurement_purpose="repair"

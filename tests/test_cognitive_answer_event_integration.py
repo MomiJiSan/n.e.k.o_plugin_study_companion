@@ -196,6 +196,7 @@ def test_v3_shadow_records_reviewed_exposure_and_attempt_without_changing_answer
                 "difficulty_bucket": "3",
                 "strategy_family": "complete_steps",
                 "comparison_scope_id": "chain.omit-inner.repair",
+                "comparison_family_id": "chain.omit-inner.repair.v1",
                 "baseline": True,
                 "answer_window_expires_at": "2026-09-03T08:00:00Z",
             }
@@ -262,6 +263,7 @@ def test_v3_shadow_failure_isolated_from_question_and_answer_commits(
                 "difficulty_bucket": "3",
                 "strategy_family": "complete_steps",
                 "comparison_scope_id": "chain.omit-inner.repair",
+                "comparison_family_id": "chain.omit-inner.repair.v1",
                 "baseline": True,
                 "answer_window_expires_at": "2026-09-03T08:00:00Z",
             }
