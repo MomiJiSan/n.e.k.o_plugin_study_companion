@@ -305,6 +305,57 @@ def test_exposure_requires_committed_provenance_and_is_immutable_idempotent() ->
         store.close()
 
 
+def test_collection_summary_is_answer_free_and_respects_delete_cutoffs() -> None:
+    store = _Store(with_cutoffs=True)
+    try:
+        baseline = strategy.record_cognitive_strategy_exposure(
+            store, _exposure("question-baseline", root_fact_seq=11)
+        )
+        strategy.record_cognitive_strategy_exposure(
+            store,
+            _exposure(
+                "question-alternate",
+                root_fact_seq=12,
+                strategy_id="alternate",
+                baseline=False,
+            ),
+        )
+        strategy.record_cognitive_strategy_fact(
+            store, _fact(str(baseline["exposure_id"]), "attempt", 13)
+        )
+        strategy.record_cognitive_strategy_fact(
+            store, _fact(str(baseline["exposure_id"]), "transfer", 14)
+        )
+
+        summary = strategy.get_cognitive_strategy_collection_summary(store)
+
+        assert summary["exposure_count"] == 2
+        assert summary["repair_exposure_count"] == 2
+        assert summary["baseline_repair_exposure_count"] == 1
+        assert summary["alternate_repair_exposure_count"] == 1
+        assert summary["fact_count"] == 2
+        assert [item["strategy_id"] for item in summary["repair_strategies"]] == [
+            "compare_steps",
+            "alternate",
+        ]
+        serialized = json.dumps(summary, sort_keys=True)
+        assert "answer" not in serialized
+        assert "prompt" not in serialized
+
+        store.conn.execute(
+            "INSERT INTO cognitive_delete_cutoffs VALUES (?, ?, ?)",
+            ("calculus.chain_rule", "omit_inner_derivative", 13),
+        )
+        store.conn.commit()
+
+        deleted = strategy.get_cognitive_strategy_collection_summary(store)
+        assert deleted["exposure_count"] == 0
+        assert deleted["fact_count"] == 0
+        assert deleted["repair_strategies"] == []
+    finally:
+        store.close()
+
+
 def test_append_only_facts_preserve_every_history_in_root_and_source_order() -> None:
     store = _Store()
     try:

@@ -404,6 +404,9 @@ def _owner(module: ModuleType, calls: list[str]):
     async def unsubscribe() -> None:
         calls.append("commands.unsubscribe")
 
+    async def cancel_subscription() -> None:
+        calls.append("commands.subscription.cancel")
+
     async def cancel_pomodoro() -> None:
         calls.append("pomodoro.cancel")
 
@@ -411,6 +414,7 @@ def _owner(module: ModuleType, calls: list[str]):
         calls.append("local_model.shutdown")
 
     owner._unsubscribe_neko_commands = unsubscribe
+    owner._cancel_neko_command_subscription_task = cancel_subscription
     owner._cancel_pomodoro_watcher = cancel_pomodoro
     owner._shutdown_local_model_manager = shutdown_local_model
     owner.clear_list_actions = lambda: calls.append("actions.clear")

@@ -92,6 +92,7 @@ from .store_cognitive_retention import (
 )
 from .store_cognitive_strategy import (
     build_cognitive_strategy_report_snapshot,
+    get_cognitive_strategy_collection_summary,
     get_cognitive_strategy_exposure_snapshot,
     list_cognitive_strategy_exposures,
     list_cognitive_strategy_facts,
@@ -1938,6 +1939,7 @@ StudyStore.record_cognitive_strategy_exposure = record_cognitive_strategy_exposu
 StudyStore.record_cognitive_strategy_fact = record_cognitive_strategy_fact  # type: ignore[method-assign]
 StudyStore.list_cognitive_strategy_exposures = list_cognitive_strategy_exposures  # type: ignore[method-assign]
 StudyStore.list_cognitive_strategy_facts = list_cognitive_strategy_facts  # type: ignore[method-assign]
+StudyStore.get_cognitive_strategy_collection_summary = get_cognitive_strategy_collection_summary  # type: ignore[method-assign]
 StudyStore.get_cognitive_strategy_exposure_snapshot = get_cognitive_strategy_exposure_snapshot  # type: ignore[method-assign]
 StudyStore.rebuild_cognitive_strategy_ledger = rebuild_cognitive_strategy_ledger  # type: ignore[method-assign]
 StudyStore.rebuild_cognitive_strategy_from_persisted_sources = rebuild_cognitive_strategy_from_persisted_sources  # type: ignore[method-assign]

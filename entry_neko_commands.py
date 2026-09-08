@@ -11,6 +11,7 @@ from .constants import MODE_COMPANION, MODE_INTERACTIVE, MODE_TEACHING
 from .entry_common import _plugin_lock
 
 _NEKO_COMMAND_TOPIC = "neko.study_command"
+_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS = 0.05
 
 _NEKO_COMMAND_HANDLERS: dict[str, str] = {
     "explain_current": "_handle_neko_explain_current",
@@ -90,12 +91,62 @@ def _fmt_mode_changed_for_neko(*, new_mode: str, transition_phrase: str) -> str:
 
 
 class _NekoCommandsMixin:
+    def _schedule_neko_command_subscription(self) -> None:
+        existing = getattr(self, "_neko_command_subscription_task", None)
+        if existing is not None and not existing.done():
+            return
+        self._neko_command_subscription_status = "pending"
+        self._neko_command_subscription_error = ""
+        task = asyncio.create_task(self._subscribe_neko_commands_after_startup())
+        self._neko_command_subscription_task = task
+
+        def _clear_completed(completed: asyncio.Task[None]) -> None:
+            if getattr(self, "_neko_command_subscription_task", None) is completed:
+                self._neko_command_subscription_task = None
+
+        task.add_done_callback(_clear_completed)
+
+    async def _subscribe_neko_commands_after_startup(self) -> None:
+        """Subscribe after the lifecycle response releases the host downlink loop."""
+
+        try:
+            await asyncio.sleep(_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS)
+            await self._subscribe_neko_commands()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._neko_command_subscription_status = "error"
+            self._neko_command_subscription_error = "subscription_failed"
+            self.logger.warning(
+                "startup: deferred message-plane subscription failed for {}: {}",
+                _NEKO_COMMAND_TOPIC,
+                exc,
+            )
+
+    async def _cancel_neko_command_subscription_task(self) -> None:
+        task = getattr(self, "_neko_command_subscription_task", None)
+        self._neko_command_subscription_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._neko_command_subscription_status = "inactive"
+        self._neko_command_subscription_error = ""
+
     async def _subscribe_neko_commands(self) -> None:
         await self._unsubscribe_neko_commands()
+        self._neko_command_subscription_status = "pending"
+        self._neko_command_subscription_error = ""
         if await self._subscribe_neko_command_transport():
+            self._neko_command_subscription_status = "transport"
             return
         if await self._subscribe_neko_command_bus():
+            self._neko_command_subscription_status = "messages_bus"
             return
+        self._neko_command_subscription_status = "unavailable"
+        self._neko_command_subscription_error = "transport_unavailable"
         self.logger.warning(
             "startup: message-plane transport unavailable for {}",
             _NEKO_COMMAND_TOPIC,
