@@ -95,7 +95,6 @@ async def test_subscription_is_deferred_and_reports_messages_bus_health(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_commands(monkeypatch, "_deferred_neko_subscription")
-    monkeypatch.setattr(module, "_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS", 0)
     watcher = _Watcher()
     get_called = asyncio.Event()
 
@@ -137,7 +136,6 @@ async def test_pending_subscription_is_cancelled_before_shutdown_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_commands(monkeypatch, "_cancelled_neko_subscription")
-    monkeypatch.setattr(module, "_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS", 0)
     get_called = asyncio.Event()
 
     class Bus:

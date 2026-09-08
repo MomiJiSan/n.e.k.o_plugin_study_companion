@@ -11,7 +11,6 @@ from .constants import MODE_COMPANION, MODE_INTERACTIVE, MODE_TEACHING
 from .entry_common import _plugin_lock
 
 _NEKO_COMMAND_TOPIC = "neko.study_command"
-_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS = 0.05
 
 _NEKO_COMMAND_HANDLERS: dict[str, str] = {
     "explain_current": "_handle_neko_explain_current",
@@ -97,7 +96,7 @@ class _NekoCommandsMixin:
             return
         self._neko_command_subscription_status = "pending"
         self._neko_command_subscription_error = ""
-        task = asyncio.create_task(self._subscribe_neko_commands_after_startup())
+        task = asyncio.create_task(self._subscribe_neko_commands_in_command_loop())
         self._neko_command_subscription_task = task
 
         def _clear_completed(completed: asyncio.Task[None]) -> None:
@@ -106,11 +105,10 @@ class _NekoCommandsMixin:
 
         task.add_done_callback(_clear_completed)
 
-    async def _subscribe_neko_commands_after_startup(self) -> None:
-        """Subscribe after the lifecycle response releases the host downlink loop."""
+    async def _subscribe_neko_commands_in_command_loop(self) -> None:
+        """Subscribe from the long-lived loop created after the startup response."""
 
         try:
-            await asyncio.sleep(_NEKO_COMMAND_SUBSCRIBE_DELAY_SECONDS)
             await self._subscribe_neko_commands()
         except asyncio.CancelledError:
             raise

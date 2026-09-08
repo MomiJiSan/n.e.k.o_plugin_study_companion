@@ -430,10 +430,6 @@ class StudyCompanionPlugin(
             await self._start_knowledge_dungeon_bridge(
                 enabled=knowledge_dungeon_bridge_enabled
             )
-            self._start_review_due_task()
-            if self._event_bus is not None:
-                self._start_command_worker()
-                self._schedule_neko_command_subscription()
             if self._cfg.awareness.enabled:
                 self.start_awareness_loop()
             status_payload = await asyncio.to_thread(self._status_payload)
@@ -448,6 +444,14 @@ class StudyCompanionPlugin(
                 self._state.status = STATUS_ERROR
                 self._state.last_error = "startup_failed"
             return Err(SdkError("failed to start study_companion"))
+
+    async def _on_command_loop_start(self) -> None:
+        """Start downlink-dependent tasks after the host sends startup result."""
+
+        self._start_review_due_task()
+        if self._event_bus is not None:
+            self._start_command_worker()
+            self._schedule_neko_command_subscription()
 
     async def _finish_cancelled_startup_cleanup(self) -> None:
         """Finish bounded cleanup even when startup receives repeated cancellation."""
