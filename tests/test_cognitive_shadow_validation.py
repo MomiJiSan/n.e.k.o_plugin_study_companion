@@ -8,6 +8,7 @@ from adaptive_learning.cognitive_projection import (
     project_cognitive_hypothesis,
     project_cognitive_intervention_events,
 )
+
 from tools.cognitive_shadow_validation import (
     DEFAULT_FIXTURE,
     EXPECTED_CODES,

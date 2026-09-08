@@ -1,7 +1,6 @@
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
-
 from adaptive_learning.cognitive_catalog import COGNITIVE_CATALOG_V1
 from adaptive_learning.cognitive_strategy_catalog import (
     COGNITIVE_STRATEGY_CATALOG_V1,
