@@ -130,6 +130,7 @@ def test_empty_current_schema_is_healthy_and_runtime_is_unknown(database: Path) 
     assert payload["versions"]["supported_version_sets"] == [
         "cognitive-v1",
         "cognitive-v2.1-1",
+        "cognitive-v4-coverage-1",
     ]
 
 

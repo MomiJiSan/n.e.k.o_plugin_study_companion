@@ -362,8 +362,13 @@ class KnowledgeGraphCognitiveCatalog(CognitiveCatalog):
 
 def build_knowledge_graph_cognitive_catalog(
     topic_provider: Callable[[str], Mapping[str, Any] | None],
+    *,
+    base_catalog: CognitiveCatalog | None = None,
 ) -> KnowledgeGraphCognitiveCatalog:
-    return KnowledgeGraphCognitiveCatalog(COGNITIVE_CATALOG_V1, topic_provider)
+    return KnowledgeGraphCognitiveCatalog(
+        base_catalog or COGNITIVE_CATALOG_V1,
+        topic_provider,
+    )
 
 
 CHAIN_RULE_HYPOTHESES = (
@@ -518,19 +523,155 @@ CHAIN_RULE_QUESTION_BLUEPRINTS = (
     ),
 )
 
+
+CHAIN_RULE_TEACHING_COVERAGE_BLUEPRINTS = (
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.inner-incorrect.compare-factor.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="differentiate_inner_incorrectly",
+        learning_intent="misconception_probe",
+        repair_strategy="compare_steps",
+        question_family_id="chain.sin-cube.compare-inner-factor",
+        question_text=(
+            "A learner writes d/dx sin(x^3) = 2*x*cos(x^3). "
+            "Identify the incorrect factor and give the corrected derivative."
+        ),
+        math_expression="d/dx sin(x^3)",
+        expected_answer="3*x^2*cos(x^3)",
+        diagnostic_signature=(
+            "composition:sin(x^3)|outer:cos(x^3)|inner:3*x^2|"
+            "attempted_inner:2*x"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.inner-incorrect.recompute-inner.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="differentiate_inner_incorrectly",
+        learning_intent="misconception_repair",
+        repair_strategy="complete_inner_derivative",
+        question_family_id="chain.exp-quartic.recompute-inner",
+        question_text=(
+            "For d/dx exp(x^4), first recompute the derivative of x^4, "
+            "then give the complete derivative."
+        ),
+        math_expression="d/dx exp(x^4)",
+        expected_answer="4*x^3*exp(x^4)",
+        diagnostic_signature=(
+            "composition:exp(x^4)|outer:exp(x^4)|inner:4*x^3|"
+            "repair:recompute_inner"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.inner-incorrect.cross-form-transfer.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="differentiate_inner_incorrectly",
+        learning_intent="transfer_check",
+        repair_strategy="cross_form_transfer",
+        question_family_id="chain.cos-cubic.cross-form-transfer",
+        question_text="Differentiate cos(2*x^3 + 1).",
+        math_expression="d/dx cos(2*x^3+1)",
+        expected_answer="-6*x^2*sin(2*x^3+1)",
+        diagnostic_signature=(
+            "composition:cos(2*x^3+1)|outer:-sin(2*x^3+1)|"
+            "inner:6*x^2|transfer:inner_derivative_accuracy"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.product-confusion.classify-rule.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="confuse_product_and_chain",
+        learning_intent="misconception_probe",
+        repair_strategy="structure_classification",
+        question_family_id="chain.power-composition.classify-rule",
+        question_text=(
+            "Classify (x^2 + 1)^5 as a composition or a product, name the "
+            "differentiation rule, and give its derivative."
+        ),
+        math_expression="d/dx (x^2+1)^5",
+        expected_answer="composition; chain rule; 10*x*(x^2+1)^4",
+        diagnostic_signature=(
+            "composition:(x^2+1)^5|rule:chain|outer:5*(x^2+1)^4|"
+            "inner:2*x|competition:product"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.product-confusion.compare-structure.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="confuse_product_and_chain",
+        learning_intent="misconception_repair",
+        repair_strategy="compare_steps",
+        question_family_id="chain.exp-quadratic.compare-structure",
+        question_text=(
+            "Treat exp(x^2 + 1) as an outer function applied to an inner "
+            "expression, then differentiate it."
+        ),
+        math_expression="d/dx exp(x^2+1)",
+        expected_answer="2*x*exp(x^2+1)",
+        diagnostic_signature=(
+            "composition:exp(x^2+1)|outer:exp(x^2+1)|inner:2*x|"
+            "repair:composition_not_product"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+    CognitiveQuestionBlueprint(
+        blueprint_id="chain.product-confusion.cross-form-transfer.v1",
+        topic_id=CHAIN_RULE_TOPIC_ID,
+        hypothesis_code="confuse_product_and_chain",
+        learning_intent="transfer_check",
+        repair_strategy="cross_form_transfer",
+        question_family_id="chain.log-affine.cross-form-transfer",
+        question_text="Differentiate ln(3*x + 2).",
+        math_expression="d/dx ln(3*x+2)",
+        expected_answer="3/(3*x+2)",
+        diagnostic_signature=(
+            "composition:ln(3*x+2)|outer:1/(3*x+2)|inner:3|"
+            "transfer:composition_not_product"
+        ),
+        competing_hypothesis_codes=("omit_inner_derivative",),
+    ),
+)
+
 COGNITIVE_CATALOG_V1 = CognitiveCatalog(
     CHAIN_RULE_HYPOTHESES,
     topic_aliases={COLLEGE_CHAIN_RULE_TOPIC_ID: CHAIN_RULE_TOPIC_ID},
     question_blueprints=CHAIN_RULE_QUESTION_BLUEPRINTS,
 )
 
+COGNITIVE_CATALOG_V2 = CognitiveCatalog(
+    tuple(replace(item, availability="active") for item in CHAIN_RULE_HYPOTHESES),
+    topic_aliases={COLLEGE_CHAIN_RULE_TOPIC_ID: CHAIN_RULE_TOPIC_ID},
+    question_blueprints=(
+        *CHAIN_RULE_QUESTION_BLUEPRINTS,
+        *CHAIN_RULE_TEACHING_COVERAGE_BLUEPRINTS,
+    ),
+)
+
+
+def cognitive_catalog_for_component_version(value: object) -> CognitiveCatalog:
+    """Resolve the immutable reviewed catalog for one registered component id."""
+
+    normalized = str(value or "").strip()
+    if normalized in {
+        "cognitive-v4-coverage-1",
+        "cognitive-catalog-v2",
+        "cognitive-question-validator-v4-coverage-1",
+    }:
+        return COGNITIVE_CATALOG_V2
+    return COGNITIVE_CATALOG_V1
+
 
 __all__ = [
     "CHAIN_RULE_HYPOTHESES",
     "CHAIN_RULE_QUESTION_BLUEPRINTS",
+    "CHAIN_RULE_TEACHING_COVERAGE_BLUEPRINTS",
     "CHAIN_RULE_TOPIC_ID",
     "COLLEGE_CHAIN_RULE_TOPIC_ID",
     "COGNITIVE_CATALOG_V1",
+    "COGNITIVE_CATALOG_V2",
     "CognitiveCatalog",
     "CognitiveHypothesisSpec",
     "CognitiveQuestionBlueprint",
@@ -538,4 +679,5 @@ __all__ = [
     "KNOWLEDGE_GRAPH_HYPOTHESES",
     "KnowledgeGraphCognitiveCatalog",
     "build_knowledge_graph_cognitive_catalog",
+    "cognitive_catalog_for_component_version",
 ]

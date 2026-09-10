@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .adaptive_learning.cognitive_catalog import (
-    COGNITIVE_CATALOG_V1,
     build_knowledge_graph_cognitive_catalog,
+    cognitive_catalog_for_component_version,
 )
 from .adaptive_learning.cognitive_contracts import (
     DEFAULT_COGNITIVE_MODEL_VERSION,
@@ -628,8 +628,25 @@ class KnowledgeTracker:
             _cognitive_config_value(cognitive_config, "projection_enabled", False)
             is True
         )
+        cognitive_model_version = str(
+            _cognitive_config_value(
+                cognitive_config,
+                "model_version",
+                DEFAULT_COGNITIVE_MODEL_VERSION,
+            )
+            or DEFAULT_COGNITIVE_MODEL_VERSION
+        ).strip()
+        cognitive_version_set = get_cognitive_version_set(
+            _cognitive_config_value(cognitive_config, "version_set", "cognitive-v1")
+        )
+        reviewed_catalog = cognitive_catalog_for_component_version(
+            cognitive_version_set.catalog_version
+            if cognitive_version_set is not None
+            else ""
+        )
         self._cognitive_catalog = build_knowledge_graph_cognitive_catalog(
-            store.get_topic
+            store.get_topic,
+            base_catalog=reviewed_catalog,
         )
         self._cognitive_knowledge_graph_enabled = (
             _cognitive_config_value(
@@ -648,7 +665,7 @@ class KnowledgeTracker:
             canonical
             for raw_topic in configured_cognitive_topics
             if (
-                canonical := COGNITIVE_CATALOG_V1.canonical_topic_id(
+                canonical := self._cognitive_catalog.canonical_topic_id(
                     str(raw_topic or "").strip()
                 )
             )
@@ -659,17 +676,6 @@ class KnowledgeTracker:
                 self._cognitive_topic_ids
                 or self._cognitive_knowledge_graph_enabled
             )
-        )
-        cognitive_model_version = str(
-            _cognitive_config_value(
-                cognitive_config,
-                "model_version",
-                DEFAULT_COGNITIVE_MODEL_VERSION,
-            )
-            or DEFAULT_COGNITIVE_MODEL_VERSION
-        ).strip()
-        cognitive_version_set = get_cognitive_version_set(
-            _cognitive_config_value(cognitive_config, "version_set", "cognitive-v1")
         )
         if (
             cognitive_version_set is None
@@ -741,7 +747,12 @@ class KnowledgeTracker:
             else None
         )
         self._cognitive_intent_policy = CognitiveIntentPolicy(
-            mode=effective_intent_mode
+            mode=effective_intent_mode,
+            active_hypothesis_codes=frozenset(
+                code
+                for topic_id in self._cognitive_topic_ids
+                for code in self._cognitive_catalog.active_codes(topic_id)
+            ),
         )
         if self._cognitive_projection_enabled and cognitive_extractor is None:
             from .cognitive_model_gateway import build_cognitive_extractor
