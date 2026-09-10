@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any, cast
+
 from ._event_bus import StudyEventBus
 from .entry_common import (
     Ok,
@@ -115,6 +118,21 @@ def _cognitive_strategy_collection_health_payload(owner) -> dict[str, object]:
             if isinstance(item, dict)
         ),
     }
+
+
+def _cognitive_personalization_status_payload(owner) -> dict[str, object]:
+    from .cognitive_personalization_runtime import personalization_status
+
+    return personalization_status(owner)
+
+
+def _answer_write_fence(owner) -> AbstractContextManager[Any]:
+    provider = getattr(getattr(owner, "_store", None), "answer_write_lock", None)
+    return (
+        cast(AbstractContextManager[Any], provider())
+        if callable(provider)
+        else nullcontext()
+    )
 
 
 def _communication_settings_lock(owner) -> asyncio.Lock:
@@ -243,6 +261,14 @@ def _apply_settings_config(current: StudyConfig, raw: dict) -> StudyConfig:
             current.cognitive.knowledge_graph_enabled,
         )
     next_values["cognitive"] = next_cognitive
+    for key in (
+        "strategy_personalization_enabled",
+        "strategy_personalization_exploration_enabled",
+        "strategy_personalization_stopped",
+    ):
+        if key in cognitive:
+            # Let CognitiveConfig apply strict booleans (malformed stop = on).
+            next_cognitive[key] = cognitive[key]
     next_communication = dict(next_values.get("communication") or {})
     if "enabled" in communication:
         next_communication["enabled"] = _coerce_bool(
@@ -350,8 +376,9 @@ class _StatusEntriesMixin:
 
     def _apply_runtime_settings_config(self, config: StudyConfig) -> None:
         previous_config = self._cfg
-        self._cfg = config
-        self._replace_knowledge_tracker_for_config(previous_config, config)
+        with _answer_write_fence(self):
+            self._cfg = config
+            self._replace_knowledge_tracker_for_config(previous_config, config)
         if self._ocr_pipeline is not None:
             self._ocr_pipeline.update_config(config)
         if self._agent is not None:
@@ -375,8 +402,9 @@ class _StatusEntriesMixin:
 
     def _restore_runtime_settings_config(self, config: StudyConfig) -> None:
         previous_config = self._cfg
-        self._cfg = config
-        self._replace_knowledge_tracker_for_config(previous_config, config)
+        with _answer_write_fence(self):
+            self._cfg = config
+            self._replace_knowledge_tracker_for_config(previous_config, config)
         restore_steps: list[tuple[str, object]] = []
         sync_doc_export_entry = getattr(self, "_sync_doc_export_entry", None)
         if callable(sync_doc_export_entry):
@@ -695,6 +723,40 @@ class _StatusEntriesMixin:
         payload = await asyncio.to_thread(
             _cognitive_strategy_collection_health_payload, self
         )
+        return Ok(payload)
+
+    @plugin_entry(
+        id="study_cognitive_personalization_status",
+        name=tr(
+            "entries.cognitive_personalization_status.name",
+            default="Cognitive Personalization Status",
+        ),
+        description=tr(
+            "entries.cognitive_personalization_status.description",
+            default="Return answer-free V3 personalization switches, strategy, reason, and safety counters.",
+        ),
+        input_schema={"type": "object", "properties": {}},
+        llm_result_fields=[
+            "status",
+            "switches",
+            "gates",
+            "effective_enabled",
+            "current_strategy",
+            "current_repair_strategy",
+            "last_delivered_strategy",
+            "last_delivered_repair_strategy",
+            "decision_reason",
+            "last_decision_reason",
+            "alternate_deliveries_7d",
+            "consecutive_alternate_failures",
+            "stopped",
+            "hypothesis_id",
+            "as_of_root_fact_seq",
+            "error",
+        ],
+    )
+    async def study_cognitive_personalization_status(self, **_):
+        payload = await asyncio.to_thread(_cognitive_personalization_status_payload, self)
         return Ok(payload)
 
     @ui.action()

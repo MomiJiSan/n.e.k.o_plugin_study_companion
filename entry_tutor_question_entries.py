@@ -63,6 +63,12 @@ from .adaptive_learning.question_factory import (
     QuestionGenerationRequest,
     QuestionValidationResult,
 )
+from .cognitive_personalization_runtime import (
+    commit_personalized_question,
+    personalization_enabled,
+    personalization_owns_selection,
+    personalize_candidate,
+)
 from .difficulty_policy import select_targeted_difficulty
 from .entry_common import (
     LLM_OPERATION_QUESTION_GENERATE,
@@ -1512,6 +1518,7 @@ class _TutorQuestionEntriesMixin:
         prepared_retention: PreparedRetentionQuestion | None = None
         prepared_cognitive: PreparedCognitiveIntervention | None = None
         strategy_rotation_metadata: dict[str, object] = {}
+        strategy_personalization_metadata: dict[str, object] = {}
         cognitive_validation = None
         repair_question_family_id = ""
         cognitive_fallback = bool(
@@ -1641,8 +1648,10 @@ class _TutorQuestionEntriesMixin:
                         )
                     if not development_source:
                         tracker = getattr(self, "_knowledge_tracker", None)
+                        baseline_decision = decision
                         try:
-                            rotation_enabled = bool(
+                            personalizing = personalization_owns_selection(self)
+                            rotation_enabled = not personalizing and bool(
                                 getattr(
                                     tracker,
                                     "cognitive_strategy_rotation_enabled",
@@ -1676,21 +1685,28 @@ class _TutorQuestionEntriesMixin:
                                         raw_prior_events,
                                     )
                                 )
-                            decision, rotation_assignment = (
-                                apply_guarded_strategy_rotation(
-                                    decision,
-                                    enabled=rotation_enabled,
-                                    retry_assignment=retry_assignment,
+                            if personalizing:
+                                decision, strategy_personalization_metadata = await asyncio.to_thread(
+                                    personalize_candidate, self, decision,
                                 )
-                            )
-                            if rotation_assignment.applied:
-                                strategy_rotation_metadata = (
-                                    rotation_assignment.to_metadata()
+                            if not personalizing:
+                                decision, rotation_assignment = (
+                                    apply_guarded_strategy_rotation(
+                                        decision,
+                                        enabled=rotation_enabled,
+                                        retry_assignment=retry_assignment,
+                                    )
                                 )
+                                if rotation_assignment.applied:
+                                    strategy_rotation_metadata = (
+                                        rotation_assignment.to_metadata()
+                                    )
                         except Exception:
                             # Rotation is optional.  Its failure must retain
                             # the already accepted V2.1 baseline decision.
                             strategy_rotation_metadata = {}
+                            strategy_personalization_metadata = {}
+                            decision = baseline_decision
                     action_candidate = getattr(decision, "action_candidate", None)
                     if (
                         action_candidate is None
@@ -1766,6 +1782,11 @@ class _TutorQuestionEntriesMixin:
                                     strategy_rotation_metadata
                                 )
                                 proposal_payload["metadata"] = proposal_metadata
+                            if strategy_personalization_metadata:
+                                proposal_payload["metadata"] = {
+                                    **dict(proposal_payload.get("metadata") or {}),
+                                    "strategy_personalization": strategy_personalization_metadata,
+                                }
                             await asyncio.to_thread(
                                 record_event,
                                 proposal_payload,
@@ -2184,12 +2205,14 @@ class _TutorQuestionEntriesMixin:
                 if not callable(record_event):
                     raise RuntimeError("cognitive intervention ledger is unavailable")
                 event_payload = {**asdict(committed_cognitive_event), **development_audit}
+                if strategy_rotation_metadata and personalization_owns_selection(self):
+                    raise RuntimeError("strategy selection mode changed before delivery")
                 strategy_metadata = _v3_strategy_exposure_metadata(
                     self,
                     prepared_cognitive,
                     committed_at=str(event_payload.get("created_at") or ""),
                 )
-                if strategy_metadata or strategy_rotation_metadata:
+                if strategy_metadata or strategy_rotation_metadata or strategy_personalization_metadata:
                     event_metadata = dict(event_payload.get("metadata") or {})
                     if replacement_for_question_id:
                         event_metadata["replacement_for_question_id"] = (
@@ -2201,11 +2224,15 @@ class _TutorQuestionEntriesMixin:
                         event_metadata["strategy_rotation_assignment"] = (
                             strategy_rotation_metadata
                         )
+                    if strategy_personalization_metadata:
+                        if strategy_personalization_metadata.get("applied") is True and not personalization_enabled(self):
+                            raise RuntimeError("personalization gates changed before delivery")
+                        event_metadata["strategy_personalization"] = strategy_personalization_metadata
                     event_payload["metadata"] = event_metadata
-                await asyncio.to_thread(
-                    record_event,
-                    event_payload,
-                )
+                if strategy_personalization_metadata.get("applied") is True:
+                    await asyncio.to_thread(commit_personalized_question, self, event_payload)
+                else:
+                    await asyncio.to_thread(record_event, event_payload)
                 wake_projection = getattr(self, "_request_cognitive_projection", None)
                 if callable(wake_projection):
                     try:

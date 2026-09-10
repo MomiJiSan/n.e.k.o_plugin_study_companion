@@ -259,6 +259,10 @@ def insert_cognitive_intervention_event(
             raise ValueError("cognitive intervention event identity collision")
     else:
         if item["event_type"] == "question_committed":
+            if (event.get("metadata") or {}).get("strategy_personalization"):
+                from .store_cognitive_personalization import validate_personalized_commit
+
+                validate_personalized_commit(conn, event)
             if (event.get("metadata") or {}).get("development_transfer_retest"):
                 from .store_cognitive_transfer_development import validate_transfer_retest_commit
 

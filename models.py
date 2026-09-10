@@ -474,6 +474,9 @@ class CognitiveConfig:
     # ``model_version = cognitive-v1`` continue to open their old projection.
     model_version: str = ""
     supported_topics: tuple[str, ...] = COGNITIVE_V1_SUPPORTED_TOPICS
+    strategy_personalization_enabled: bool = False
+    strategy_personalization_exploration_enabled: bool = False
+    strategy_personalization_stopped: bool = False
 
     def __post_init__(self) -> None:
         self.projection_enabled = self.projection_enabled if isinstance(self.projection_enabled, bool) else False
@@ -508,6 +511,11 @@ class CognitiveConfig:
             if isinstance(self.knowledge_graph_enabled, bool)
             else False
         )
+        self.strategy_personalization_enabled = self.strategy_personalization_enabled is True
+        self.strategy_personalization_exploration_enabled = (
+            self.strategy_personalization_exploration_enabled is True
+        )
+        self.strategy_personalization_stopped = self.strategy_personalization_stopped is not False
         requested_set = str(self.version_set or "").strip()
         legacy_model_version = str(self.model_version or "").strip()
         requested_versions = get_cognitive_version_set(requested_set)
@@ -534,6 +542,8 @@ class CognitiveConfig:
             self.retention_enabled = False
             self.strategy_shadow_enabled = False
             self.strategy_rotation_enabled = False
+            self.strategy_personalization_enabled = False
+            self.strategy_personalization_exploration_enabled = False
         if not isinstance(self.supported_topics, (list, tuple)):
             self.supported_topics = ()
         else:
@@ -565,6 +575,11 @@ def build_cognitive_config(raw: Mapping[str, Any]) -> CognitiveConfig:
         retention_enabled=cognitive.get("retention_enabled", False),
         strategy_shadow_enabled=cognitive.get("strategy_shadow_enabled", False),
         strategy_rotation_enabled=cognitive.get("strategy_rotation_enabled", False),
+        strategy_personalization_enabled=cognitive.get("strategy_personalization_enabled", False),
+        strategy_personalization_exploration_enabled=cognitive.get(
+            "strategy_personalization_exploration_enabled", False
+        ),
+        strategy_personalization_stopped=cognitive.get("strategy_personalization_stopped", False),
         knowledge_graph_enabled=cognitive.get("knowledge_graph_enabled", True),
         version_set=cognitive.get(
             "version_set",

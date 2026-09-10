@@ -50,3 +50,28 @@ report explicitly leaves those gates `NOT_EVALUATED`.
 
 Use `--skip-targeted-tests` only when pytest was run separately. The tool never
 runs the repository-wide test suite.
+
+## Cognitive V3 personalization deterministic acceptance
+
+Run the independent personalization acceptance tool from the repository root:
+
+```powershell
+uv run python tools/cognitive_personalization_acceptance.py `
+  --report-dir docs/reports
+```
+
+The runner creates an isolated temporary production `StudyStore` and anchors
+all synthetic timestamps to one run-local UTC instant. It calls the production
+strategy ledger, report builder, personalization selector, canonical question
+writer and atomic answer transaction, then writes byte-stable JSON and Markdown:
+
+- `docs/reports/cognitive-v3-personalization-deterministic.json`
+- `docs/reports/cognitive-v3-personalization-deterministic.md`
+
+The cases cover production and manifest defaults, exploration off/on,
+sufficient, insufficient, stale, conflicting, incompatible and invalid
+evidence, exposure and consecutive non-correct failure stops, user stop, the
+frozen strategy snapshot digest, canonical question/answer/outcome writes and a
+concurrent delivery rejection. The tool does not invoke pytest, access the
+configured learner database, call a model or network service, install the
+plugin, or claim human teaching effectiveness.
