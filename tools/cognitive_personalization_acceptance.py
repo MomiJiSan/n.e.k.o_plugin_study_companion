@@ -555,9 +555,12 @@ def run_acceptance(*, report_dir: Path) -> dict[str, Any]:
                 "content_sha256"
             ]
             personalized_exposure = next(
-                row
-                for row in after_answer["exposures"]
-                if row["source_id"] == "personalized-question"
+                (
+                    row
+                    for row in after_answer["exposures"]
+                    if row["source_id"] == "personalized-question"
+                ),
+                None,
             )
             stale_event = _personalized_question_event(
                 audit,
@@ -569,8 +572,10 @@ def run_acceptance(*, report_dir: Path) -> dict[str, Any]:
             fence_rejected = False
             try:
                 store.record_cognitive_intervention_event(stale_event)
-            except ValueError:
-                fence_rejected = True
+            except ValueError as exc:
+                fence_rejected = (
+                    str(exc) == "personalized delivery history changed or stopped"
+                )
 
             expected = {
                 "default_off": ("baseline", "disabled"),
@@ -614,7 +619,8 @@ def run_acceptance(*, report_dir: Path) -> dict[str, Any]:
                     == 1
                 ),
                 "outcome_projection_updated": (
-                    personalized_exposure["outcomes"]["immediate"]["success"]
+                    personalized_exposure is not None
+                    and personalized_exposure["outcomes"]["immediate"]["success"]
                     is False
                     and before_hash != after_hash
                 ),
