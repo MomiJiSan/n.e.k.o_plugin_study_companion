@@ -4,8 +4,8 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+# isort: off
 import pytest
-
 from adaptive_learning.cognitive_personalization import (
     ALTERNATE,
     BASELINE,
@@ -14,6 +14,7 @@ from adaptive_learning.cognitive_personalization import (
     select_personalized_strategy,
 )
 from adaptive_learning.cognitive_policy import question_plan_ownership_fingerprint
+# isort: on
 
 # isort: split
 from test_cognitive_strategy_report import _exposure

@@ -7,11 +7,12 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+# isort: off
 import pytest
-
 from adaptive_learning.cognitive_personalization import VERSION_SET
 from adaptive_learning.cognitive_strategy_report import build_cognitive_strategy_report
 from store_cognitive_strategy import insert_cognitive_strategy_exposure, insert_cognitive_strategy_fact
+# isort: on
 
 # isort: split
 from test_cognitive_active_question_entry import _active_subject, _generate
