@@ -225,6 +225,8 @@ class CommandIntent(str, Enum):
     CHOOSE_RUN_REWARD = "choose_run_reward"
     LEAVE_ENCOUNTER = "leave_encounter"
     FINISH_RUN = "finish_run"
+    CHOOSE_EVENT = "choose_event"
+    REPAIR_CAMP = "repair_camp"
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .bridge_contracts import BridgeContractError, PerformActionRequest, PublicAction
+from .forest import NODES
 from .state import RunState
 
 _NODE_LABELS = {
@@ -50,9 +51,11 @@ def _action_plan(
         action_id = "enter_selected_node"
     elif action_type == "play_card":
         action_id = f"play_card:{target_id}"
+    elif action_type == "choose_event":
+        action_id = f"choose_event:{target_id}"
     elif action_type == "choose_reward":
         action_id = f"choose_reward:{target_id}"
-    elif action_type in {"end_turn", "abandon_run", "finish_run"}:
+    elif action_type in {"end_turn", "abandon_run", "finish_run", "repair_camp"}:
         action_id = action_type
     else:
         raise ValueError(f"unsupported public action type: {action_type}")
@@ -84,7 +87,9 @@ def build_available_actions(state: RunState) -> tuple[ActionPlan, ...]:
                     _action_plan(
                         state,
                         action_type="select_node",
-                        label=_NODE_LABELS.get(node_id, "选择节点"),
+                        label=("前往" + NODES[node_id]["name"])
+                        if state.expedition
+                        else _NODE_LABELS.get(node_id, "选择节点"),
                         intent="select_node",
                         target_id=node_id,
                         payload={"node_id": node_id},
@@ -95,7 +100,9 @@ def build_available_actions(state: RunState) -> tuple[ActionPlan, ...]:
                     _action_plan(
                         state,
                         action_type="enter_selected_node",
-                        label=_NODE_LABELS.get(state.selected_node_id, "进入节点"),
+                        label=("进入" + NODES[state.selected_node_id]["name"])
+                        if state.expedition
+                        else _NODE_LABELS.get(state.selected_node_id, "进入节点"),
                         intent="start_encounter",
                         target_id=state.selected_node_id,
                     )
@@ -128,11 +135,11 @@ def build_available_actions(state: RunState) -> tuple[ActionPlan, ...]:
             )
         )
         plans.append(
-                _action_plan(
-                    state,
-                    action_type="abandon_run",
-                    label="撤离本轮探索",
-                    intent="leave_encounter",
+            _action_plan(
+                state,
+                action_type="abandon_run",
+                label="撤离本轮探索",
+                intent="leave_encounter",
             )
         )
     elif state.phase == "reward":
@@ -146,6 +153,28 @@ def build_available_actions(state: RunState) -> tuple[ActionPlan, ...]:
                     target_id=reward_id,
                     payload={"reward_id": reward_id},
                 )
+            )
+    if state.expedition:
+        if state.phase == "event" and state.expedition["event"]:
+            for choice in state.expedition["event"]["choices"]:
+                plans.append(
+                    _action_plan(
+                        state,
+                        action_type="choose_event",
+                        label=choice["label"],
+                        intent="choose_event",
+                        target_id=choice["id"],
+                        payload={"choice_id": choice["id"]},
+                    )
+                )
+        if state.status == "active" and state.phase in {"map", "event", "reward"}:
+            plans.append(
+                _action_plan(state, action_type="abandon_run", label="撤退并保留本轮收获", intent="leave_encounter")
+            )
+        camp = state.expedition["camp"]
+        if state.phase in {"complete", "failed"} and not camp["watchtower_repaired"] and camp["materials"] >= 6:
+            plans.append(
+                _action_plan(state, action_type="repair_camp", label="修复灰铃哨塔 · 6 份材料", intent="repair_camp")
             )
     return tuple(plans)
 
@@ -179,6 +208,10 @@ def command_for_action_id(action_id: str) -> tuple[str, dict[str, str]]:
         return "choose_run_reward", {"reward_id": action_id.partition(":")[2]}
     if action_id == "abandon_run":
         return "leave_encounter", {}
+    if action_id.startswith("choose_event:"):
+        return "choose_event", {"choice_id": action_id.partition(":")[2]}
+    if action_id == "repair_camp":
+        return "repair_camp", {}
     if action_id == "finish_run":
         return "finish_run", {}
     raise BridgeContractError("invalid_request", "action_id is invalid")

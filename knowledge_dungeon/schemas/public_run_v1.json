@@ -17,47 +17,93 @@
     "events"
   ],
   "properties": {
-    "bridge_protocol_version": {"const": 1},
-    "engine_protocol_version": {"const": 1},
-    "public_projection_version": {"const": 1},
-    "application_service_version": {"const": "knowledge-dungeon-v0.2-c0"},
-    "scenario_id": {"const": "calculus_v0_1"},
-    "state_version": {"type": "integer", "minimum": 1},
-    "state_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "run": {"$ref": "#/$defs/run"},
+    "bridge_protocol_version": {
+      "const": 1
+    },
+    "engine_protocol_version": {
+      "const": 1
+    },
+    "public_projection_version": {
+      "const": 1
+    },
+    "application_service_version": {
+      "const": "knowledge-dungeon-v0.2-c0"
+    },
+    "scenario_id": {
+      "enum": [
+        "calculus_v0_1",
+        "forest_v0_2"
+      ]
+    },
+    "state_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "state_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "run": {
+      "$ref": "#/$defs/run"
+    },
     "available_actions": {
       "type": "array",
-      "items": {"$ref": "#/$defs/action"}
+      "items": {
+        "$ref": "#/$defs/action"
+      }
     },
     "events": {
       "type": "array",
-      "items": {"$ref": "#/$defs/event"}
+      "items": {
+        "$ref": "#/$defs/event"
+      }
     }
   },
   "$defs": {
-    "identifier": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
     "nullableIdentifier": {
       "oneOf": [
-        {"$ref": "#/$defs/identifier"},
-        {"type": "null"}
+        {
+          "$ref": "#/$defs/identifier"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "identifierArray": {
       "type": "array",
-      "items": {"$ref": "#/$defs/identifier"}
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
     },
     "action": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["action_id", "action_type", "label", "target_id"],
+      "required": [
+        "action_id",
+        "action_type",
+        "label",
+        "target_id"
+      ],
       "properties": {
         "action_id": {
           "type": "string",
-          "pattern": "^(select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|play_card:[a-z0-9][a-z0-9._-]*|end_turn|choose_reward:[a-z0-9][a-z0-9._-]*|abandon_run|finish_run)$"
+          "pattern": "^(select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|play_card:[a-z0-9][a-z0-9._-]*|end_turn|choose_reward:[a-z0-9][a-z0-9._-]*|choose_event:[a-z0-9][a-z0-9._-]*|repair_camp|abandon_run|finish_run)$"
         },
-        "action_type": {"$ref": "#/$defs/identifier"},
-        "label": {"type": "string", "minLength": 1},
-        "target_id": {"$ref": "#/$defs/nullableIdentifier"}
+        "action_type": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_id": {
+          "$ref": "#/$defs/nullableIdentifier"
+        }
       }
     },
     "card": {
@@ -77,30 +123,85 @@
         "available_in_run"
       ],
       "properties": {
-        "card_id": {"$ref": "#/$defs/identifier"},
-        "name": {"type": "string", "minLength": 1},
-        "subject_id": {"$ref": "#/$defs/identifier"},
-        "base_damage": {"type": "integer", "minimum": 0},
-        "energy_cost": {"type": "integer", "minimum": 0},
-        "freshness_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
-        "lifecycle_state": {"enum": ["active", "fading_light", "fading_heavy", "dormant"]},
-        "rules_text": {"type": "string"},
-        "flavor_text": {"type": "string"},
-        "starter": {"type": "boolean"},
-        "available_in_run": {"type": "boolean"}
+        "card_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subject_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "base_damage": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "energy_cost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "freshness_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "lifecycle_state": {
+          "enum": [
+            "active",
+            "fading_light",
+            "fading_heavy",
+            "dormant"
+          ]
+        },
+        "rules_text": {
+          "type": "string"
+        },
+        "flavor_text": {
+          "type": "string"
+        },
+        "starter": {
+          "type": "boolean"
+        },
+        "available_in_run": {
+          "type": "boolean"
+        }
       }
     },
     "enemy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enemy_id", "name", "max_hp", "hp", "attack", "boss"],
+      "required": [
+        "enemy_id",
+        "name",
+        "max_hp",
+        "hp",
+        "attack",
+        "boss"
+      ],
       "properties": {
-        "enemy_id": {"$ref": "#/$defs/identifier"},
-        "name": {"type": "string", "minLength": 1},
-        "max_hp": {"type": "integer", "minimum": 1},
-        "hp": {"type": "integer", "minimum": 0},
-        "attack": {"type": "integer", "minimum": 0},
-        "boss": {"type": "boolean"}
+        "enemy_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_hp": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attack": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "boss": {
+          "type": "boolean"
+        }
       }
     },
     "versions": {
@@ -115,12 +216,27 @@
         "rng_algorithm"
       ],
       "properties": {
-        "protocol_version": {"const": 1},
-        "state_schema_version": {"const": 1},
-        "content_pack_version": {"type": "string", "minLength": 1},
-        "engine_version": {"type": "string", "minLength": 1},
-        "card_policy_version": {"type": "string", "minLength": 1},
-        "rng_algorithm": {"const": "pcg32-v1"}
+        "protocol_version": {
+          "const": 1
+        },
+        "state_schema_version": {
+          "const": 1
+        },
+        "content_pack_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "card_policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rng_algorithm": {
+          "const": "pcg32-v1"
+        }
       }
     },
     "run": {
@@ -148,54 +264,141 @@
         "versions"
       ],
       "properties": {
-        "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{24}$"},
-        "status": {"enum": ["active", "boss_defeated", "completed", "failed", "abandoned"]},
-        "phase": {"enum": ["map", "encounter", "reward", "complete", "failed"]},
-        "map_subject_id": {"$ref": "#/$defs/identifier"},
-        "current_node_id": {"$ref": "#/$defs/nullableIdentifier"},
-        "selected_node_id": {"$ref": "#/$defs/nullableIdentifier"},
-        "available_node_ids": {"$ref": "#/$defs/identifierArray"},
-        "completed_node_ids": {"$ref": "#/$defs/identifierArray"},
-        "revealed_node_ids": {"$ref": "#/$defs/identifierArray"},
+        "run_id": {
+          "type": "string",
+          "pattern": "^run-[0-9a-f]{24}$"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "boss_defeated",
+            "completed",
+            "failed",
+            "abandoned"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "map",
+            "encounter",
+            "reward",
+            "complete",
+            "failed",
+            "event"
+          ]
+        },
+        "map_subject_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "current_node_id": {
+          "$ref": "#/$defs/nullableIdentifier"
+        },
+        "selected_node_id": {
+          "$ref": "#/$defs/nullableIdentifier"
+        },
+        "available_node_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "completed_node_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "revealed_node_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
         "player": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["hp", "max_hp", "energy", "max_energy"],
+          "required": [
+            "hp",
+            "max_hp",
+            "energy",
+            "max_energy"
+          ],
           "properties": {
-            "hp": {"type": "integer", "minimum": 0},
-            "max_hp": {"type": "integer", "minimum": 1},
-            "energy": {"type": "integer", "minimum": 0},
-            "max_energy": {"type": "integer", "minimum": 0}
+            "hp": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_hp": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "energy": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_energy": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "turn": {"type": "integer", "minimum": 0},
-        "cards": {"type": "array", "items": {"$ref": "#/$defs/card"}},
-        "hand": {"$ref": "#/$defs/identifierArray"},
-        "draw_pile_count": {"type": "integer", "minimum": 0},
-        "discard_pile_count": {"type": "integer", "minimum": 0},
+        "turn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/card"
+          }
+        },
+        "hand": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "draw_pile_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "discard_pile_count": {
+          "type": "integer",
+          "minimum": 0
+        },
         "enemy": {
           "oneOf": [
-            {"$ref": "#/$defs/enemy"},
-            {"type": "null"}
+            {
+              "$ref": "#/$defs/enemy"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "pending_rewards": {"$ref": "#/$defs/identifierArray"},
+        "pending_rewards": {
+          "$ref": "#/$defs/identifierArray"
+        },
         "run_modifiers": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["encounter_damage_bps", "next_encounter_damage_bps"],
+          "required": [
+            "encounter_damage_bps",
+            "next_encounter_damage_bps"
+          ],
           "properties": {
-            "encounter_damage_bps": {"type": "integer", "minimum": 0},
-            "next_encounter_damage_bps": {"type": "integer", "minimum": 0}
+            "encounter_damage_bps": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "next_encounter_damage_bps": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "versions": {"$ref": "#/$defs/versions"}
+        "versions": {
+          "$ref": "#/$defs/versions"
+        },
+        "expedition": {
+          "$ref": "#/$defs/expedition"
+        }
       }
     },
     "event": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "enum": [
@@ -216,30 +419,373 @@
             "enemy_attacked",
             "boss_defeated",
             "run_abandoned",
-            "run_finished"
+            "run_finished",
+            "event_entered",
+            "event_resolved",
+            "expedition_settled",
+            "camp_repaired"
           ]
         },
-        "run_id": {"$ref": "#/$defs/identifier"},
-        "active_card_ids": {"$ref": "#/$defs/identifierArray"},
-        "dormant_card_ids": {"$ref": "#/$defs/identifierArray"},
-        "node_id": {"$ref": "#/$defs/identifier"},
-        "enemy_id": {"$ref": "#/$defs/identifier"},
-        "boss": {"type": "boolean"},
-        "turn": {"type": "integer", "minimum": 1},
-        "drawn_card_ids": {"$ref": "#/$defs/identifierArray"},
-        "card_id": {"$ref": "#/$defs/identifier"},
-        "damage": {"type": "integer", "minimum": 0},
-        "freshness_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
-        "subject_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
-        "hp": {"type": "integer", "minimum": 0},
-        "reward_ids": {"$ref": "#/$defs/identifierArray"},
-        "reward_id": {"$ref": "#/$defs/identifier"},
-        "healed": {"type": "integer", "minimum": 0},
-        "reason": {"type": "string", "minLength": 1},
-        "player_hp": {"type": "integer", "minimum": 0},
-        "permanent_reward": {"type": "null"},
-        "learning_fact_written": {"const": false}
+        "run_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "active_card_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "dormant_card_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "node_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "enemy_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "boss": {
+          "type": "boolean"
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "drawn_card_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "card_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "damage": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "freshness_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "subject_bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "hp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reward_ids": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "reward_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "healed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_hp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "permanent_reward": {
+          "type": "null"
+        },
+        "learning_fact_written": {
+          "const": false
+        },
+        "choice_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "repair_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "abandoned",
+            "failed"
+          ]
+        },
+        "materials_kept": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "materials_lost": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "expedition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "content_version",
+        "regions",
+        "nodes",
+        "carried_materials",
+        "carried_relics",
+        "clues",
+        "boss_intel",
+        "event",
+        "settlement",
+        "camp"
+      ],
+      "properties": {
+        "content_version": {
+          "const": "forest_v0_2"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "type",
+              "region_id",
+              "x",
+              "y",
+              "description",
+              "risk",
+              "reward",
+              "next"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "enum": [
+                  "entrance",
+                  "battle",
+                  "investigation",
+                  "mechanism",
+                  "rest",
+                  "boss"
+                ]
+              },
+              "region_id": {
+                "$ref": "#/$defs/identifier"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "risk": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reward": {
+                "type": "string",
+                "minLength": 1
+              },
+              "next": {
+                "$ref": "#/$defs/identifierArray"
+              }
+            }
+          }
+        },
+        "carried_materials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "carried_relics": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "clues": {
+          "$ref": "#/$defs/identifierArray"
+        },
+        "boss_intel": {
+          "type": "boolean"
+        },
+        "event": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "node_id",
+                "title",
+                "description",
+                "choices"
+              ],
+              "properties": {
+                "node_id": {
+                  "$ref": "#/$defs/identifier"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "label",
+                      "description"
+                    ],
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/identifier"
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settlement": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "outcome",
+                "materials_kept",
+                "materials_lost",
+                "relics_kept"
+              ],
+              "properties": {
+                "outcome": {
+                  "enum": [
+                    "completed",
+                    "abandoned",
+                    "failed"
+                  ]
+                },
+                "materials_kept": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "materials_lost": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "relics_kept": {
+                  "$ref": "#/$defs/identifierArray"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "camp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "materials",
+            "relics",
+            "clues",
+            "watchtower_repaired"
+          ],
+          "properties": {
+            "materials": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "relics": {
+              "$ref": "#/$defs/identifierArray"
+            },
+            "clues": {
+              "$ref": "#/$defs/identifierArray"
+            },
+            "watchtower_repaired": {
+              "type": "boolean"
+            }
+          }
+        }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scenario_id": {
+            "const": "forest_v0_2"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run": {
+            "required": [
+              "expedition"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "run": {
+            "not": {
+              "required": [
+                "expedition"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

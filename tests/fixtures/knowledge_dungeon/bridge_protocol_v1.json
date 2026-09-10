@@ -1,25 +1,31 @@
 {
   "bootstrap": {
-    "application_service_version": "knowledge-dungeon-v0.2-c0",
-    "capabilities": {
-      "learning_writeback": false,
-      "action_id_only_submission": true,
-      "real_learning_data": false,
-      "server_generated_command_id": true,
-      "server_generated_run_id": true,
-      "server_generated_seed": true
-    },
     "bridge_protocol_version": 1,
     "engine_protocol_version": 1,
     "public_projection_version": 1,
+    "application_service_version": "knowledge-dungeon-v0.2-c0",
     "scenarios": [
       {
-        "content_status": "simulated",
-        "map_subject_id": "math",
         "scenario_id": "calculus_v0_1",
-        "title": "极限森林"
+        "title": "极限森林",
+        "map_subject_id": "math",
+        "content_status": "simulated"
+      },
+      {
+        "scenario_id": "forest_v0_2",
+        "title": "极限森林 · 远征",
+        "map_subject_id": "math",
+        "content_status": "simulated"
       }
-    ]
+    ],
+    "capabilities": {
+      "action_id_only_submission": true,
+      "server_generated_run_id": true,
+      "server_generated_command_id": true,
+      "server_generated_seed": true,
+      "real_learning_data": false,
+      "learning_writeback": false
+    }
   },
   "create_run_contract": {
     "available_action_ids": [

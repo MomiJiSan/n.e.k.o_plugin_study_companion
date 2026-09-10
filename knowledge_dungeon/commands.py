@@ -18,6 +18,8 @@ SUPPORTED_INTENTS = frozenset(
         "choose_run_reward",
         "leave_encounter",
         "finish_run",
+        "choose_event",
+        "repair_camp",
     }
 )
 _COMMAND_ENVELOPE_KEYS = frozenset(

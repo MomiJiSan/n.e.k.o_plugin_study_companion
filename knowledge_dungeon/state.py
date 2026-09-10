@@ -66,8 +66,14 @@ class RunState:
     command_log: list[dict[str, Any]] = field(default_factory=list)
     versions: dict[str, Any] = field(default_factory=dict)
 
+    expedition: dict[str, Any] | None = None
+    camp_version: int = 0
+
     def to_dict(self, *, include_command_log: bool = True) -> dict[str, Any]:
         result = asdict(self)
+        if self.expedition is None:
+            result.pop("expedition", None)
+            result.pop("camp_version", None)
         if not self.owner_client_id:
             result.pop("owner_client_id", None)
         if not include_command_log:

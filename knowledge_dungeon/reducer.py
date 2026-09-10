@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from . import forest
 from .card_projection import calculate_effect_value, subject_multiplier_bp
 from .commands import DungeonCommand
 from .contracts import VersionBundle
@@ -144,6 +145,11 @@ def _start_run(command: DungeonCommand) -> Transition:
         dormant_card_ids=dormant,
         versions=versions,
     )
+    if command.payload.get("scenario_id") == forest.FOREST_ID:
+        state.expedition = forest.new_expedition()
+        state.versions["content_pack_version"] = forest.FOREST_ID
+        state.available_node_ids = list(forest.NODES["entrance"]["next"])
+        state.revealed_node_ids = ["entrance", *state.available_node_ids]
     return Transition(
         state,
         [
@@ -226,9 +232,7 @@ def _complete_noncombat_node(state: RunState, node_id: str) -> list[dict[str, An
     state.current_node_id = node_id
     state.selected_node_id = None
     state.available_node_ids = list(node["next"])
-    state.revealed_node_ids.extend(
-        candidate for candidate in node["next"] if candidate not in state.revealed_node_ids
-    )
+    state.revealed_node_ids.extend(candidate for candidate in node["next"] if candidate not in state.revealed_node_ids)
     state.phase = "map"
     return events + [{"type": "node_completed", "node_id": node_id}]
 
@@ -238,7 +242,9 @@ def _start_encounter(state: RunState, _command: DungeonCommand) -> list[dict[str
     node_id = state.selected_node_id
     if not node_id:
         raise ReducerError("node_not_selected", "select a node before starting it")
-    node = MAP_NODES[node_id]
+    node = (forest.NODES if state.expedition else MAP_NODES)[node_id]
+    if state.expedition and node["type"] in {"investigation", "mechanism", "rest"}:
+        return forest.enter_event(state)
     if node["type"] in {"trap", "rest"}:
         return _complete_noncombat_node(state, node_id)
     if node["type"] not in {"battle", "boss"}:
@@ -253,11 +259,19 @@ def _start_encounter(state: RunState, _command: DungeonCommand) -> list[dict[str
         attack=4 if boss else 3,
         boss=boss,
     )
+    if state.expedition:
+        hp, attack = (30, 6) if boss else ((16, 4) if node_id == "mist_patrol" else (10, 3))
+        if boss and state.expedition["boss_intel"]:
+            hp, attack = 22, 4
+        state.enemy.hp = state.enemy.max_hp = hp
+        state.enemy.attack = attack
     state.current_node_id = node_id
     state.phase = "encounter"
     state.turn = 1
     state.energy = state.max_energy
     state.encounter_damage_bps = state.next_encounter_damage_bps
+    if state.expedition and "moss_charm" in state.expedition["carried_relics"]:
+        state.encounter_damage_bps += 1000
     state.next_encounter_damage_bps = 10_000
     state.mercy_used_this_turn = False
     state.draw_pile = _active_card_ids(state)
@@ -332,6 +346,10 @@ def _win_encounter(state: RunState) -> list[dict[str, Any]]:
     state.hand.clear()
     state.energy = 0
     state.enemy = None
+    if state.expedition:
+        state.expedition["carried_materials"] += 8 if was_boss else 3
+        if was_boss:
+            state.expedition["carried_relics"].append("guardian_badge")
     if was_boss:
         state.status = "boss_defeated"
         state.phase = "map"
@@ -384,14 +402,14 @@ def _choose_reward(state: RunState, command: DungeonCommand) -> list[dict[str, A
     elif reward_id == "next_damage_25":
         state.next_encounter_damage_bps = 12_500
     elif reward_id == "reveal_map":
-        for node_id in MAP_NODES:
+        for node_id in forest.NODES if state.expedition else MAP_NODES:
             if node_id not in state.revealed_node_ids:
                 state.revealed_node_ids.append(node_id)
     state.applied_reward_ids.append(reward_id)
     state.pending_rewards.clear()
     node_id = state.current_node_id
     assert node_id is not None
-    state.available_node_ids = list(MAP_NODES[node_id]["next"])
+    state.available_node_ids = list((forest.NODES if state.expedition else MAP_NODES)[node_id]["next"])
     state.revealed_node_ids.extend(
         candidate for candidate in state.available_node_ids if candidate not in state.revealed_node_ids
     )
@@ -400,7 +418,11 @@ def _choose_reward(state: RunState, command: DungeonCommand) -> list[dict[str, A
 
 
 def _leave_encounter(state: RunState, _command: DungeonCommand) -> list[dict[str, Any]]:
-    _require_phase(state, "encounter")
+    if state.expedition:
+        if state.status != "active" or state.phase not in {"map", "event", "encounter", "reward"}:
+            raise ReducerError("invalid_phase", "expedition is not active")
+    else:
+        _require_phase(state, "encounter")
     state.status = "abandoned"
     state.phase = "complete"
     state.enemy = None
@@ -438,5 +460,19 @@ def reduce_command(state: RunState | None, command: DungeonCommand) -> Transitio
         "leave_encounter": _leave_encounter,
         "finish_run": _finish_run,
     }
-    events = handlers[command.intent](next_state, command)
+    if command.intent in {"choose_event", "repair_camp"}:
+        if not next_state.expedition:
+            raise ReducerError("action_unavailable", "forest expedition required")
+        try:
+            events = (
+                forest.choose_event(next_state, str(command.payload.get("choice_id", "")))
+                if command.intent == "choose_event"
+                else forest.repair_camp(next_state)
+            )
+        except ValueError as exc:
+            raise ReducerError("action_unavailable", str(exc)) from exc
+    else:
+        events = handlers[command.intent](next_state, command)
+    if next_state.expedition:
+        events.extend(forest.settle(next_state))
     return Transition(next_state, events)

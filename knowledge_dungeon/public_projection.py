@@ -22,6 +22,10 @@ class PublicProjectionError(RuntimeError):
 
 
 _PUBLIC_EVENT_FIELDS: dict[str, frozenset[str]] = {
+    "event_entered": frozenset(("type", "node_id")),
+    "event_resolved": frozenset(("type", "node_id", "choice_id")),
+    "expedition_settled": frozenset(("type", "outcome", "materials_kept", "materials_lost")),
+    "camp_repaired": frozenset(("type", "repair_id")),
     "run_started": frozenset(("type", "run_id")),
     "deck_frozen": frozenset(("type", "active_card_ids", "dormant_card_ids")),
     "node_selected": frozenset(("type", "node_id")),
@@ -97,7 +101,11 @@ def project_public_run(
     *,
     scenario_id: str,
     events: Iterable[Mapping[str, Any]] = (),
+    camp: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    action_state = deepcopy(state)
+    if camp is not None and action_state.expedition is not None:
+        action_state.expedition["camp"] = deepcopy(dict(camp))
     response: dict[str, Any] = {
         "bridge_protocol_version": BRIDGE_PROTOCOL_VERSION,
         "engine_protocol_version": PROTOCOL_VERSION,
@@ -106,8 +114,8 @@ def project_public_run(
         "scenario_id": scenario_id,
         "state_version": state.state_version,
         "state_hash": state_hash(state),
-        "run": _public_view(state),
-        "available_actions": [plan.public.to_dict() for plan in build_available_actions(state)],
+        "run": _public_view(action_state),
+        "available_actions": [plan.public.to_dict() for plan in build_available_actions(action_state)],
         "events": filter_public_events(events),
     }
     _assert_no_sensitive_keys(response)

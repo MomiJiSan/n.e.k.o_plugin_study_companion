@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping
 
 from .commands import CommandValidationError, DungeonCommand, command_to_dict
 from .contracts import PROTOCOL_VERSION
+from .forest import empty_camp, public_expedition
 from .persistence import (
     ConcurrentDungeonWrite,
     DungeonCommandConflict,
@@ -28,9 +29,8 @@ class KnowledgeDungeonEngine:
         self._lock = RLock()
         self._store = store
         self._runs: dict[str, RunState] = {}
-        self._response_cache: dict[
-            tuple[str, str], tuple[str, dict[str, Any]]
-        ] = {}
+        self._camps: dict[str, tuple[int, dict[str, Any]]] = {}
+        self._response_cache: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
 
     def get_state(self, run_id: str) -> RunState | None:
         with self._lock:
@@ -40,9 +40,7 @@ class KnowledgeDungeonEngine:
     def dispatch(self, raw_command: DungeonCommand | Mapping[str, Any]) -> dict[str, Any]:
         try:
             command = (
-                raw_command
-                if isinstance(raw_command, DungeonCommand)
-                else DungeonCommand.from_mapping(raw_command)
+                raw_command if isinstance(raw_command, DungeonCommand) else DungeonCommand.from_mapping(raw_command)
             )
         except CommandValidationError as exc:
             return self._rejection(None, "invalid_command", str(exc))
@@ -57,13 +55,9 @@ class KnowledgeDungeonEngine:
             fingerprint = command_fingerprint(command)
             if self._store is not None:
                 try:
-                    receipt = self._store.load_receipt(
-                        command.run_id, command.command_id
-                    )
+                    receipt = self._store.load_receipt(command.run_id, command.command_id)
                 except DungeonStoreError as exc:
-                    error_state = (
-                        None if exc.code == "corrupt_dungeon_state" else current
-                    )
+                    error_state = None if exc.code == "corrupt_dungeon_state" else current
                     return self._rejection(error_state, exc.code, str(exc))
                 if receipt is not None:
                     if receipt.request_hash != fingerprint:
@@ -98,12 +92,31 @@ class KnowledgeDungeonEngine:
             if current is not None and current.run_id != command.run_id:
                 return self._rejection(current, "run_id_mismatch", "run_id does not match state")
 
+            camp_version = 0
+            camp = None
+            reduction_state = current
+            if (current is not None and current.expedition is not None) or (
+                current is None and command.payload.get("scenario_id") == "forest_v0_2"
+            ):
+                owner = current.owner_client_id if current else str(command.payload.get("owner_client_id") or "")
+                try:
+                    camp_version, camp = self.get_camp(owner)
+                except DungeonStoreError as exc:
+                    return self._rejection(current, exc.code, str(exc))
+                if current is not None:
+                    reduction_state = deepcopy(current)
+                    assert reduction_state.expedition is not None
+                    reduction_state.expedition["camp"] = deepcopy(camp)
             try:
-                transition = reduce_command(current, command)
+                transition = reduce_command(reduction_state, command)
             except ReducerError as exc:
                 return self._rejection(current, exc.code, str(exc))
 
             next_state = transition.state
+            if next_state.expedition is not None:
+                if current is None:
+                    next_state.expedition["camp"] = deepcopy(camp)
+                next_state.camp_version = camp_version + 1
             next_state.state_version = actual_version + 1
             next_state.processed_command_ids.append(command.command_id)
             next_state.command_log.append(command_to_dict(command))
@@ -138,15 +151,24 @@ class KnowledgeDungeonEngine:
                         f"expected {command.expected_state_version}, actual {latest_version}",
                     )
                 except DungeonStoreError as exc:
-                    error_state = (
-                        None if exc.code == "corrupt_dungeon_state" else current
-                    )
+                    error_state = None if exc.code == "corrupt_dungeon_state" else current
                     return self._rejection(error_state, exc.code, str(exc))
 
+            if next_state.expedition is not None:
+                self._camps[next_state.owner_client_id] = (
+                    next_state.camp_version,
+                    deepcopy(next_state.expedition["camp"]),
+                )
             self._runs[command.run_id] = next_state
             if self._store is None:
                 self._response_cache[cache_key] = (fingerprint, deepcopy(response))
             return response
+
+    def get_camp(self, owner_client_id: str) -> tuple[int, dict[str, Any]]:
+        with self._lock:
+            if self._store is not None:
+                return self._store.load_camp(owner_client_id)
+            return deepcopy(self._camps.get(owner_client_id, (0, empty_camp())))
 
     def restore_state(self, state: RunState) -> None:
         with self._lock:
@@ -154,6 +176,10 @@ class KnowledgeDungeonEngine:
                 raise ValueError("persistent engines recover state from DungeonRunStore")
             if state.run_id in self._runs:
                 raise ValueError(f"run already exists: {state.run_id}")
+            if state.expedition is not None:
+                existing_version, _ = self._camps.get(state.owner_client_id, (-1, {}))
+                if state.camp_version > existing_version:
+                    self._camps[state.owner_client_id] = (state.camp_version, deepcopy(state.expedition["camp"]))
             self._runs[state.run_id] = deepcopy(state)
 
     def _load_current(self, run_id: str) -> RunState | None:
@@ -243,6 +269,7 @@ def build_view(state: RunState) -> dict[str, Any]:
             "boss": state.enemy.boss,
         }
     return {
+        **({"expedition": public_expedition(state.expedition)} if state.expedition is not None else {}),
         "run_id": state.run_id,
         "status": state.status,
         "phase": state.phase,

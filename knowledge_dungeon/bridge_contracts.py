@@ -14,6 +14,7 @@ from typing import Any, Mapping
 APPLICATION_SERVICE_VERSION = "knowledge-dungeon-v0.2-c0"
 PUBLIC_PROJECTION_VERSION = 1
 BRIDGE_PROTOCOL_VERSION = 1
+FOREST_SCENARIO_ID = "forest_v0_2"
 CALCULUS_SCENARIO_ID = "calculus_v0_1"
 CALCULUS_SUBJECT_ID = "math"
 REQUIRED_DUNGEON_SCOPE = "study_companion:dungeon"
@@ -23,7 +24,7 @@ _RUN_ID_PATTERN = re.compile(r"^run-[0-9a-f]{24}$")
 _ACTION_ID_PATTERN = re.compile(
     r"^(?:select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|"
     r"play_card:[a-z0-9][a-z0-9._-]*|end_turn|"
-    r"choose_reward:[a-z0-9][a-z0-9._-]*|abandon_run|finish_run)$"
+    r"choose_reward:[a-z0-9][a-z0-9._-]*|choose_event:[a-z0-9][a-z0-9._-]*|repair_camp|abandon_run|finish_run)$"
 )
 
 
@@ -154,7 +155,7 @@ class CreateRunRequest:
         require_identifier(self.scenario_id, "scenario_id")
         if self.subject_id != CALCULUS_SUBJECT_ID:
             raise BridgeContractError("subject_unavailable", f"unsupported subject: {self.subject_id}")
-        if self.scenario_id != CALCULUS_SCENARIO_ID:
+        if self.scenario_id not in {CALCULUS_SCENARIO_ID, FOREST_SCENARIO_ID}:
             raise BridgeContractError("scenario_unavailable", f"unsupported scenario: {self.scenario_id}")
 
     @classmethod
@@ -248,9 +249,7 @@ class PerformActionPayload:
             "perform_action payload",
         )
         run_id = _require_run_id(raw["run_id"])
-        request = PerformActionRequest.from_mapping(
-            {key: raw[key] for key in raw if key != "run_id"}
-        )
+        request = PerformActionRequest.from_mapping({key: raw[key] for key in raw if key != "run_id"})
         return cls(run_id=run_id, request=request)
 
     def to_dict(self) -> dict[str, object]:
@@ -310,3 +309,5 @@ CALCULUS_SCENARIO = ScenarioDescriptor(
     title="极限森林",
     map_subject_id=CALCULUS_SUBJECT_ID,
 )
+
+FOREST_SCENARIO = ScenarioDescriptor(FOREST_SCENARIO_ID, "极限森林 · 远征", CALCULUS_SUBJECT_ID)

@@ -13,6 +13,7 @@ from .bridge_contracts import (
     BRIDGE_PROTOCOL_VERSION,
     CALCULUS_SCENARIO,
     CALCULUS_SCENARIO_ID,
+    FOREST_SCENARIO,
     PUBLIC_PROJECTION_VERSION,
     BridgeContractError,
     CreateRunRequest,
@@ -64,7 +65,7 @@ class KnowledgeDungeonApplicationService:
             "engine_protocol_version": PROTOCOL_VERSION,
             "public_projection_version": PUBLIC_PROJECTION_VERSION,
             "application_service_version": APPLICATION_SERVICE_VERSION,
-            "scenarios": [CALCULUS_SCENARIO.to_dict()],
+            "scenarios": [CALCULUS_SCENARIO.to_dict(), FOREST_SCENARIO.to_dict()],
             "capabilities": {
                 "action_id_only_submission": True,
                 "server_generated_run_id": True,
@@ -82,9 +83,7 @@ class KnowledgeDungeonApplicationService:
     ) -> dict[str, Any]:
         trusted = require_trusted_context(context)
         request = (
-            raw_request
-            if isinstance(raw_request, CreateRunRequest)
-            else CreateRunRequest.from_mapping(raw_request)
+            raw_request if isinstance(raw_request, CreateRunRequest) else CreateRunRequest.from_mapping(raw_request)
         )
         with self._lock:
             run_id = self._derive_run_identity(trusted, request)
@@ -100,6 +99,7 @@ class KnowledgeDungeonApplicationService:
                 command_id=command_id,
                 seed=seed,
                 projection=projection,
+                scenario_id=request.scenario_id,
             )
             error = response.get("error")
             if (
@@ -116,6 +116,7 @@ class KnowledgeDungeonApplicationService:
                         command_id=command_id,
                         seed=state.seed,
                         projection=projection,
+                        scenario_id=request.scenario_id,
                     )
             self._require_accepted(response)
             state = self._engine.get_state(run_id)
@@ -125,6 +126,7 @@ class KnowledgeDungeonApplicationService:
             return project_public_run(
                 state,
                 scenario_id=request.scenario_id,
+                camp=self._engine.get_camp(trusted.client_id)[1] if state.expedition else None,
                 events=self._response_events(response),
             )
 
@@ -136,7 +138,11 @@ class KnowledgeDungeonApplicationService:
             if state is None:
                 raise ApplicationServiceError("run_not_found", "knowledge dungeon run was not found")
             self._require_run_owner(state.owner_client_id, trusted.client_id)
-            return project_public_run(state, scenario_id=CALCULUS_SCENARIO_ID)
+            return project_public_run(
+                state,
+                scenario_id=FOREST_SCENARIO.scenario_id if state.expedition else CALCULUS_SCENARIO_ID,
+                camp=self._engine.get_camp(trusted.client_id)[1] if state.expedition else None,
+            )
 
     def perform_action(
         self,
@@ -156,6 +162,8 @@ class KnowledgeDungeonApplicationService:
             if state is None:
                 raise ApplicationServiceError("run_not_found", "knowledge dungeon run was not found")
             self._require_run_owner(state.owner_client_id, trusted.client_id)
+            if state.expedition is not None:
+                state.expedition["camp"] = self._engine.get_camp(trusted.client_id)[1]
             intent, payload = command_for_action_id(request.action_id)
             if (
                 state.state_version == request.expected_state_version
@@ -182,7 +190,8 @@ class KnowledgeDungeonApplicationService:
                 raise ApplicationServiceError("authority_failure", "updated run is unavailable")
             return project_public_run(
                 next_state,
-                scenario_id=CALCULUS_SCENARIO_ID,
+                scenario_id=FOREST_SCENARIO.scenario_id if next_state.expedition else CALCULUS_SCENARIO_ID,
+                camp=self._engine.get_camp(trusted.client_id)[1] if next_state.expedition else None,
                 events=self._response_events(response),
             )
 
@@ -221,6 +230,7 @@ class KnowledgeDungeonApplicationService:
         command_id: str,
         seed: int,
         projection: Mapping[str, Any],
+        scenario_id: str,
     ) -> dict[str, Any]:
         return self._engine.dispatch(
             {
@@ -230,6 +240,7 @@ class KnowledgeDungeonApplicationService:
                 "expected_state_version": 0,
                 "intent": "start_run",
                 "payload": {
+                    **({"scenario_id": scenario_id} if scenario_id == FOREST_SCENARIO.scenario_id else {}),
                     "seed": seed,
                     "owner_client_id": context.client_id,
                     "map_subject_id": CALCULUS_SCENARIO.map_subject_id,
