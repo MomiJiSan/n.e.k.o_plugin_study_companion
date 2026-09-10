@@ -1,6 +1,6 @@
 # ADR-0009: Versioned teaching coverage expansion
 
-Status: Accepted for V4-PR1 implementation; 2026-09-10
+Status: Implemented in PR #105; 2026-09-10
 
 ## Decision
 
