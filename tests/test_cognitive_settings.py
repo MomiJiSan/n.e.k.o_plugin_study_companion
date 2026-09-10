@@ -100,6 +100,9 @@ def test_cognitive_settings_round_trip_all_runtime_modes(
             "retention_enabled": False,
             "strategy_shadow_enabled": False,
             "strategy_rotation_enabled": False,
+            "strategy_personalization_enabled": False,
+            "strategy_personalization_exploration_enabled": False,
+            "strategy_personalization_stopped": False,
             "knowledge_graph_enabled": True,
             "version_set": "cognitive-v2.1-1",
             "model_version": "cognitive-v2.1-1",
@@ -302,6 +305,75 @@ def test_strategy_collection_health_fails_closed_without_leaking_errors(
         },
         "error": "strategy_ledger_unavailable",
     }
+
+
+def test_personalization_status_entry_returns_the_runtime_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(monkeypatch, "_personalization_status_entry")
+    entries = _load_status_entries(monkeypatch, package_name, models)
+    payload = {
+        "status": "disabled",
+        "switches": {
+            "strategy_personalization_enabled": False,
+            "strategy_personalization_exploration_enabled": False,
+            "strategy_personalization_stopped": False,
+        },
+        "current_strategy": "baseline",
+        "decision_reason": "disabled",
+    }
+    runtime = ModuleType(f"{package_name}.cognitive_personalization_runtime")
+    runtime.personalization_status = lambda _owner: dict(payload)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
+
+    owner = SimpleNamespace()
+    result = entries._cognitive_personalization_status_payload(owner)
+
+    assert result == payload
+
+
+def test_runtime_cognitive_config_replacement_uses_the_answer_write_fence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models, package_name = _load_models(monkeypatch, "_settings_cognitive_fence")
+    entries = _load_status_entries(monkeypatch, package_name, models)
+
+    class Fence:
+        def __init__(self) -> None:
+            self.depth = 0
+            self.entered = 0
+
+        def __enter__(self):
+            self.depth += 1
+            self.entered += 1
+            return self
+
+        def __exit__(self, *_args) -> None:
+            self.depth -= 1
+
+    fence = Fence()
+    store = SimpleNamespace(answer_write_lock=lambda: fence)
+
+    class Owner(entries._StatusEntriesMixin):
+        def __init__(self) -> None:
+            self._cfg = models.StudyConfig()
+            self._store = store
+            self._knowledge_tracker = None
+            self._ocr_pipeline = None
+            self._agent = None
+            self._pomodoro_timer = None
+            self._supervision = None
+            self._checkin_manager = None
+
+    owner = Owner()
+    replacement = models.StudyConfig(
+        cognitive=models.CognitiveConfig(strategy_personalization_stopped=True)
+    )
+    owner._apply_runtime_settings_config(replacement)
+
+    assert owner._cfg is replacement
+    assert fence.entered == 1
+    assert fence.depth == 0
 
 
 def test_cognitive_setting_is_in_the_runtime_column_and_localized() -> None:
