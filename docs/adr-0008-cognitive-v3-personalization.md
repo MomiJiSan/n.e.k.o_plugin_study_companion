@@ -1,6 +1,6 @@
 # ADR-0008: Default-off evidence-gated repair personalization
 
-Status: Implemented behind default-off gates; 2026-09-10
+Status: Accepted and merged through PR #102 behind default-off gates; 2026-09-10
 
 ## Scope and precedence
 
