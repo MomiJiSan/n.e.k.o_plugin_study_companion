@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import sys
 from collections import Counter
@@ -14,15 +15,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from adaptive_learning.cognitive_catalog import (  # noqa: E402
-    COGNITIVE_CATALOG_V2,
-    KNOWLEDGE_GRAPH_HYPOTHESES,
-    build_knowledge_graph_cognitive_catalog,
+_catalog_module = importlib.import_module("adaptive_learning.cognitive_catalog")
+_versions_module = importlib.import_module("adaptive_learning.cognitive_versions")
+COGNITIVE_CATALOG_V2 = _catalog_module.COGNITIVE_CATALOG_V2
+KNOWLEDGE_GRAPH_HYPOTHESES = _catalog_module.KNOWLEDGE_GRAPH_HYPOTHESES
+build_knowledge_graph_cognitive_catalog = (
+    _catalog_module.build_knowledge_graph_cognitive_catalog
 )
-from adaptive_learning.cognitive_versions import (  # noqa: E402
-    COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET,
-    get_cognitive_version_set,
+COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET = (
+    _versions_module.COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET
 )
+get_cognitive_version_set = _versions_module.get_cognitive_version_set
 
 REPORT_JSON = "cognitive-v4-teaching-coverage.json"
 REPORT_MARKDOWN = "cognitive-v4-teaching-coverage.md"
