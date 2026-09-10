@@ -3,7 +3,6 @@ from copy import deepcopy
 from threading import Barrier
 
 import pytest
-
 from knowledge_dungeon.application_service import ApplicationServiceError, KnowledgeDungeonApplicationService
 from knowledge_dungeon.bridge_contracts import TrustedInvocationContext
 from knowledge_dungeon.engine import KnowledgeDungeonEngine
