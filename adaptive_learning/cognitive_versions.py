@@ -15,6 +15,7 @@ from typing import Mapping
 LEGACY_COGNITIVE_VERSION_SET = "cognitive-v1"
 DEFAULT_COGNITIVE_VERSION_SET = "cognitive-v2.1-1"
 TEACHING_COVERAGE_VERSION_SET = "cognitive-v4-coverage-1"
+COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET = "cognitive-v4-coverage-2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,14 @@ _VERSION_SETS: Mapping[str, CognitiveVersionSet] = MappingProxyType(
             projection_version=TEACHING_COVERAGE_VERSION_SET,
             validator_version="cognitive-question-validator-v4-coverage-1",
         ),
+        COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET: CognitiveVersionSet(
+            name=COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET,
+            extractor_version="cognitive-extractor-v1",
+            catalog_version="cognitive-catalog-v3",
+            reducer_version="cognitive-reducer-v2.1-1",
+            projection_version=COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET,
+            validator_version="cognitive-question-validator-v4-coverage-2",
+        ),
     }
 )
 
@@ -69,6 +78,7 @@ def supported_cognitive_version_sets() -> tuple[str, ...]:
 
 __all__ = [
     "CognitiveVersionSet",
+    "COMPREHENSIVE_TEACHING_COVERAGE_VERSION_SET",
     "DEFAULT_COGNITIVE_VERSION_SET",
     "LEGACY_COGNITIVE_VERSION_SET",
     "TEACHING_COVERAGE_VERSION_SET",

@@ -131,6 +131,7 @@ def test_empty_current_schema_is_healthy_and_runtime_is_unknown(database: Path) 
         "cognitive-v1",
         "cognitive-v2.1-1",
         "cognitive-v4-coverage-1",
+        "cognitive-v4-coverage-2",
     ]
 
 

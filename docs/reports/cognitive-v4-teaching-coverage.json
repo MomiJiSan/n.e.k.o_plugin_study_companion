@@ -1,0 +1,43 @@
+{
+  "active_topic_hypothesis_count": 2569,
+  "blueprint_count": 7710,
+  "catalog_version": "cognitive-catalog-v3",
+  "covered_topic_count": 892,
+  "default_release_unchanged": true,
+  "deterministic_graph_blueprint_count": 7698,
+  "fully_covered_topic_count": 785,
+  "generic_topic_hypothesis_count": 2566,
+  "human_effectiveness_evaluated": false,
+  "hypothesis_topic_counts": {
+    "concept_misunderstanding": 891,
+    "confuse_product_and_chain": 1,
+    "differentiate_inner_incorrectly": 1,
+    "omit_inner_derivative": 1,
+    "prerequisite_gap": 785,
+    "procedure_or_representation_error": 890
+  },
+  "personalization_expanded": false,
+  "retention_expanded": false,
+  "reviewed_blueprint_count": 12,
+  "schema_version": "cognitive-teaching-coverage-report-v1",
+  "source_digest": "8e725a4944a0f2d99be980e13ac5b00c29a75c43091444ebeb915f4012cd15f8",
+  "source_file_count": 12,
+  "status": "PASS",
+  "subject_count": 11,
+  "subject_topic_counts": {
+    "biology": 44,
+    "chemistry": 44,
+    "chinese": 45,
+    "computer_science": 40,
+    "economics": 30,
+    "english": 45,
+    "geography": 38,
+    "history": 38,
+    "math": 457,
+    "physics": 74,
+    "politics": 37
+  },
+  "topic_count": 892,
+  "validator_version": "cognitive-question-validator-v4-coverage-2",
+  "version_set": "cognitive-v4-coverage-2"
+}

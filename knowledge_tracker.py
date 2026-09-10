@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .adaptive_learning.cognitive_catalog import (
+    CHAIN_RULE_HYPOTHESES,
+    KNOWLEDGE_GRAPH_HYPOTHESES,
     build_knowledge_graph_cognitive_catalog,
     cognitive_catalog_for_component_version,
 )
@@ -647,6 +649,10 @@ class KnowledgeTracker:
         self._cognitive_catalog = build_knowledge_graph_cognitive_catalog(
             store.get_topic,
             base_catalog=reviewed_catalog,
+            comprehensive_teaching=bool(
+                cognitive_version_set is not None
+                and cognitive_version_set.catalog_version == "cognitive-catalog-v3"
+            ),
         )
         self._cognitive_knowledge_graph_enabled = (
             _cognitive_config_value(
@@ -746,13 +752,28 @@ class KnowledgeTracker:
             and self._cognitive_read_mode != "off"
             else None
         )
+        known_hypothesis_codes = {
+            hypothesis.code for hypothesis in CHAIN_RULE_HYPOTHESES
+        }
+        active_hypothesis_codes = {
+            code
+            for topic_id in self._cognitive_topic_ids
+            for code in self._cognitive_catalog.active_codes(topic_id)
+        }
+        if (
+            self._cognitive_knowledge_graph_enabled
+            and cognitive_version_set is not None
+            and cognitive_version_set.catalog_version == "cognitive-catalog-v3"
+        ):
+            graph_codes = {
+                hypothesis.code for hypothesis in KNOWLEDGE_GRAPH_HYPOTHESES
+            }
+            known_hypothesis_codes.update(graph_codes)
+            active_hypothesis_codes.update(graph_codes)
         self._cognitive_intent_policy = CognitiveIntentPolicy(
             mode=effective_intent_mode,
-            active_hypothesis_codes=frozenset(
-                code
-                for topic_id in self._cognitive_topic_ids
-                for code in self._cognitive_catalog.active_codes(topic_id)
-            ),
+            active_hypothesis_codes=frozenset(active_hypothesis_codes),
+            known_hypothesis_codes=frozenset(known_hypothesis_codes),
         )
         if self._cognitive_projection_enabled and cognitive_extractor is None:
             from .cognitive_model_gateway import build_cognitive_extractor
