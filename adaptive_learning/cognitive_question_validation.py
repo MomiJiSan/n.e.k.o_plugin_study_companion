@@ -7,7 +7,10 @@ import json
 from dataclasses import dataclass, fields
 from typing import Any, Mapping
 
-from .cognitive_catalog import COGNITIVE_CATALOG_V1, CognitiveCatalog
+from .cognitive_catalog import (
+    CognitiveCatalog,
+    cognitive_catalog_for_component_version,
+)
 from .cognitive_intervention import is_cognitive_intervention_intent
 from .contracts import HypothesisRef, QuestionInstance, QuestionPlan
 
@@ -109,12 +112,14 @@ class DiagnosticQuestionValidator:
     def __init__(
         self,
         *,
-        catalog: CognitiveCatalog = COGNITIVE_CATALOG_V1,
+        catalog: CognitiveCatalog | None = None,
         validator_version: str = DEFAULT_COGNITIVE_VALIDATOR_VERSION,
     ) -> None:
         if not validator_version.strip():
             raise ValueError("cognitive validator_version is required")
-        self._catalog = catalog
+        self._catalog = catalog or cognitive_catalog_for_component_version(
+            validator_version
+        )
         self._validator_version = validator_version
 
     def validate(

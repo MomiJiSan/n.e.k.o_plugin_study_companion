@@ -31,6 +31,14 @@ _KNOWN_V2_HYPOTHESES = frozenset(
         "confuse_product_and_chain",
     }
 )
+_GRAPH_TEACHING_HYPOTHESES = frozenset(
+    {
+        "concept_misunderstanding",
+        "prerequisite_gap",
+        "procedure_or_representation_error",
+    }
+)
+_KNOWN_COGNITIVE_HYPOTHESES = _KNOWN_V2_HYPOTHESES | _GRAPH_TEACHING_HYPOTHESES
 _POSITIVE_OUTCOMES = frozenset({"confirmed", "correct", "counter", "passed", "success"})
 _STRATEGIES: Mapping[tuple[str, LearningIntent], RepairStrategy] = {
     ("omit_inner_derivative", "misconception_probe"): "structure_classification",
@@ -42,6 +50,15 @@ _STRATEGIES: Mapping[tuple[str, LearningIntent], RepairStrategy] = {
     ("confuse_product_and_chain", "misconception_probe"): "structure_classification",
     ("confuse_product_and_chain", "misconception_repair"): "compare_steps",
     ("confuse_product_and_chain", "transfer_check"): "cross_form_transfer",
+    ("concept_misunderstanding", "misconception_probe"): "structure_classification",
+    ("concept_misunderstanding", "misconception_repair"): "compare_steps",
+    ("concept_misunderstanding", "transfer_check"): "cross_form_transfer",
+    ("prerequisite_gap", "misconception_probe"): "structure_classification",
+    ("prerequisite_gap", "misconception_repair"): "minimal_change",
+    ("prerequisite_gap", "transfer_check"): "cross_form_transfer",
+    ("procedure_or_representation_error", "misconception_probe"): "compare_steps",
+    ("procedure_or_representation_error", "misconception_repair"): "minimal_change",
+    ("procedure_or_representation_error", "transfer_check"): "cross_form_transfer",
 }
 
 
@@ -72,13 +89,17 @@ class CognitiveIntentPolicy:
         *,
         mode: CognitiveIntentMode = "off",
         active_hypothesis_codes: frozenset[str] = _ACTIVE_V2_HYPOTHESES,
+        known_hypothesis_codes: frozenset[str] = _KNOWN_V2_HYPOTHESES,
     ) -> None:
         if mode not in {"off", "shadow", "on"}:
             raise ValueError("unsupported cognitive intent policy mode")
-        if not active_hypothesis_codes.issubset(_KNOWN_V2_HYPOTHESES):
+        if not known_hypothesis_codes.issubset(_KNOWN_COGNITIVE_HYPOTHESES):
+            raise ValueError("known cognitive hypothesis is outside the catalog")
+        if not active_hypothesis_codes.issubset(known_hypothesis_codes):
             raise ValueError("active cognitive hypothesis is outside the V2 catalog")
         self._mode = mode
         self._active_hypothesis_codes = active_hypothesis_codes
+        self._known_hypothesis_codes = known_hypothesis_codes
 
     def decorate(
         self,
@@ -216,7 +237,7 @@ class CognitiveIntentPolicy:
             for item in state.hypotheses
             if item.ref.topic_id == state.topic_id
             and item.ref.model_version == state.model_version
-            and item.ref.code in _KNOWN_V2_HYPOTHESES
+            and item.ref.code in self._known_hypothesis_codes
             and item.evidence_status in {"hypothesized", "supported"}
         ]
         if self._mode == "on":

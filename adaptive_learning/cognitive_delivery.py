@@ -13,9 +13,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from .cognitive_catalog import (
-    COGNITIVE_CATALOG_V1,
     CognitiveCatalog,
     CognitiveQuestionBlueprint,
+    cognitive_catalog_for_component_version,
 )
 from .cognitive_intervention import (
     CognitiveInterventionBinding,
@@ -47,7 +47,7 @@ class PreparedCognitiveIntervention:
 def prepare_cognitive_intervention(
     decision: CognitivePolicyDecision,
     *,
-    catalog: CognitiveCatalog = COGNITIVE_CATALOG_V1,
+    catalog: CognitiveCatalog | None = None,
     decision_id: str = "",
     created_at: str = "",
 ) -> PreparedCognitiveIntervention | None:
@@ -57,6 +57,9 @@ def prepare_cognitive_intervention(
     hypothesis = decision.selected_hypothesis
     if proposed is None or hypothesis is None or proposed.hypothesis_target != hypothesis:
         return None
+    catalog = catalog or cognitive_catalog_for_component_version(
+        hypothesis.model_version
+    )
     original = decision.original_plan
     if (
         proposed.target_topic.id != original.target_topic.id

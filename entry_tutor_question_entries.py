@@ -1756,7 +1756,15 @@ class _TutorQuestionEntriesMixin:
                             else "planner_rejected_candidate"
                         ),
                     )
-                    candidate = prepare_cognitive_intervention(decision)
+                    cognitive_catalog = getattr(
+                        getattr(self, "_knowledge_tracker", None),
+                        "cognitive_catalog",
+                        None,
+                    )
+                    candidate = prepare_cognitive_intervention(
+                        decision,
+                        catalog=cognitive_catalog,
+                    )
                     if development_source:
                         from .store_cognitive_transfer_development import bind_transfer_retest
 
@@ -2019,7 +2027,14 @@ class _TutorQuestionEntriesMixin:
                     prepared_cognitive,
                     generation.question,
                     repair_question_family_id=repair_question_family_id,
-                    validator=DiagnosticQuestionValidator(validator_version=versions.validator_version),
+                    validator=DiagnosticQuestionValidator(
+                        catalog=getattr(
+                            getattr(self, "_knowledge_tracker", None),
+                            "cognitive_catalog",
+                            None,
+                        ),
+                        validator_version=versions.validator_version,
+                    ),
                 )
                 if not cognitive_validation.valid:
                     validation_failure = "Cognitive validation failed: " + ", ".join(cognitive_validation.errors)
