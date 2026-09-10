@@ -1,10 +1,10 @@
 # V3 personalization: synthetic engineering acceptance
 
-Date: 2026-09-10. Base checkout: `433dbba`; implementation is on its review
-branch and remains uninstalled. Contract:
+Date: 2026-09-10. Base checkout: `433dbba`; implementation merged through
+PR #102 as `bae8532` and remains uninstalled. Contract:
 [ADR-0008](../adr-0008-cognitive-v3-personalization.md).
 
-**Result: PASS — 189 related targeted tests.**
+**Result: PASS — 189 related targeted tests; PR #102 required CI passed.**
 This is an engineering result. No live learner database, installed runtime
 configuration, model endpoint or human trial was used. No teaching-effectiveness
 claim follows from the synthetic evidence.
