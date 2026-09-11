@@ -10,11 +10,11 @@
     "run_id": {"type": "string", "pattern": "^run-[0-9a-f]{24}$"},
     "request_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
     "subject_id": {"const": "math"},
-    "scenario_id": {"const": "calculus_v0_1"},
+    "scenario_id": {"enum": ["calculus_v0_1", "forest_v0_2"]},
     "expected_state_version": {"type": "integer", "minimum": 1},
     "action_id": {
       "type": "string",
-      "pattern": "^(select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|play_card:[a-z0-9][a-z0-9._-]*|end_turn|choose_reward:[a-z0-9][a-z0-9._-]*|abandon_run|finish_run)$"
+      "pattern": "^(select_node:[a-z0-9][a-z0-9._-]*|enter_selected_node|play_card:[a-z0-9][a-z0-9._-]*|end_turn|choose_reward:[a-z0-9][a-z0-9._-]*|choose_event:[a-z0-9][a-z0-9._-]*|repair_camp|abandon_run|finish_run)$"
     }
   },
   "oneOf": [

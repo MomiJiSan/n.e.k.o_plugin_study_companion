@@ -1,0 +1,343 @@
+{
+  "bridge_protocol_version": 1,
+  "engine_protocol_version": 1,
+  "public_projection_version": 1,
+  "application_service_version": "knowledge-dungeon-v0.2-c0",
+  "scenario_id": "forest_v0_2",
+  "state_version": 1,
+  "state_hash": "00f309e18304bd0637ca8d2e60867705aef0c8350580dada0c25e34af5fe21d9",
+  "run": {
+    "expedition": {
+      "content_version": "forest_v0_2",
+      "carried_materials": 0,
+      "carried_relics": [],
+      "clues": [],
+      "boss_intel": false,
+      "event": null,
+      "settlement": null,
+      "camp": {
+        "materials": 0,
+        "relics": [],
+        "clues": [],
+        "watchtower_repaired": false
+      },
+      "regions": [
+        {
+          "id": "edge",
+          "name": "林缘"
+        },
+        {
+          "id": "mist",
+          "name": "迷雾腹地"
+        },
+        {
+          "id": "ruins",
+          "name": "守卫遗迹"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "entrance",
+          "name": "森林入口",
+          "type": "entrance",
+          "region_id": "edge",
+          "x": 13,
+          "y": 22,
+          "next": [
+            "wisp_path",
+            "old_camp"
+          ],
+          "description": "林道分成两支，远处传来旧哨塔的铃声。",
+          "risk": "选择战斗或调查路线",
+          "reward": "发现林缘"
+        },
+        {
+          "id": "wisp_path",
+          "name": "微灵林道",
+          "type": "battle",
+          "region_id": "edge",
+          "x": 26,
+          "y": 30,
+          "next": [
+            "edge_spring"
+          ],
+          "description": "公式微灵守着一批散落的木材。",
+          "risk": "普通战斗",
+          "reward": "3 份材料与战斗奖励"
+        },
+        {
+          "id": "old_camp",
+          "name": "旧远征营地",
+          "type": "investigation",
+          "region_id": "edge",
+          "x": 13,
+          "y": 42,
+          "next": [
+            "edge_spring"
+          ],
+          "description": "残破日志记着守卫的聚能规律。",
+          "risk": "深入调查消耗 2 点生命",
+          "reward": "永久线索与守卫情报，或 2 份材料"
+        },
+        {
+          "id": "edge_spring",
+          "name": "林缘泉",
+          "type": "rest",
+          "region_id": "edge",
+          "x": 19,
+          "y": 67,
+          "next": [
+            "convergence",
+            "mist_patrol"
+          ],
+          "description": "泉水旁有可采集的青苔。",
+          "risk": "只能选择一项收益",
+          "reward": "恢复 6 点生命或采集 2 份材料"
+        },
+        {
+          "id": "convergence",
+          "name": "趋近回廊",
+          "type": "mechanism",
+          "region_id": "mist",
+          "x": 36,
+          "y": 46,
+          "next": [
+            "broken_creek"
+          ],
+          "description": "每一步跨过剩余路程的一半；不断重复无法真正抵达终点。",
+          "risk": "强行穿越消耗 5 点生命",
+          "reward": "稳定终点锚点：3 份材料；穿越：5 份"
+        },
+        {
+          "id": "mist_patrol",
+          "name": "迷雾巡守",
+          "type": "battle",
+          "region_id": "mist",
+          "x": 44,
+          "y": 74,
+          "next": [
+            "relic_grove"
+          ],
+          "description": "更强的巡守占据了一条藏有遗物的支路。",
+          "risk": "敌人生命 16，攻击 4",
+          "reward": "3 份材料与遗物路线"
+        },
+        {
+          "id": "broken_creek",
+          "name": "断续溪谷",
+          "type": "investigation",
+          "region_id": "mist",
+          "x": 50,
+          "y": 50,
+          "next": [
+            "memory_spring"
+          ],
+          "description": "漂来的远征标记指出汇合点的位置。",
+          "risk": "搜寻消耗 2 点生命",
+          "reward": "4 份材料，或安全通过"
+        },
+        {
+          "id": "relic_grove",
+          "name": "余响树穴",
+          "type": "investigation",
+          "region_id": "mist",
+          "x": 80,
+          "y": 66,
+          "next": [
+            "memory_spring"
+          ],
+          "description": "树根中埋着一枚远征者留下的护符。",
+          "risk": "取出护符消耗 3 点生命",
+          "reward": "苔光护符：本轮后续每场战斗伤害提高 10%"
+        },
+        {
+          "id": "memory_spring",
+          "name": "记忆泉",
+          "type": "rest",
+          "region_id": "ruins",
+          "x": 53,
+          "y": 24,
+          "next": [
+            "guardian_seal"
+          ],
+          "description": "遗迹前最后一处安全水源。",
+          "risk": "治疗与准备只能选一项",
+          "reward": "恢复 8 点生命或下一战伤害提高 25%"
+        },
+        {
+          "id": "guardian_seal",
+          "name": "守卫碑文",
+          "type": "investigation",
+          "region_id": "ruins",
+          "x": 74,
+          "y": 36,
+          "next": [
+            "guardian"
+          ],
+          "description": "碑文指向守卫聚能核心的裂隙。",
+          "risk": "解析消耗 3 点生命",
+          "reward": "守卫情报，或采集 2 份材料"
+        },
+        {
+          "id": "guardian",
+          "name": "极限守卫",
+          "type": "boss",
+          "region_id": "ruins",
+          "x": 87,
+          "y": 27,
+          "next": [],
+          "description": "守卫在遗迹前聚能；远征调查能够破坏它的核心。",
+          "risk": "生命 30 / 攻击 6；有情报时生命 22 / 攻击 4",
+          "reward": "8 份材料与守望徽记"
+        }
+      ]
+    },
+    "run_id": "run-32e751cf8049467885f9860c",
+    "status": "active",
+    "phase": "map",
+    "map_subject_id": "math",
+    "current_node_id": "entrance",
+    "selected_node_id": null,
+    "available_node_ids": [
+      "wisp_path",
+      "old_camp"
+    ],
+    "completed_node_ids": [
+      "entrance"
+    ],
+    "revealed_node_ids": [
+      "entrance",
+      "wisp_path",
+      "old_camp"
+    ],
+    "player": {
+      "hp": 30,
+      "max_hp": 30,
+      "energy": 0,
+      "max_energy": 3
+    },
+    "turn": 0,
+    "cards": [
+      {
+        "card_id": "neutral.momiji_mercy",
+        "name": "红枼的怜悯",
+        "subject_id": "neutral",
+        "base_damage": 1,
+        "energy_cost": 0,
+        "freshness_bps": 10000,
+        "lifecycle_state": "active",
+        "rules_text": "造成 1 点伤害。每回合只能使用一次。",
+        "flavor_text": "快去学习获取更强力的卡片吧，少年！",
+        "starter": true,
+        "available_in_run": true
+      },
+      {
+        "card_id": "math.calculus.limit_concept",
+        "name": "极限概念",
+        "subject_id": "math",
+        "base_damage": 3,
+        "energy_cost": 1,
+        "freshness_bps": 10000,
+        "lifecycle_state": "active",
+        "rules_text": "造成 3 点伤害。",
+        "flavor_text": "趋近并非抵达，却足以窥见答案。",
+        "starter": false,
+        "available_in_run": true
+      },
+      {
+        "card_id": "math.calculus.limit_laws",
+        "name": "极限运算法则",
+        "subject_id": "math",
+        "base_damage": 5,
+        "energy_cost": 1,
+        "freshness_bps": 8000,
+        "lifecycle_state": "fading_light",
+        "rules_text": "造成 5 点伤害。",
+        "flavor_text": "法则让无穷的变化重新变得有序。",
+        "starter": false,
+        "available_in_run": true
+      },
+      {
+        "card_id": "math.calculus.important_limits",
+        "name": "两个重要极限",
+        "subject_id": "math",
+        "base_damage": 8,
+        "energy_cost": 2,
+        "freshness_bps": 5000,
+        "lifecycle_state": "fading_heavy",
+        "rules_text": "造成 8 点伤害。",
+        "flavor_text": "记住通往无穷的两枚路标。",
+        "starter": false,
+        "available_in_run": true
+      },
+      {
+        "card_id": "math.calculus.continuity",
+        "name": "连续性",
+        "subject_id": "math",
+        "base_damage": 5,
+        "energy_cost": 1,
+        "freshness_bps": 0,
+        "lifecycle_state": "dormant",
+        "rules_text": "造成 5 点伤害。",
+        "flavor_text": "没有断裂的道路，才能承载稳定的力量。",
+        "starter": false,
+        "available_in_run": false
+      }
+    ],
+    "hand": [],
+    "draw_pile_count": 0,
+    "discard_pile_count": 0,
+    "enemy": null,
+    "pending_rewards": [],
+    "run_modifiers": {
+      "encounter_damage_bps": 10000,
+      "next_encounter_damage_bps": 10000
+    },
+    "versions": {
+      "protocol_version": 1,
+      "state_schema_version": 1,
+      "content_pack_version": "forest_v0_2",
+      "engine_version": "knowledge-dungeon-v0.1.0",
+      "card_policy_version": "knowledge-cards-v1",
+      "rng_algorithm": "pcg32-v1"
+    }
+  },
+  "available_actions": [
+    {
+      "action_id": "select_node:wisp_path",
+      "action_type": "select_node",
+      "label": "前往微灵林道",
+      "target_id": "wisp_path"
+    },
+    {
+      "action_id": "select_node:old_camp",
+      "action_type": "select_node",
+      "label": "前往旧远征营地",
+      "target_id": "old_camp"
+    },
+    {
+      "action_id": "abandon_run",
+      "action_type": "abandon_run",
+      "label": "撤退并保留本轮收获",
+      "target_id": null
+    }
+  ],
+  "events": [
+    {
+      "type": "run_started",
+      "run_id": "run-32e751cf8049467885f9860c"
+    },
+    {
+      "type": "deck_frozen",
+      "active_card_ids": [
+        "neutral.momiji_mercy",
+        "math.calculus.limit_concept",
+        "math.calculus.limit_laws",
+        "math.calculus.important_limits"
+      ],
+      "dormant_card_ids": [
+        "math.calculus.continuity"
+      ]
+    }
+  ]
+}

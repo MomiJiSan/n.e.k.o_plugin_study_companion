@@ -14,10 +14,11 @@ from typing import Any
 
 from .commands import DungeonCommand, command_to_dict
 from .contracts import canonical_json, canonical_sha256
+from .forest import empty_camp
 from .serializer import state_hash
 from .state import RunState
 
-STORE_SCHEMA_VERSION = 1
+STORE_SCHEMA_VERSION = 2
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -95,13 +96,20 @@ class DungeonRunStore:
     def _initialize_schema(self) -> None:
         with self._lock:
             version = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
-            if version not in {0, STORE_SCHEMA_VERSION}:
+            if version not in {0, 1, STORE_SCHEMA_VERSION}:
                 raise DungeonStoreError(
                     "unsupported_store_schema",
                     f"unsupported dungeon store schema: {version}",
                 )
             self._connection.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS dungeon_camps (
+                    owner_client_id TEXT PRIMARY KEY,
+                    version INTEGER NOT NULL,
+                    camp_json TEXT NOT NULL,
+                    camp_hash TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS dungeon_runs (
                     run_id TEXT PRIMARY KEY,
                     state_version INTEGER NOT NULL CHECK (state_version >= 0),
@@ -352,17 +360,29 @@ class DungeonRunStore:
                             state.run_id,
                             f"invalid command receipt {command.command_id}",
                         )
-                    if canonical_sha256(existing_response) != str(
-                        existing["response_hash"]
-                    ):
+                    if canonical_sha256(existing_response) != str(existing["response_hash"]):
                         raise CorruptDungeonState(
                             state.run_id,
                             f"invalid command receipt {command.command_id}",
                         )
-                    raise DuplicateDungeonCommand(
-                        CommandReceipt(existing_hash, existing_response)
-                    )
+                    raise DuplicateDungeonCommand(CommandReceipt(existing_hash, existing_response))
 
+                if state.expedition is not None:
+                    camp = state.expedition["camp"]
+                    camp_cursor = self._connection.execute(
+                        "INSERT INTO dungeon_camps(owner_client_id,version,camp_json,camp_hash) VALUES(?,?,?,?) "
+                        "ON CONFLICT(owner_client_id) DO UPDATE SET version=excluded.version,camp_json=excluded.camp_json,camp_hash=excluded.camp_hash "
+                        "WHERE dungeon_camps.version=?",
+                        (
+                            state.owner_client_id,
+                            state.camp_version,
+                            canonical_json(camp),
+                            canonical_sha256(camp),
+                            state.camp_version - 1,
+                        ),
+                    )
+                    if camp_cursor.rowcount != 1:
+                        raise ConcurrentDungeonWrite(state.run_id)
                 cursor = self._connection.execute(
                     """
                     INSERT INTO dungeon_runs (
@@ -429,6 +449,25 @@ class DungeonRunStore:
                 raise DungeonStoreError(
                     "persistence_failure",
                     f"failed to commit dungeon transition: {exc}",
+                ) from exc
+
+    def load_camp(self, owner_client_id: str) -> tuple[int, dict[str, Any]]:
+        with self._lock:
+            row = self._fetchone(
+                "SELECT version,camp_json,camp_hash FROM dungeon_camps WHERE owner_client_id=?",
+                (owner_client_id,),
+                operation="load camp",
+            )
+            if row is None:
+                return 0, empty_camp()
+            try:
+                camp = json.loads(row["camp_json"])
+                if not isinstance(camp, dict) or canonical_sha256(camp) != row["camp_hash"]:
+                    raise ValueError("camp hash mismatch")
+                return int(row["version"]), camp
+            except Exception as exc:
+                raise DungeonStoreError(
+                    "corrupt_dungeon_camp", "camp is corrupt; refusing progression changes"
                 ) from exc
 
     def list_active_run_ids(self) -> list[str]:

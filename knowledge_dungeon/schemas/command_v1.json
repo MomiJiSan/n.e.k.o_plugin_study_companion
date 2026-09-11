@@ -4,12 +4,30 @@
   "title": "Knowledge Dungeon command envelope v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol_version", "command_id", "run_id", "expected_state_version", "intent", "payload"],
+  "required": [
+    "protocol_version",
+    "command_id",
+    "run_id",
+    "expected_state_version",
+    "intent",
+    "payload"
+  ],
   "properties": {
-    "protocol_version": {"const": 1},
-    "command_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
-    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
-    "expected_state_version": {"type": "integer", "minimum": 0},
+    "protocol_version": {
+      "const": 1
+    },
+    "command_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "expected_state_version": {
+      "type": "integer",
+      "minimum": 0
+    },
     "intent": {
       "enum": [
         "start_run",
@@ -19,12 +37,18 @@
         "end_turn",
         "choose_run_reward",
         "leave_encounter",
-        "finish_run"
+        "finish_run",
+        "choose_event",
+        "repair_camp"
       ]
     },
     "payload": {
       "type": "object",
-      "not": {"required": ["attempt_id"]}
+      "not": {
+        "required": [
+          "attempt_id"
+        ]
+      }
     }
   }
 }
