@@ -805,6 +805,10 @@ class KnowledgeTracker:
     def set_memory_deck_summary_provider(self, provider: Callable[..., dict[str, Any]] | None) -> None:
         self._memory_deck_summary_provider = provider
 
+    def get_learning_card_snapshot(self) -> dict[str, Any]:
+        """Capture all subjects at one committed authoritative learning time."""
+        return self.store.get_learning_card_snapshot()
+
     def get_mastery(self, topic_id: str) -> float:
         latest = self.get_mastery_snapshot(topic_id)
         return float((latest or {}).get("mastery") or 0.0)
@@ -1502,7 +1506,7 @@ class KnowledgeTracker:
         if batch_result.get("duplicate_attempt"):
             return {
                 "topic_id": str(batch_result.get("topic_id") or topic_id),
-                "mastery": {},
+                "mastery": batch_result.get("retention_mastery") or {},
                 "wrong_question_id": "",
                 "wrong_question_attempt": {},
                 "fsrs": {},
@@ -1511,7 +1515,7 @@ class KnowledgeTracker:
             }
         return {
             "topic_id": topic_id,
-            "mastery": snapshot.to_dict(),
+            "mastery": batch_result.get("retention_mastery") or snapshot.to_dict(),
             "wrong_question_id": str(batch_result.get("wrong_question_id") or ""),
             "wrong_question_attempt": dict(batch_result.get("wrong_question_attempt") or {}),
             "fsrs": schedule,

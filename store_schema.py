@@ -8,6 +8,7 @@ from .adaptive_learning.cognitive_versions import (
 )
 from .store_cognitive_retention import create_cognitive_retention_schema
 from .store_cognitive_strategy import create_cognitive_strategy_schema
+from .store_mastery_retention import create_mastery_retention_schema
 from .store_common import (
     STORE_CONFIG,
     STORE_STATE,
@@ -1505,6 +1506,7 @@ def _init_db(self) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_notes_edited ON notes(edited_at DESC, rowid DESC)"
     )
+    create_mastery_retention_schema(conn)
     conn.commit()
 
 

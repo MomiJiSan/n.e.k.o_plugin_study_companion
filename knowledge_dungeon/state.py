@@ -25,7 +25,7 @@ class EnemyState:
     enemy_id: str
     name: str
     max_hp: int
-    hp: int
+    hp: int | float
     attack: int
     boss: bool = False
 

@@ -624,6 +624,7 @@ class StudyCompanionPlugin(
         bridge = KnowledgeDungeonPrivateBridge(
             self.data_path("knowledge_dungeon.sqlite3"),
             logger=self.logger,
+            learning_snapshot_provider=self._knowledge_tracker.get_learning_card_snapshot,
         )
         start_task = asyncio.create_task(asyncio.to_thread(bridge.start))
         try:
