@@ -122,3 +122,4 @@ def test_learning_commit_session_freeze_expiry_and_reacquisition(monkeypatch, tm
         if bridge is not None:
             bridge.stop()
         store.close()
+

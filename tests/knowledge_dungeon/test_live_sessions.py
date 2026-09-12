@@ -385,3 +385,4 @@ def test_bad_owned_topic_never_becomes_empty_collection(changes):
     raw["topics"][0].update(changes)
     with pytest.raises(ApplicationServiceError):
         collection_from_snapshot(raw)
+
