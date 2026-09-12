@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Iterable, Mapping
 
 from . import forest
@@ -312,10 +313,17 @@ def _play_card(state: RunState, command: DungeonCommand) -> list[dict[str, Any]]
         subject_bps,
         state.encounter_damage_bps,
     )
+    if "learning" in state.versions:
+        mastery = state.versions["learning"]["cards"][card_id]["mastery"]
+        if card.starter:
+            damage = 1
+        else:
+            base = max(Decimal(1), Decimal(6) * Decimal(str(mastery)))
+            damage = float(max(Decimal(1), base * Decimal(subject_bps) * Decimal(state.encounter_damage_bps) / Decimal(100_000_000)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP))
     state.energy -= card.energy_cost
     state.hand.remove(card_id)
     state.discard_pile.append(card_id)
-    state.enemy.hp = max(0, state.enemy.hp - damage)
+    state.enemy.hp = max(0, round(state.enemy.hp - damage, 6))
     if card_id == STARTER_CARD_ID:
         state.mercy_used_this_turn = True
     events: list[dict[str, Any]] = [
@@ -451,6 +459,21 @@ def reduce_command(state: RunState | None, command: DungeonCommand) -> Transitio
         raise ReducerError("run_not_found", "start_run must be the first command")
 
     next_state = deepcopy(state)
+    if command.intent == "reconcile_learning":
+        incoming = deepcopy(command.payload["learning"])
+        previous = next_state.versions.get("learning", {})
+        survivors = {}
+        for card_id, card in next_state.cards.items():
+            old = previous.get("cards", {}).get(card_id)
+            new = incoming["cards"].get(card_id)
+            if card.starter or (old is not None and new is not None and previous.get("dataset_id") == incoming["dataset_id"] and old["generation"] == new["generation"]):
+                survivors[card_id] = card
+        next_state.cards = survivors
+        for pile in ("hand", "draw_pile", "discard_pile", "dormant_card_ids"):
+            setattr(next_state, pile, [cid for cid in getattr(next_state, pile) if cid in survivors])
+        incoming["cards"] = {cid: metadata for cid, metadata in incoming["cards"].items() if cid in survivors}
+        next_state.versions["learning"] = incoming
+        return Transition(next_state, [])
     handlers = {
         "select_node": _select_node,
         "start_encounter": _start_encounter,

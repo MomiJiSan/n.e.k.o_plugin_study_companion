@@ -11,6 +11,7 @@ from .contracts import PROTOCOL_VERSION
 SUPPORTED_INTENTS = frozenset(
     {
         "start_run",
+        "reconcile_learning",
         "select_node",
         "start_encounter",
         "play_card",

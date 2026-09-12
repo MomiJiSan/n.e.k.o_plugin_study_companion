@@ -15,6 +15,7 @@ from .store_common import (
     json,
     sqlite3,
 )
+from .store_mastery_retention import create_mastery_retention_schema
 
 _SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SUPPORTED_COGNITIVE_PROJECTION_VERSIONS = tuple(
@@ -1505,6 +1506,7 @@ def _init_db(self) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_notes_edited ON notes(edited_at DESC, rowid DESC)"
     )
+    create_mastery_retention_schema(conn)
     conn.commit()
 
 

@@ -693,6 +693,10 @@ def test_document_page_entry_maps_timeout_and_releases_image_after_worker(
         assert worker_finished.is_set() is False
         finish_worker.set()
         assert await asyncio.to_thread(worker_finished.wait, 1.0)
+        # The forced short deadline exercises the first request's timeout.
+        # Recovery exercises gate cleanup, not a second scheduler race against
+        # a 5 ms deadline (notably below Windows' usual timer granularity).
+        monkeypatch.setattr(entry, "_DOCUMENT_PAGE_OCR_TIMEOUT_SECONDS", 35.0)
         recovered = None
         for _ in range(100):
             recovered = await entry._OcrEntriesMixin.study_ocr_document_page(
