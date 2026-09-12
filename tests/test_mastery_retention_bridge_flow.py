@@ -10,6 +10,8 @@ from types import ModuleType
 
 import pytest
 
+# isort: split
+
 from knowledge_dungeon.private_bridge import KnowledgeDungeonPrivateBridge
 
 

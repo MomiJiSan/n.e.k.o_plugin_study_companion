@@ -2,6 +2,8 @@ from copy import deepcopy
 
 import pytest
 
+# isort: split
+
 from knowledge_dungeon.bridge_contracts import REQUIRED_DUNGEON_SCOPE, TrustedInvocationContext
 from knowledge_dungeon.host_adapter import KnowledgeDungeonHostAdapter
 from knowledge_dungeon.live_service import collection_from_snapshot
