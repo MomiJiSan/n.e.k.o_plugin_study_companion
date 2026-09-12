@@ -452,7 +452,8 @@ async def test_knowledge_dungeon_bridge_receives_authoritative_learning_provider
     module = _load_runtime(monkeypatch)
     owner = _owner(module, [])
     snapshot = {"dataset_id": "learning-test", "topics": []}
-    provider = lambda: snapshot
+    def provider() -> dict[str, Any]:
+        return snapshot
     owner._knowledge_tracker.get_learning_card_snapshot = provider
     captured: dict[str, Any] = {}
 

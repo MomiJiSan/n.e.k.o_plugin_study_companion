@@ -11,8 +11,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .adaptive_learning.mastery_retention import (
-    ACQUIRE_THRESHOLD, BASELINE_VERSION, INITIAL_HALF_LIFE, MODEL_VERSION,
-    current_mastery, evidence_baseline, feedback_half_life, finite_fraction,
+    ACQUIRE_THRESHOLD,
+    BASELINE_VERSION,
+    INITIAL_HALF_LIFE,
+    MODEL_VERSION,
+    current_mastery,
+    evidence_baseline,
+    feedback_half_life,
+    finite_fraction,
 )
 
 

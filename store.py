@@ -29,9 +29,6 @@ from .models import (
     json_copy,
 )
 from .store_attempt_facts import get_attempt_fact, write_attempt_facts
-from .store_mastery_retention import (
-    get_learning_card_snapshot, list_retention_mastery, write_retention_answer,
-)
 from .store_captured_questions import (
     clear_captured_questions,
     delete_captured_question,
@@ -150,6 +147,11 @@ from .store_learning_plans import (
     update_learning_plan_status,
 )
 from .store_maintenance import json_loads, purge_all, transaction
+from .store_mastery_retention import (
+    get_learning_card_snapshot,
+    list_retention_mastery,
+    write_retention_answer,
+)
 from .store_mastery_v2 import (
     claim_mastery_projections,
     complete_mastery_projection,
