@@ -380,7 +380,7 @@ def _owner(module: ModuleType, calls: list[str]):
     owner._agent = _Resource(calls, "agent")
     owner._local_model_manager = _Resource(calls, "local_model_manager")
     owner._ocr_pipeline = _Resource(calls, "ocr")
-    owner._knowledge_tracker = object()
+    owner._knowledge_tracker = SimpleNamespace(get_learning_card_snapshot=lambda: {})
     owner._memory_deck_store = object()
     owner._habit_store = object()
     owner._checkin_manager = object()
@@ -442,6 +442,35 @@ async def test_command_loop_start_owns_downlink_dependent_tasks(
         "commands.worker.start",
         "commands.subscription.schedule",
     ]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_dungeon_bridge_receives_authoritative_learning_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_runtime(monkeypatch)
+    owner = _owner(module, [])
+    snapshot = {"dataset_id": "learning-test", "topics": []}
+    def provider() -> dict[str, Any]:
+        return snapshot
+    owner._knowledge_tracker.get_learning_card_snapshot = provider
+    captured: dict[str, Any] = {}
+
+    class _Bridge:
+        def __init__(self, *_args: Any, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        def start(self) -> None:
+            pass
+
+    monkeypatch.setattr(module, "KnowledgeDungeonPrivateBridge", _Bridge)
+    owner.data_path = lambda filename: tmp_path / filename
+    await owner._start_knowledge_dungeon_bridge(enabled=True)
+
+    assert captured["learning_snapshot_provider"] is provider
+    assert captured["learning_snapshot_provider"]() is snapshot
+    assert owner._knowledge_dungeon_bridge is not None
 
 
 @pytest.mark.asyncio

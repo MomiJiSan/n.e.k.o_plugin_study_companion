@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,15 @@ class DungeonRunStore:
         self._connection.row_factory = sqlite3.Row
         self._configure()
         self._initialize_schema()
+
+    @contextmanager
+    def locked_connection(self, operation: str) -> Iterator[sqlite3.Connection]:
+        """Hold the store lock for a complete SQL operation and normalize failures."""
+        with self._lock:
+            try:
+                yield self._connection
+            except sqlite3.Error as exc:
+                raise DungeonStoreError("persistence_failure", f"failed to {operation}: {exc}") from exc
 
     def _configure(self) -> None:
         self._connection.execute("PRAGMA foreign_keys = ON")

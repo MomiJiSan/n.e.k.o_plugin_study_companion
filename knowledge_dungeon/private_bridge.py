@@ -60,6 +60,12 @@ _RENDEZVOUS_FIELDS = frozenset(
     )
 )
 _DOMAIN_PATHS = {
+    "/v2/bootstrap": "bootstrap",
+    "/v2/game-sessions/begin": "begin_game_session",
+    "/v2/game-sessions/select": "select_deck",
+    "/v2/runs/create": "create_run",
+    "/v2/runs/get": "get_run",
+    "/v2/runs/action": "perform_action",
     "/v1/bootstrap": "bootstrap",
     "/v1/runs/create": "create_run",
     "/v1/runs/get": "get_run",
@@ -831,11 +837,13 @@ class KnowledgeDungeonPrivateBridge:
         runtime_dir: str | Path | None = None,
         logger: Any | None = None,
         runtime_hardener: Callable[[str | Path], None] | None = None,
+        learning_snapshot_provider: Callable[[], Mapping[str, Any]] | None = None,
     ) -> None:
         self._store_path = Path(store_path)
         self.runtime_dir = Path(runtime_dir) if runtime_dir is not None else default_runtime_directory()
         self._logger = logger
         self._runtime_hardener = runtime_hardener or harden_runtime_directory
+        self._learning_snapshot_provider = learning_snapshot_provider
         self._ownership = RuntimeOwnershipLock(self.runtime_dir / _LOCK_FILENAME)
         self._publisher = RendezvousPublisher(self.runtime_dir, self._ownership)
         self._server: _PrivateBridgeHttpServer | None = None
@@ -881,7 +889,7 @@ class KnowledgeDungeonPrivateBridge:
             server.timeout = REQUEST_TIMEOUT
             port = int(server.server_address[1])
             state = _BridgeState(
-                adapter=KnowledgeDungeonHostAdapter(self._store_path),
+                adapter=KnowledgeDungeonHostAdapter(self._store_path, learning_snapshot_provider=self._learning_snapshot_provider),
                 publisher=self._publisher,
                 bridge_instance_id=f"bridge-{token_hex(16)}",
                 port=port,

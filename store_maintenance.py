@@ -5,6 +5,15 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 _PURGE_TABLES = (
+    "mastery_retention_evidence",
+    "mastery_retention_state",
+    "learning_card_events",
+    "mastery_retention_identity",
+    "evaluations",
+    "attempts",
+    "question_instances",
+    "mastery_projection_queue",
+    "mastery_snapshots_v2",
     "cognitive_monitoring_episode_facts",
     "cognitive_obligation_satisfactions",
     "cognitive_obligation_claims",
@@ -87,6 +96,9 @@ def purge_all(self) -> dict[str, int]:
                     deleted[table] = 0
                 else:
                     deleted[table] = max(0, int(cursor.rowcount or 0))
+            from .store_mastery_retention import create_mastery_retention_schema
+
+            create_mastery_retention_schema(conn)
             conn.commit()
         except Exception:
             conn.rollback()

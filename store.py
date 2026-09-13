@@ -147,6 +147,11 @@ from .store_learning_plans import (
     update_learning_plan_status,
 )
 from .store_maintenance import json_loads, purge_all, transaction
+from .store_mastery_retention import (
+    get_learning_card_snapshot,
+    list_retention_mastery,
+    write_retention_answer,
+)
 from .store_mastery_v2 import (
     claim_mastery_projections,
     complete_mastery_projection,
@@ -907,6 +912,10 @@ class StudyStore:
                         (attempt_key,),
                         ).fetchone()
                     if existing_attempt is not None:
+                        retention_receipt = conn.execute(
+                            "SELECT result_json FROM mastery_retention_evidence WHERE attempt_id=?",
+                            (attempt_key,),
+                        ).fetchone()
                         conn.commit()
                         duplicate_result: dict[str, Any] = {
                             "ok": True,
@@ -918,6 +927,10 @@ class StudyStore:
                             "wrong_question_id": "",
                             "wrong_question_attempt": {},
                         }
+                        if retention_receipt is not None:
+                            duplicate_result["retention_mastery"] = self._json_loads(
+                                retention_receipt["result_json"], {}
+                            )
                         if cognitive_intervention_event:
                             duplicate_result["cognitive_intervention_event"] = {
                                 "recorded": False,
@@ -1051,6 +1064,11 @@ class StudyStore:
                 step = "session_topics"
                 self._batch_update_session_topics(conn, session_key, topic_key)
                 step = "mastery"
+                retention_mastery = write_retention_answer(
+                    self, conn, topic_id=topic_key, attempt_id=attempt_key,
+                    session_id=session_key, question=question_payload,
+                    eval_result=eval_result, user_answer=user_answer, used_hint=used_hint,
+                )
                 self._batch_write_mastery(
                     conn,
                     mastery_snapshot=mastery_snapshot,
@@ -1118,6 +1136,8 @@ class StudyStore:
             "wrong_question_id": wrong_question_id,
             "wrong_question_attempt": wrong_question_attempt_result,
         }
+        if retention_mastery is not None:
+            result["retention_mastery"] = retention_mastery
         if cognitive_intervention_event:
             result["cognitive_intervention_event"] = cognitive_intervention_result
         return result
@@ -1891,6 +1911,8 @@ class StudyStore:
 
 
 StudyStore._init_db = _init_db  # type: ignore[method-assign]
+StudyStore.get_learning_card_snapshot = get_learning_card_snapshot  # type: ignore[attr-defined]
+StudyStore.list_retention_mastery = list_retention_mastery  # type: ignore[attr-defined]
 StudyStore._ensure_column = _ensure_column  # type: ignore[method-assign]
 StudyStore._trim_append_only_rows = _trim_append_only_rows  # type: ignore[method-assign]
 StudyStore._load_seed_if_empty = _load_seed_if_empty  # type: ignore[method-assign]
