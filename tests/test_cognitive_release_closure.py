@@ -96,7 +96,7 @@ def test_all_cognitive_gates_off_leave_normal_answer_path_inert(
         cognitive.intent_policy,
         cognitive.ui_enabled,
         cognitive.retention_enabled,
-    ) == (False, "off", "off", False, False)
+    ) == (True, "active", "on", True, True)
     assert cognitive.version_set == "cognitive-v2.1-1"
 
     store = _open_store(store_module.StudyStore, tmp_path / "study.db")

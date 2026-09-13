@@ -27,11 +27,16 @@ model_version = "mastery-v2-shadow-1"
 # Cognitive Evidence Engine V2. Every behavioral surface is independently
 # disabled by default. V2 is bounded to one server-validated concept cluster.
 [cognitive]
-projection_enabled = false
-read_mode = "off" # off / shadow / active
-intent_policy = "off" # off / shadow / on
-ui_enabled = false
-retention_enabled = false
+projection_enabled = true
+read_mode = "active" # off / shadow / active
+intent_policy = "on" # off / shadow / on
+ui_enabled = true
+retention_enabled = true
+strategy_shadow_enabled = true
+strategy_rotation_enabled = true
+strategy_personalization_enabled = true
+strategy_personalization_exploration_enabled = true
+strategy_personalization_stopped = false
 knowledge_graph_enabled = true
 version_set = "cognitive-v2.1-1"
 supported_topics = ["calculus.chain_rule", "college_chain_rule"]

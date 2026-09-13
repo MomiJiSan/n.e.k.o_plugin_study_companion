@@ -244,7 +244,7 @@ def test_study_config_cognitive_round_trip_preserves_existing_defaults(
     assert reloaded.adaptive_loop.to_dict() == baseline.adaptive_loop.to_dict()
 
 
-def test_example_config_keeps_every_cognitive_surface_disabled(
+def test_example_config_enables_cognitive_surfaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     models = _load_models(monkeypatch, "_cognitive_example_config")
@@ -252,13 +252,13 @@ def test_example_config_keeps_every_cognitive_surface_disabled(
 
     cognitive = models.build_config(raw).cognitive
 
-    assert cognitive.projection_enabled is False
-    assert cognitive.read_mode == "off"
-    assert cognitive.intent_policy == "off"
-    assert cognitive.ui_enabled is False
+    assert cognitive.projection_enabled is True
+    assert cognitive.read_mode == "active"
+    assert cognitive.intent_policy == "on"
+    assert cognitive.ui_enabled is True
 
 
-def test_plugin_manifest_keeps_every_cognitive_surface_disabled(
+def test_plugin_manifest_enables_cognitive_surfaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     models = _load_models(monkeypatch, "_cognitive_plugin_config")
@@ -266,10 +266,10 @@ def test_plugin_manifest_keeps_every_cognitive_surface_disabled(
 
     cognitive = models.build_config(raw).cognitive
 
-    assert cognitive.projection_enabled is False
-    assert cognitive.read_mode == "off"
-    assert cognitive.intent_policy == "off"
-    assert cognitive.ui_enabled is False
+    assert cognitive.projection_enabled is True
+    assert cognitive.read_mode == "active"
+    assert cognitive.intent_policy == "on"
+    assert cognitive.ui_enabled is True
 
 
 def test_public_question_never_exposes_cognitive_provenance(

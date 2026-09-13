@@ -76,15 +76,15 @@ auto_generate_next_question = false
 # Cognitive Evidence Engine V2. Projection, reading, question intent, and UI
 # are independent opt-ins and remain fail closed by default.
 [cognitive]
-projection_enabled = false
-read_mode = "off" # off / shadow / active
-intent_policy = "off" # off / shadow / on
-ui_enabled = false
-retention_enabled = false
-strategy_shadow_enabled = false
-strategy_rotation_enabled = false
-strategy_personalization_enabled = false
-strategy_personalization_exploration_enabled = false
+projection_enabled = true
+read_mode = "active" # off / shadow / active
+intent_policy = "on" # off / shadow / on
+ui_enabled = true
+retention_enabled = true
+strategy_shadow_enabled = true
+strategy_rotation_enabled = true
+strategy_personalization_enabled = true
+strategy_personalization_exploration_enabled = true
 strategy_personalization_stopped = false
 knowledge_graph_enabled = true
 version_set = "cognitive-v2.1-1"
