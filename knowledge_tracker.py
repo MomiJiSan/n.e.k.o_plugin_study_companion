@@ -39,7 +39,7 @@ from .adaptive_learning.cognitive_versions import (
     get_cognitive_version_set,
 )
 from .adaptive_learning.contracts import QuestionPlan
-from .adaptive_learning.learner_state import LearnerStateReader
+from .adaptive_learning.learner_state import LearnerStateReader, adapt_retention_mastery
 from .adaptive_learning.mastery_projection import MasteryV2Projector
 from .fsrs_bridge import (
     REVIEW_IS_DUE_AFTER_KEY,
@@ -1506,7 +1506,7 @@ class KnowledgeTracker:
         if batch_result.get("duplicate_attempt"):
             return {
                 "topic_id": str(batch_result.get("topic_id") or topic_id),
-                "mastery": batch_result.get("retention_mastery") or {},
+                "mastery": adapt_retention_mastery(batch_result["retention_mastery"]) if batch_result.get("retention_mastery") else {},
                 "wrong_question_id": "",
                 "wrong_question_attempt": {},
                 "fsrs": {},
@@ -1515,7 +1515,7 @@ class KnowledgeTracker:
             }
         return {
             "topic_id": topic_id,
-            "mastery": batch_result.get("retention_mastery") or snapshot.to_dict(),
+            "mastery": adapt_retention_mastery(batch_result["retention_mastery"], snapshot.to_dict()) if batch_result.get("retention_mastery") else snapshot.to_dict(),
             "wrong_question_id": str(batch_result.get("wrong_question_id") or ""),
             "wrong_question_attempt": dict(batch_result.get("wrong_question_attempt") or {}),
             "fsrs": schedule,
@@ -2055,13 +2055,15 @@ class KnowledgeTracker:
         )
 
     def get_status_summary(self, *, limit: int = 8) -> dict[str, Any]:
-        overview = self.list_mastery_overview(limit=limit)
+        retention = callable(getattr(self.store, "get_learning_card_snapshot", None))
+        all_mastery = self.list_mastery_overview(limit=2_147_483_647 if retention else limit)
+        overview = all_mastery[:max(0, limit)] if retention else all_mastery
         memory_deck = self.get_memory_deck_status(limit=limit)
         return {
             "topic_count": self.store.count_topics(),
-            "tracked_topic_count": self.learner_state.count_tracked_topics(),
-            "average_mastery": round(self.learner_state.average_mastery(), 4),
-            "weak_topic_count": self.count_weak_topics(),
+            "tracked_topic_count": len(all_mastery) if retention else self.learner_state.count_tracked_topics(),
+            "average_mastery": round((sum(float(row.get("mastery") or 0) for row in all_mastery) / len(all_mastery) if all_mastery else 0.0) if retention else self.learner_state.average_mastery(), 4),
+            "weak_topic_count": sum(1 for row in all_mastery if float(row.get("mastery") or 0) < .60 or "false_mastery" in (row.get("flags") or [])) if retention else self.count_weak_topics(),
             "due_review_count": self.count_due_reviews(),
             "memory_card_count": int(memory_deck.get("card_count") or memory_deck.get("item_count") or 0),
             "last_updated_at": overview[0].get("updated_at") if overview else "",

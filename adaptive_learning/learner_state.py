@@ -84,7 +84,7 @@ class LearnerStateReader:
         retention_read: Any = getattr(self._store, "list_retention_mastery", None)
         if callable(retention_read):
             rows = cast(list[dict[str, Any]], retention_read([topic_id]))
-            return rows[0] if rows else None
+            return adapt_retention_mastery(rows[0], self._store.get_latest_mastery(topic_id)) if rows else None
 
         if self._read_model == "v1":
             return self._store.get_latest_mastery(topic_id)
@@ -103,7 +103,9 @@ class LearnerStateReader:
 
         retention_read: Any = getattr(self._store, "list_retention_mastery", None)
         if callable(retention_read):
-            return retention_read(list(topic_ids))
+            legacy = {row["topic_id"]: row for row in self._store.list_latest_mastery_for_topics(topic_ids)}
+            retention_rows = cast(list[dict[str, Any]], retention_read(list(topic_ids)))
+            return [adapt_retention_mastery(row, legacy.get(row["topic_id"])) for row in retention_rows]
 
         if self._read_model == "v1":
             return self._store.list_latest_mastery_for_topics(topic_ids)
@@ -126,9 +128,13 @@ class LearnerStateReader:
 
         retention_snapshot: Any = getattr(self._store, "get_learning_card_snapshot", None)
         if callable(retention_snapshot):
-            rows = [dict(topic, topic_name=topic["name"], flags=[]) for topic in
-                    cast(dict[str, Any], retention_snapshot())["topics"] if topic["mastery"] is not None]
-            return sorted(rows, key=lambda row: row["mastery"])[:max(0, limit)]
+            snapshot = cast(dict[str, Any], retention_snapshot())
+            legacy = {row["topic_id"]: row for row in self._store.list_mastery_overview(2_147_483_647)}
+            rows = [adapt_retention_mastery(topic, legacy.get(topic["topic_id"])) for topic in
+                    snapshot["topics"] if topic["mastery"] is not None]
+            # Include authoritative-only topics rather than silently dropping
+            # them through legacy membership. Keep the public recency order.
+            return sorted(rows, key=lambda row: (row["updated_at"], row["id"]), reverse=True)[:max(0, limit)]
         v1_rows = self._store.list_mastery_overview(limit)
         if self._read_model == "v1" or not v1_rows:
             return v1_rows
@@ -164,6 +170,18 @@ class LearnerStateReader:
         if not rows:
             return 0.0
         return sum(float(row.get("mastery") or 0.0) for row in rows) / len(rows)
+
+
+def adapt_retention_mastery(row: Mapping[str, Any], fallback: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Preserve public mastery metadata while making retention authoritative."""
+    metadata = dict(fallback or {})
+    result = _adapt_v2_mastery(metadata)
+    result.update(row)
+    for field in ("id", "chapter", "accuracy", "recency", "consistency", "confidence", "level", "flags", "updated_at"):
+        if field in metadata:
+            result[field] = metadata[field]
+    result["topic_name"] = metadata.get("topic_name") or row.get("name") or row["topic_id"]
+    return result
 
 
 def tracker_list_mastery(

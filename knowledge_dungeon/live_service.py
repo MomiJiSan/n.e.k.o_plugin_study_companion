@@ -20,6 +20,7 @@ from .bridge_contracts import (
 )
 from .contracts import PROTOCOL_VERSION, VersionBundle, canonical_json, canonical_sha256
 from .engine import KnowledgeDungeonEngine
+from .persistence import DungeonRunStore
 from .public_projection import project_public_run
 from .reducer import STARTER_CARD_ID, _starter_card
 
@@ -154,21 +155,21 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 class LiveLearningService:
-    def __init__(self, store: Any, provider: Callable[[], Mapping[str, Any]] | None) -> None:
+    def __init__(self, store: DungeonRunStore, provider: Callable[[], Mapping[str, Any]] | None) -> None:
         self.store, self.provider = store, provider
         self.engine = KnowledgeDungeonEngine(store)
-        self.db = store._connection
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS dungeon_learning_sessions (
-                client_id TEXT NOT NULL, session_id TEXT NOT NULL, active INTEGER NOT NULL,
-                data TEXT NOT NULL, data_hash TEXT NOT NULL, PRIMARY KEY(client_id,session_id));
-            CREATE UNIQUE INDEX IF NOT EXISTS dungeon_one_active_session
-                ON dungeon_learning_sessions(client_id) WHERE active=1;
-            CREATE TABLE IF NOT EXISTS dungeon_selection_receipts (
-                client_id TEXT NOT NULL, session_id TEXT NOT NULL, request_id TEXT NOT NULL,
-                fingerprint TEXT NOT NULL, response TEXT NOT NULL,
-                PRIMARY KEY(client_id,session_id,request_id));
-        """)
+        with store.locked_connection("initialize learning sessions") as db:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS dungeon_learning_sessions (
+                    client_id TEXT NOT NULL, session_id TEXT NOT NULL, active INTEGER NOT NULL,
+                    data TEXT NOT NULL, data_hash TEXT NOT NULL, PRIMARY KEY(client_id,session_id));
+                CREATE UNIQUE INDEX IF NOT EXISTS dungeon_one_active_session
+                    ON dungeon_learning_sessions(client_id) WHERE active=1;
+                CREATE TABLE IF NOT EXISTS dungeon_selection_receipts (
+                    client_id TEXT NOT NULL, session_id TEXT NOT NULL, request_id TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL, response TEXT NOT NULL,
+                    PRIMARY KEY(client_id,session_id,request_id));
+            """)
 
     def invoke(self, context: Any, operation: str, request: dict[str, Any]) -> dict[str, Any]:
         if operation == "bootstrap":
@@ -222,97 +223,101 @@ class LiveLearningService:
         return self.project(state, session, events)
 
     def load(self, client: str, sid: str) -> dict[str, Any]:
-        row = self.db.execute(
-            "SELECT active,data,data_hash FROM dungeon_learning_sessions WHERE client_id=? AND session_id=?",
-            (client, sid),
-        ).fetchone()
-        if row is None or not row["active"]:
-            raise ApplicationServiceError("game_session_expired", "game session is absent or retired")
-        data = json.loads(row["data"])
-        if canonical_sha256(data) != row["data_hash"]:
-            raise ApplicationServiceError("learning_unavailable", "session integrity failure")
-        return data
+        with self.store.locked_connection("load learning session") as db:
+            row = db.execute(
+                "SELECT active,data,data_hash FROM dungeon_learning_sessions WHERE client_id=? AND session_id=?",
+                (client, sid),
+            ).fetchone()
+            if row is None or not row["active"]:
+                raise ApplicationServiceError("game_session_expired", "game session is absent or retired")
+            data = json.loads(row["data"])
+            if canonical_sha256(data) != row["data_hash"]:
+                raise ApplicationServiceError("learning_unavailable", "session integrity failure")
+            return data
 
     def begin(self, client: str, sid: str) -> dict[str, Any]:
-        self.db.execute("BEGIN IMMEDIATE")
-        try:
-            existing = self.db.execute(
-                "SELECT 1 FROM dungeon_learning_sessions WHERE client_id=? AND session_id=?", (client, sid)
-            ).fetchone()
-            if existing:
-                result = self.load(client, sid)
-            else:
-                if self.provider is None:
-                    raise ApplicationServiceError("learning_unavailable", "learning provider unavailable")
-                try:
-                    raw = self.provider()
-                    cards = collection_from_snapshot(raw)
-                except Exception as exc:
-                    raise ApplicationServiceError("learning_unavailable", "learning snapshot unavailable") from exc
-                result = {
-                    **LIVE_VERSIONS,
-                    "game_session_id": sid,
-                    "dataset_id": raw["dataset_id"],
-                    "snapshot_id": canonical_sha256(raw),
-                    "captured_at": raw["as_of"],
-                    "policy_version": raw["model_version"],
-                    "selection_version": 0,
-                    "selected_card_ids": [STARTER_CARD_ID],
-                    "cards": cards,
-                }
-                previous = self.db.execute(
-                    "SELECT session_id FROM dungeon_learning_sessions WHERE client_id=? AND active=1", (client,)
+        with self.store.locked_connection("begin learning session") as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                existing = db.execute(
+                    "SELECT 1 FROM dungeon_learning_sessions WHERE client_id=? AND session_id=?", (client, sid)
                 ).fetchone()
-                if previous:
-                    old = self.load(client, previous["session_id"])
-                    if old["dataset_id"] == result["dataset_id"]:
-                        old_cards = {c["card_id"]: c for c in old["cards"]}
-                        new_cards = {c["card_id"]: c for c in cards}
-                        result["selected_card_ids"] = [
-                            cid
-                            for cid in old["selected_card_ids"]
-                            if cid in new_cards and old_cards[cid]["generation"] == new_cards[cid]["generation"]
-                        ]
-                self.db.execute("UPDATE dungeon_learning_sessions SET active=0 WHERE client_id=?", (client,))
-                self.db.execute(
-                    "INSERT INTO dungeon_learning_sessions VALUES(?,?,1,?,?)",
-                    (client, sid, canonical_json(result), canonical_sha256(result)),
-                )
-            self.db.execute("COMMIT")
-            return result
-        except BaseException:
-            self.db.execute("ROLLBACK")
-            raise
+                if existing:
+                    result = self.load(client, sid)
+                else:
+                    if self.provider is None:
+                        raise ApplicationServiceError("learning_unavailable", "learning provider unavailable")
+                    try:
+                        raw = self.provider()
+                        cards = collection_from_snapshot(raw)
+                    except Exception as exc:
+                        raise ApplicationServiceError("learning_unavailable", "learning snapshot unavailable") from exc
+                    result = {
+                        **LIVE_VERSIONS,
+                        "game_session_id": sid,
+                        "dataset_id": raw["dataset_id"],
+                        "snapshot_id": canonical_sha256(raw),
+                        "captured_at": raw["as_of"],
+                        "policy_version": raw["model_version"],
+                        "selection_version": 0,
+                        "selected_card_ids": [STARTER_CARD_ID],
+                        "cards": cards,
+                    }
+                    previous = db.execute(
+                        "SELECT session_id FROM dungeon_learning_sessions WHERE client_id=? AND active=1", (client,)
+                    ).fetchone()
+                    if previous:
+                        old = self.load(client, previous["session_id"])
+                        if old["dataset_id"] == result["dataset_id"]:
+                            old_cards = {c["card_id"]: c for c in old["cards"]}
+                            new_cards = {c["card_id"]: c for c in cards}
+                            result["selected_card_ids"] = [
+                                cid
+                                for cid in old["selected_card_ids"]
+                                if cid in new_cards and old_cards[cid]["generation"] == new_cards[cid]["generation"]
+                            ]
+                    db.execute("UPDATE dungeon_learning_sessions SET active=0 WHERE client_id=?", (client,))
+                    db.execute(
+                        "INSERT INTO dungeon_learning_sessions VALUES(?,?,1,?,?)",
+                        (client, sid, canonical_json(result), canonical_sha256(result)),
+                    )
+                db.execute("COMMIT")
+                return result
+            except BaseException:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
 
     def select(self, client: str, session: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
-        sid = session["game_session_id"]
-        fingerprint = canonical_sha256(request)
-        row = self.db.execute(
-            "SELECT fingerprint,response FROM dungeon_selection_receipts WHERE client_id=? AND session_id=? AND request_id=?",
-            (client, sid, request["request_id"]),
-        ).fetchone()
-        if row:
-            if row["fingerprint"] != fingerprint:
-                raise ApplicationServiceError("command_id_conflict", "request reused")
-            return json.loads(row["response"])
-        if session["selection_version"] != request["expected_selection_version"]:
-            raise ApplicationServiceError("stale_selection_version", "selection changed")
-        if not set(request["card_ids"]) <= {c["card_id"] for c in session["cards"]}:
-            raise ApplicationServiceError("card_unavailable", "card not in frozen collection")
-        updated = deepcopy(session)
-        updated.update(selection_version=session["selection_version"] + 1, selected_card_ids=request["card_ids"])
-        with self.db:
-            self.db.execute("BEGIN IMMEDIATE")
-            self.load(client, sid)
-            self.db.execute(
-                "UPDATE dungeon_learning_sessions SET data=?,data_hash=? WHERE client_id=? AND session_id=? AND active=1",
-                (canonical_json(updated), canonical_sha256(updated), client, sid),
-            )
-            self.db.execute(
-                "INSERT INTO dungeon_selection_receipts VALUES(?,?,?,?,?)",
-                (client, sid, request["request_id"], fingerprint, canonical_json(updated)),
-            )
-        return updated
+        with self.store.locked_connection("select learning session") as db:
+            sid = session["game_session_id"]
+            fingerprint = canonical_sha256(request)
+            row = db.execute(
+                "SELECT fingerprint,response FROM dungeon_selection_receipts WHERE client_id=? AND session_id=? AND request_id=?",
+                (client, sid, request["request_id"]),
+            ).fetchone()
+            if row:
+                if row["fingerprint"] != fingerprint:
+                    raise ApplicationServiceError("command_id_conflict", "request reused")
+                return json.loads(row["response"])
+            if session["selection_version"] != request["expected_selection_version"]:
+                raise ApplicationServiceError("stale_selection_version", "selection changed")
+            if not set(request["card_ids"]) <= {c["card_id"] for c in session["cards"]}:
+                raise ApplicationServiceError("card_unavailable", "card not in frozen collection")
+            updated = deepcopy(session)
+            updated.update(selection_version=session["selection_version"] + 1, selected_card_ids=request["card_ids"])
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                self.load(client, sid)
+                db.execute(
+                    "UPDATE dungeon_learning_sessions SET data=?,data_hash=? WHERE client_id=? AND session_id=? AND active=1",
+                    (canonical_json(updated), canonical_sha256(updated), client, sid),
+                )
+                db.execute(
+                    "INSERT INTO dungeon_selection_receipts VALUES(?,?,?,?,?)",
+                    (client, sid, request["request_id"], fingerprint, canonical_json(updated)),
+                )
+            return updated
 
     def dispatch(
         self, run_id: str, command_id: str, version: int, intent: str, payload: Mapping[str, Any]
@@ -371,7 +376,9 @@ class LiveLearningService:
 
     def reconcile(self, context: Any, session: dict[str, Any], state: Any) -> Any:
         old = state.versions.get("learning", {})
-        if old.get("dataset_id") is not None and old["dataset_id"] != session["dataset_id"]:
+        if (not old.get("dataset_id") and any(not card.starter for card in state.cards.values())) or (
+            old.get("dataset_id") is not None and old["dataset_id"] != session["dataset_id"]
+        ):
             raise ApplicationServiceError("learning_dataset_mismatch", "saved run belongs to another learning dataset")
         if old.get("game_session_id") == session["game_session_id"]:
             return state

@@ -103,13 +103,16 @@ def _load(conn: sqlite3.Connection, topic_id: str, now: float) -> dict | None:
     legacy = conn.execute("SELECT mastery,updated_at,attempts FROM mastery_snapshots WHERE topic_id=? AND id <= (SELECT migration_max_id FROM mastery_retention_identity WHERE singleton=1) ORDER BY updated_at DESC,id DESC LIMIT 1", (topic_id,)).fetchone()
     if legacy is None:
         return None
-    baseline = finite_fraction(legacy["mastery"])
-    anchor = datetime.fromisoformat(str(legacy["updated_at"]).replace("Z", "+00:00"))
-    if anchor.tzinfo is None:
-        anchor = anchor.replace(tzinfo=timezone.utc)
-    anchor_time = anchor.timestamp()
+    try:
+        baseline = finite_fraction(legacy["mastery"])
+        anchor = datetime.fromisoformat(str(legacy["updated_at"]).replace("Z", "+00:00"))
+        if anchor.tzinfo is None:
+            anchor = anchor.replace(tzinfo=timezone.utc)
+        anchor_time = anchor.timestamp()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
     if anchor_time > now:
-        raise ValueError("legacy mastery timestamp is in the future")
+        return None
     mastery = current_mastery(baseline, INITIAL_HALF_LIFE, (now-anchor_time)/86400)
     state = dict(topic_id=topic_id, baseline=baseline, half_life=INITIAL_HALF_LIFE,
                  anchor=anchor_time, generation=int(mastery >= ACQUIRE_THRESHOLD),

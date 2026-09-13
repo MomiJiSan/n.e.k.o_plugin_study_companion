@@ -232,3 +232,76 @@ def test_actual_normalized_rubric_provenance_drives_retention(runtime, monkeypat
     assert answer(store, eval_result=payload)["retention_mastery"]["owned"]
     clock[0] += 7 * 86400
     assert answer(store, "b", eval_result=payload)["retention_mastery"]["half_life"] == pytest.approx(9.8)
+
+
+@pytest.mark.parametrize("stamp", [None, "not-a-date", "2999-01-01T00:00:00Z"])
+def test_invalid_legacy_timestamp_is_unassessed_and_new_answer_recovers(runtime, stamp):
+    store, _, _ = runtime
+    conn = store._require_conn()
+    conn.execute("INSERT INTO mastery_snapshots(topic_id,mastery,updated_at) VALUES('topic',.8,?)", (stamp,))
+    conn.execute("UPDATE mastery_retention_identity SET migration_max_id=(SELECT MAX(id) FROM mastery_snapshots)")
+    conn.commit()
+    store.ensure_topic(topic_id="healthy", name="Healthy")
+    answer(store, "healthy", topic_id="healthy")
+    snapshot = store.get_learning_card_snapshot()
+    assert next(row for row in snapshot["topics"] if row["topic_id"] == "healthy")["owned"]
+    assert topic(store)["mastery"] is None
+    assert topic(store)["status"] == "unassessed"
+    assert answer(store)["retention_mastery"]["generation"] == 1
+
+
+def test_retention_overview_preserves_metadata_order_and_authoritative_only_topics(runtime):
+    store, clock, module = runtime
+    reader = importlib.import_module(module.__package__ + ".adaptive_learning.learner_state").LearnerStateReader(store)
+    answer(store, mastery_snapshot={"mastery": .9, "accuracy": .9, "confidence": .5, "level": "old", "flags": ["false_mastery"]})
+    legacy = store.get_latest_mastery("topic")
+    clock[0] += 86400
+    store.ensure_topic(topic_id="new", name="New")
+    answer(store, "new", topic_id="new")
+    rows = reader.list_overview(10)
+    assert [row["topic_id"] for row in rows] == ["new", "topic"]
+    old = rows[1]
+    for key in ("id", "accuracy", "confidence", "level", "flags", "updated_at"):
+        assert old[key] == legacy[key]
+    assert old["mastery"] != legacy["mastery"]
+    assert reader.list_overview(1)[0]["topic_id"] == "new"
+
+
+def test_status_summary_captures_only_one_snapshot(runtime, monkeypatch):
+    from types import SimpleNamespace
+    store, _, module = runtime
+    answer(store)
+    reader = importlib.import_module(module.__package__ + ".adaptive_learning.learner_state").LearnerStateReader(store)
+    tracker_type = importlib.import_module(module.__package__ + ".knowledge_tracker").KnowledgeTracker
+    capture = store.get_learning_card_snapshot
+    calls = []
+    def counted():
+        calls.append(True)
+        return capture()
+    monkeypatch.setattr(store, "get_learning_card_snapshot", counted)
+    owner = SimpleNamespace(store=store, list_mastery_overview=lambda *, limit: reader.list_overview(limit),
+                            get_memory_deck_status=lambda **_: {}, count_due_reviews=lambda: 0,
+                            quality=SimpleNamespace(status_summary=lambda **_: {}))
+    summary = tracker_type.get_status_summary(owner)
+    assert summary["tracked_topic_count"] == 1
+    assert summary["average_mastery"] > 0
+    assert calls == [True]
+
+
+def test_real_tracker_answer_keeps_public_mastery_contract(runtime):
+    store, _, module = runtime
+    tracker_module = importlib.import_module(module.__package__ + ".knowledge_tracker")
+    tracker = tracker_module.KnowledgeTracker(store)
+    result = tracker.on_answer(topic_id="topic", question={"question_id": "q", "question": "2+2?"},
+                               user_answer="4", eval_result={"verdict": "correct", "score": 100,
+                               "evaluator_type": "llm_rubric", "confidence": 1},
+                               mode="companion", session_id="s", attempt_id="a", used_hint=False)
+    public = result["mastery"]
+    assert {"topic_id", "mastery", "accuracy", "recency", "consistency", "confidence", "level", "attempts", "flags"} <= public.keys()
+    assert public["mastery"] == topic(store)["mastery"]
+    assert public["generation"] == 1
+    repeated = tracker.on_answer(topic_id="topic", question={"question_id": "q", "question": "2+2?"},
+                                 user_answer="4", eval_result={"verdict": "correct", "score": 100,
+                                 "evaluator_type": "llm_rubric", "confidence": 1},
+                                 mode="companion", session_id="s", attempt_id="a", used_hint=False)
+    assert {"topic_id", "mastery", "accuracy", "recency", "consistency", "confidence", "level", "attempts", "flags"} <= repeated["mastery"].keys()

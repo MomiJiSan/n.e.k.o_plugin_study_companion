@@ -388,3 +388,117 @@ def test_bad_owned_topic_never_becomes_empty_collection(changes):
     with pytest.raises(ApplicationServiceError):
         collection_from_snapshot(raw)
 
+
+@pytest.mark.asyncio
+async def test_unavailable_learning_message_does_not_advertise_retry(tmp_path):
+    adapter = KnowledgeDungeonHostAdapter(tmp_path / "runs.db")
+    result = await adapter.invoke(CONTEXT, "begin_game_session", dict(bridge_protocol_version=2, game_session_id="boot"))
+    assert result.error.code == "learning_unavailable"
+    assert result.error.retryable is False
+    assert "retry" not in result.error.message.lower()
+
+
+def test_sqlite_session_errors_are_normalized_and_transaction_rolls_back(tmp_path):
+    from knowledge_dungeon.live_service import LiveLearningService
+    from knowledge_dungeon.persistence import DungeonStoreError
+    with DungeonRunStore(tmp_path / "runs.db") as store:
+        service = LiveLearningService(store, snapshot)
+        session = service.begin(CONTEXT.client_id, "boot")
+        with store.locked_connection("inject failure") as db:
+            db.execute("CREATE TRIGGER deny_selection BEFORE INSERT ON dungeon_selection_receipts BEGIN SELECT RAISE(ABORT, 'injected'); END")
+        with pytest.raises(DungeonStoreError) as failed:
+            service.select(CONTEXT.client_id, session, dict(request_id="select", expected_selection_version=0, card_ids=[STARTER, CARD]))
+        assert failed.value.code == "persistence_failure"
+        assert service.load(CONTEXT.client_id, "boot") == session
+        with store.locked_connection("drop session table") as db:
+            db.execute("DROP TABLE dungeon_learning_sessions")
+        with pytest.raises(DungeonStoreError) as failed:
+            service.load(CONTEXT.client_id, "boot")
+        assert failed.value.code == "persistence_failure"
+
+
+@pytest.mark.asyncio
+async def test_missing_dataset_refuses_knowledge_run_without_mutating_it(tmp_path):
+    from knowledge_dungeon.application_service import ApplicationServiceError
+    from knowledge_dungeon.live_service import LiveLearningService
+    path = tmp_path / "runs.db"
+    adapter = KnowledgeDungeonHostAdapter(path, learning_snapshot_provider=snapshot)
+    run = await start(adapter)
+    with DungeonRunStore(path) as store:
+        service = LiveLearningService(store, snapshot)
+        session = service.load(CONTEXT.client_id, "boot-one")
+        state = store.load_run(run["run"]["run_id"])
+        state.versions["learning"].pop("dataset_id")
+        before = state.to_dict()
+        with pytest.raises(ApplicationServiceError) as failed:
+            service.reconcile(CONTEXT, session, state)
+        assert failed.value.code == "learning_dataset_mismatch"
+        assert state.to_dict() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("learning", [{}, {"cards": {}}, {"cards": {CARD: {}}}, {"cards": {CARD: {"mastery": None}}}])
+async def test_starter_ignores_missing_metadata_and_knowledge_card_fails_closed(tmp_path, learning):
+    from knowledge_dungeon.commands import DungeonCommand
+    from knowledge_dungeon.reducer import ReducerError, reduce_command
+    path = tmp_path / "runs.db"
+    adapter = KnowledgeDungeonHostAdapter(path, learning_snapshot_provider=snapshot)
+    run = await start(adapter)
+    run = await act(adapter, run, "select_node:battle_1")
+    run = await act(adapter, run, "enter_selected_node", "enter")
+    with DungeonRunStore(path) as store:
+        state = store.load_run(run["run"]["run_id"])
+    state.versions["learning"] = learning
+    before = state.to_dict()
+    def command(card):
+        return DungeonCommand(command_id="play", run_id=state.run_id, expected_state_version=state.state_version, intent="play_card", payload={"card_id": card})
+    assert reduce_command(state, command(STARTER)).state.enemy.hp == 7
+    with pytest.raises(ReducerError) as failed:
+        reduce_command(state, command(CARD))
+    assert failed.value.code == "card_unavailable"
+    assert state.to_dict() == before
+
+@pytest.mark.asyncio
+async def test_starter_only_legacy_run_can_join_learning_session(tmp_path):
+    from knowledge_dungeon.live_service import LiveLearningService
+    path = tmp_path / "runs.db"
+    adapter = KnowledgeDungeonHostAdapter(path, learning_snapshot_provider=snapshot)
+    await invoke(adapter, "begin_game_session", game_session_id="boot-one")
+    run = await invoke(adapter, "create_run", game_session_id="boot-one", request_id="starter-run", subject_id="math", scenario_id="calculus_v0_1")
+    with DungeonRunStore(path) as store:
+        service = LiveLearningService(store, snapshot)
+        state = store.load_run(run["run"]["run_id"])
+        state.versions.pop("learning")
+        session = service.begin(CONTEXT.client_id, "boot-two")
+        reconciled = service.reconcile(CONTEXT, session, state)
+        assert list(reconciled.cards) == [STARTER]
+        assert reconciled.versions["learning"]["dataset_id"] == "dataset-one"
+
+
+def test_session_schema_sqlite_failure_is_persistence_error(tmp_path):
+    import sqlite3
+
+    from knowledge_dungeon.live_service import LiveLearningService
+    from knowledge_dungeon.persistence import DungeonStoreError
+    with DungeonRunStore(tmp_path / "runs.db") as store:
+        with store.locked_connection("make read only") as db:
+            db.execute("PRAGMA query_only=ON")
+        with pytest.raises(DungeonStoreError) as failed:
+            LiveLearningService(store, snapshot)
+        assert failed.value.code == "persistence_failure"
+        assert isinstance(failed.value.__cause__, sqlite3.Error)
+
+
+def test_session_begin_sqlite_failure_rolls_back_and_normalizes(tmp_path):
+    from knowledge_dungeon.live_service import LiveLearningService
+    from knowledge_dungeon.persistence import DungeonStoreError
+    with DungeonRunStore(tmp_path / "runs.db") as store:
+        service = LiveLearningService(store, snapshot)
+        with store.locked_connection("inject begin failure") as db:
+            db.execute("CREATE TRIGGER deny_begin BEFORE INSERT ON dungeon_learning_sessions BEGIN SELECT RAISE(ABORT, 'injected'); END")
+        with pytest.raises(DungeonStoreError) as failed:
+            service.begin(CONTEXT.client_id, "boot")
+        assert failed.value.code == "persistence_failure"
+        with store.locked_connection("check rollback") as db:
+            assert not db.in_transaction
+            assert db.execute("SELECT COUNT(*) FROM dungeon_learning_sessions").fetchone()[0] == 0

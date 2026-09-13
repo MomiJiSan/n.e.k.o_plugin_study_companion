@@ -36,7 +36,7 @@ _SAFE_DOMAIN_MESSAGES = {
     "game_session_expired": "This game session has been retired; reopen the game.",
     "card_unavailable": "The card is not in the frozen collection.",
     "stale_selection_version": "The deck selection has changed.",
-    "learning_unavailable": "Learning data is unavailable; retry without changing the collection.",
+    "learning_unavailable": "Learning data is unavailable. The collection has not been changed.",
     "action_unavailable": "The requested action is unavailable.",
     "command_id_conflict": "The request ID was already used for different input.",
     "corrupt_dungeon_state": "The run is unavailable because its state failed validation.",

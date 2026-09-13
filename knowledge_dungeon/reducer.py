@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -314,10 +315,15 @@ def _play_card(state: RunState, command: DungeonCommand) -> list[dict[str, Any]]
         state.encounter_damage_bps,
     )
     if "learning" in state.versions:
-        mastery = state.versions["learning"]["cards"][card_id]["mastery"]
         if card.starter:
             damage = 1
         else:
+            learning = state.versions["learning"]
+            metadata = learning.get("cards") if isinstance(learning, Mapping) else None
+            entry = metadata.get(card_id) if isinstance(metadata, Mapping) else None
+            mastery = entry.get("mastery") if isinstance(entry, Mapping) else None
+            if isinstance(mastery, bool) or not isinstance(mastery, (int, float)) or not math.isfinite(mastery) or not 0.001 <= mastery <= 1:
+                raise ReducerError("card_unavailable", "knowledge card mastery is unavailable or invalid")
             base = max(Decimal(1), Decimal(6) * Decimal(str(mastery)))
             damage = float(max(Decimal(1), base * Decimal(subject_bps) * Decimal(state.encounter_damage_bps) / Decimal(100_000_000)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP))
     state.energy -= card.energy_cost
