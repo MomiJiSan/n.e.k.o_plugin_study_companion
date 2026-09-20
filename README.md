@@ -68,7 +68,7 @@ uv run python -m plugin.neko_plugin_cli.cli check -r study_companion
 
 `0.3.0` 延续并扩展了可审计、可回滚的认知证据与保持检查闭环：它可以从结构化答题记录中识别受支持的错误模式，在 Shadow 模式下仅观察，或在 Active 模式下参与下一题规划。用户可以查看证据、否认、暂时忽略、删除或恢复相关判断。
 
-该能力默认关闭，并采用独立开关控制投影、读取、题目意图、界面和保持检查。当前主动干预范围仍严格限定在已验证的链式法则场景；未知版本、积压或冲突都会回退到普通学习流程。配置示例见 [`config.example.toml`](config.example.toml)，设计与升级边界见 [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md)。
+该能力在 v0.3.0 的已验证 `cognitive-v2.1-1` 路径上默认开启，并采用独立开关控制投影、读取、题目意图、界面和保持检查。当前主动干预范围仍严格限定在已验证的链式法则场景；未知版本、积压或冲突都会回退到普通学习流程。配置示例见 [`config.example.toml`](config.example.toml)，设计与升级边界见 [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md)。
 
 ## 知识副本原型
 
@@ -85,14 +85,14 @@ Electron 演示夹具现由 Python 权威引擎完整导出；格式和同步检
 
 v0.2-A1 增加可选的独立 SQLite 运行存储、原子命令回执、重启恢复与损坏隔离；实现边界见 [`docs/knowledge-dungeon-v0.2-persistence.md`](docs/knowledge-dungeon-v0.2-persistence.md)。
 
-> **注意：** 该原型尚未接入正式插件入口、真实 Mastery/FSRS/Cognitive 数据或用户数据库，也不会写回学习事实。详细验收范围见 [`docs/knowledge-dungeon-v0.1-acceptance.md`](docs/knowledge-dungeon-v0.1-acceptance.md)。
+> **注意：** 该原型通过可选的本地 Bridge 读取伴学插件的学习快照；Bridge 使用独立数据库和协议，不写回 Mastery/FSRS/Cognitive 学习事实，也不会让副本战斗产生学习事件。详细验收范围见 [`docs/knowledge-dungeon-v0.1-acceptance.md`](docs/knowledge-dungeon-v0.1-acceptance.md)。
 
 ## 配置要点
 
 主要默认配置位于 [`plugin.toml`](plugin.toml)，可选配置示例位于 [`config.example.toml`](config.example.toml)。需要特别注意：
 
 - `study.adaptive_loop` 控制学习计划预览、材料学习计划与自动出题。
-- `cognitive` 的所有行为面默认关闭，启用前请先阅读 v0.3.0 发布边界。
+- `cognitive` 的已验证 v2.1-1 行为面默认开启；可通过独立开关或停止开关回退到普通学习流程。
 - `ocr_reader` 与 `rapidocr` 控制截图/文档页面识别及模型资源。
 - `fsrs.retention_target` 控制记忆卡目标保持率。
 - `doc_export.enabled` 默认关闭，启用后才开放笔记导出能力。

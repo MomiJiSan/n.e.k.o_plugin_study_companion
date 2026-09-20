@@ -4,7 +4,9 @@ import pytest
 
 # isort: split
 
+from knowledge_dungeon.application_service import ApplicationServiceError
 from knowledge_dungeon.bridge_contracts import REQUIRED_DUNGEON_SCOPE, TrustedInvocationContext
+from knowledge_dungeon.contracts import canonical_sha256
 from knowledge_dungeon.host_adapter import KnowledgeDungeonHostAdapter
 from knowledge_dungeon.live_service import collection_from_snapshot
 from knowledge_dungeon.persistence import DungeonRunStore
@@ -367,6 +369,66 @@ def test_collection_is_not_limited_to_combat_deck_and_keeps_unassessed_distinct(
     assert len(cards) == 22
     assert cards[1]["card_id"] == CARD
     assert cards[-1]["subject_id"] == "physics"
+
+
+def test_collection_preserves_review_projection_metadata_and_rejects_invalid_values():
+    raw = snapshot()
+    raw["topics"][0].update(
+        lifecycle_state="fading_light",
+        freshness_bps=8000,
+        available_in_run=True,
+        fsrs_due_at="2026-09-21T00:00:00+00:00",
+        wrong_question_count=2,
+    )
+    card = collection_from_snapshot(raw)[1]
+    assert card["lifecycle_state"] == "fading_light"
+    assert card["freshness_bps"] == 8000
+
+    raw["topics"][0]["freshness_bps"] = 10001
+    with pytest.raises(ApplicationServiceError):
+        collection_from_snapshot(raw)
+
+
+def test_snapshot_hash_is_verified_before_card_projection():
+    current = snapshot()
+    current["snapshot_hash"] = canonical_sha256(current)
+    assert collection_from_snapshot(current)[1]["topic_id"] == "college_limit_concept"
+
+    current["snapshot_hash"] = "0" * 64
+    with pytest.raises(ApplicationServiceError, match="snapshot hash mismatch"):
+        collection_from_snapshot(current)
+
+
+@pytest.mark.parametrize(
+    ("lifecycle_state", "freshness_bps", "available_in_run"),
+    [
+        ("active", 9_999, True),
+        ("fading_light", 8_000, False),
+        ("fading_heavy", 5_000, False),
+        ("dormant", 0, True),
+    ],
+)
+def test_collection_rejects_cross_axis_lifecycle_mismatches(
+    lifecycle_state, freshness_bps, available_in_run
+):
+    raw = snapshot()
+    raw["topics"][0].update(
+        lifecycle_state=lifecycle_state,
+        freshness_bps=freshness_bps,
+        available_in_run=available_in_run,
+    )
+    with pytest.raises(ApplicationServiceError):
+        collection_from_snapshot(raw)
+
+
+def test_destroyed_card_keeps_generation_and_never_reuses_zero():
+    raw = snapshot(0, generation=0)
+    raw["topics"][0].update(owned=False, status="forgotten", mastery=0)
+    with pytest.raises(ApplicationServiceError):
+        collection_from_snapshot(raw)
+
+    raw["topics"][0]["generation"] = 1
+    assert len(collection_from_snapshot(raw)) == 1
 
 
 @pytest.mark.parametrize(

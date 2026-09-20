@@ -1397,10 +1397,18 @@ class KnowledgeTracker:
             if isinstance(binding, dict)
             else ""
         )
-        is_retention = RETENTION_COGNITIVE_STRATEGY in {
-            str(question_payload.get("cognitive_strategy") or "").strip(),
-            binding_strategy,
-        }
+        # Retention is a cognitive side effect.  It may only cross the store
+        # boundary when the retention gate is active; the store validates the
+        # separate claim token/lease contract.  A client-carried strategy must
+        # never create a retention outbox while cognitive learning is off.
+        is_retention = bool(
+            self._cognitive_retention_enabled
+            and RETENTION_COGNITIVE_STRATEGY
+            in {
+                str(question_payload.get("cognitive_strategy") or "").strip(),
+                binding_strategy,
+            }
+        )
         if cognitive_attempt_event is None and not is_retention:
             question_payload = _without_cognitive_question_provenance(
                 question_payload
@@ -1965,10 +1973,39 @@ class KnowledgeTracker:
         topic_id: str,
         rating: str | int,
         answer: str = "",
+        question: dict[str, Any] | None = None,
+        user_answer: str = "",
+        eval_result: dict[str, Any] | None = None,
+        session_id: str = "",
+        attempt_id: str = "",
+        used_hint: bool | None = None,
     ) -> dict[str, Any]:
         resolved = self._resolve_topic_id(topic_id)
         if not resolved:
             raise ValueError("memory card topic_id is required")
+        if any(value is not None for value in (question, eval_result)):
+            if not isinstance(question, dict) or not isinstance(eval_result, dict):
+                raise ValueError("question and eval_result are required together")
+            if not str(session_id or "").strip() or not str(attempt_id or "").strip():
+                raise ValueError("session_id and attempt_id are required for evidence review")
+            # Evidence reviews use the authoritative answer transaction.  The
+            # rating remains a UI hint; it never mutates mastery by itself.
+            learning = self.on_answer(
+                topic_id=resolved,
+                question=question,
+                user_answer=user_answer,
+                eval_result=eval_result,
+                mode="review",
+                session_id=session_id,
+                attempt_id=attempt_id,
+                used_hint=used_hint,
+            )
+            return {
+                "topic_id": resolved,
+                "rating": int(self._rating_from_review(rating)),
+                "answer": str(answer or user_answer or ""),
+                "learning": learning,
+            }
         card_row = self.store.get_fsrs_card(resolved)
         if card_row is None:
             raise ValueError("memory card not found")

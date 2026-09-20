@@ -13,6 +13,11 @@ DOCUMENT_JOB_TIMEOUT_SECONDS = 20 * 60.0
 DOCUMENT_JOB_MERGE_RESERVED_SECONDS = 2 * 60.0
 DOCUMENT_JOB_FINALIZE_RESERVED_SECONDS = 30.0
 DOCUMENT_JOB_RESULT_TTL_SECONDS = 30 * 60.0
+# Shutdown must not block plugin teardown on a runner that is waiting in a
+# synchronous provider (for example OCR/model work in ``to_thread``).  The
+# runner's generation fence still prevents any late result from being
+# committed after this grace period.
+DOCUMENT_JOB_SHUTDOWN_GRACE_SECONDS = 5.0
 DOCUMENT_JOB_COMMITTED_RESULT_KEY = "_document_job_committed_result"
 
 ProgressCallback = Callable[[str, int, int], Awaitable[None]]
@@ -65,6 +70,7 @@ class _Job:
     finished_at: float = 0.0
     consumed: bool = False
     task: asyncio.Task[None] | None = None
+    generation: int = 0
 
     def public_payload(self) -> dict[str, Any]:
         progress = (
@@ -103,6 +109,7 @@ class DocumentAnalysisJobManager:
         self._active_job_id = ""
         self._expiry_tasks: set[asyncio.Task[None]] = set()
         self._closed = False
+        self._generation = 0
 
     async def start(
         self,
@@ -141,6 +148,7 @@ class DocumentAnalysisJobManager:
                 total_chunks=max(1, int(total_chunks)),
                 start_token=str(start_token or "").strip(),
                 stage="analyzing_chunks" if analysis_mode == "chunked" else "analyzing",
+                generation=self._generation,
             )
             self._jobs[job_id] = job
             self._active_job_id = job_id
@@ -247,6 +255,7 @@ class DocumentAnalysisJobManager:
     async def shutdown(self) -> None:
         async with self._lock:
             self._closed = True
+            self._generation += 1
             tasks: list[asyncio.Task[None]] = []
             for job in self._jobs.values():
                 if job.task is None or job.task.done():
@@ -265,7 +274,24 @@ class DocumentAnalysisJobManager:
             self._active_job_id = ""
         pending = [*tasks, *expiry_tasks]
         if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending, return_exceptions=True),
+                    timeout=DOCUMENT_JOB_SHUTDOWN_GRACE_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                # A cancelled asyncio wrapper cannot forcibly stop a worker
+                # thread.  Detach it after the bounded grace period; the
+                # generation/closed checks in _run's commit fence discard any
+                # late result and its finally block performs no new expiry
+                # registration while closed.
+                _logger.warning(
+                    "document analysis shutdown grace exceeded; retiring %d task(s)",
+                    len(pending),
+                )
+                for task in pending:
+                    if not task.done():
+                        task.cancel()
         async with self._lock:
             late_expiry_tasks = list(self._expiry_tasks)
             for task in late_expiry_tasks:
@@ -310,6 +336,10 @@ class DocumentAnalysisJobManager:
                 result.pop(DOCUMENT_JOB_COMMITTED_RESULT_KEY, False)
             )
             async with self._lock:
+                # A runner may return after shutdown or a future generation
+                # has taken ownership. Such late results are discarded.
+                if self._closed or job.generation != self._generation:
+                    return False
                 if job.status != "running" and not (
                     job.status == "canceled" and committed_result
                 ):
@@ -377,9 +407,12 @@ class DocumentAnalysisJobManager:
                 if self._active_job_id == job.job_id:
                     self._active_job_id = ""
                 job.task = None
-                expiry_task = asyncio.create_task(self._expire_after_ttl(job.job_id))
-                self._expiry_tasks.add(expiry_task)
-                expiry_task.add_done_callback(self._expiry_tasks.discard)
+                if not self._closed and job.generation == self._generation:
+                    expiry_task = asyncio.create_task(
+                        self._expire_after_ttl(job.job_id)
+                    )
+                    self._expiry_tasks.add(expiry_task)
+                    expiry_task.add_done_callback(self._expiry_tasks.discard)
 
     async def _fail(
         self,
@@ -422,6 +455,7 @@ __all__ = [
     "DOCUMENT_JOB_FINALIZE_RESERVED_SECONDS",
     "DOCUMENT_JOB_MERGE_RESERVED_SECONDS",
     "DOCUMENT_JOB_TIMEOUT_SECONDS",
+    "DOCUMENT_JOB_SHUTDOWN_GRACE_SECONDS",
     "DocumentAnalysisJobError",
     "DocumentAnalysisJobManager",
     "DocumentJobBudget",

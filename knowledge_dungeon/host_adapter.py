@@ -105,9 +105,16 @@ HostRequest = BootstrapRequest | CreateRunRequest | GetRunRequest | PerformActio
 class KnowledgeDungeonHostAdapter:
     """Run one trusted operation against one short-lived persistent engine."""
 
-    def __init__(self, store_path: str | Path, *, learning_snapshot_provider=None) -> None:
+    def __init__(
+        self,
+        store_path: str | Path,
+        *,
+        learning_snapshot_provider=None,
+        revive_service=None,
+    ) -> None:
         self._store_path = Path(store_path)
         self._learning_snapshot_provider = learning_snapshot_provider
+        self._revive_service = revive_service
 
     async def invoke(
         self,
@@ -159,7 +166,11 @@ class KnowledgeDungeonHostAdapter:
     ) -> dict[str, Any]:
         if isinstance(request, dict):
             with LIVE_LOCK, DungeonRunStore(self._store_path) as store:
-                return LiveLearningService(store, self._learning_snapshot_provider).invoke(context, operation, request)
+                return LiveLearningService(
+                    store,
+                    self._learning_snapshot_provider,
+                    self._revive_service,
+                ).invoke(context, operation, request)
         if self._learning_snapshot_provider is not None and operation != "bootstrap":
             raise BridgeContractError("unsupported_bridge_protocol", "real learning requires bridge protocol 2")
         with DungeonRunStore(self._store_path) as store:

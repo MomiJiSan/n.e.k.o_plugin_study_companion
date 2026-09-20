@@ -7,7 +7,11 @@ from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from .adaptive_learning.cognitive_personalization import POLICY_VERSION, VERSION_SET
+from .adaptive_learning.cognitive_personalization import POLICY_VERSION
+from .adaptive_learning.cognitive_runtime_policy import (
+    CognitiveRuntimeGates,
+    evaluate_cognitive_runtime_gates,
+)
 from .store_cognitive_personalization import decide_from_store, personalization_runtime_ledger_status
 
 
@@ -24,17 +28,22 @@ def personalization_owns_selection(owner: Any) -> bool:
 
 
 def personalization_enabled(owner: Any) -> bool:
+    return runtime_gates(owner).effective_enabled
+
+
+def runtime_gates(
+    owner: Any,
+    *,
+    ledger_readable: bool = True,
+    tracker_state_readable: bool = True,
+) -> CognitiveRuntimeGates:
+    """Return the single effective gate snapshot used by runtime callers."""
     tracker = getattr(owner, "_knowledge_tracker", None)
-    return (
-        config_value(owner, "strategy_personalization_enabled") is True
-        and config_value(owner, "strategy_personalization_stopped") is False
-        and config_value(owner, "projection_enabled") is True
-        and config_value(owner, "read_mode", "off") == "active"
-        and config_value(owner, "intent_policy", "off") == "on"
-        and config_value(owner, "strategy_shadow_enabled") is True
-        and config_value(owner, "version_set", "") == VERSION_SET
-        and getattr(tracker, "cognitive_strategy_shadow_enabled", False) is True
-        and getattr(tracker, "_cognitive_version_set_id", "") == VERSION_SET
+    return evaluate_cognitive_runtime_gates(
+        getattr(getattr(owner, "_cfg", None), "cognitive", None),
+        tracker,
+        ledger_readable=ledger_readable,
+        tracker_state_readable=tracker_state_readable,
     )
 
 
@@ -65,17 +74,15 @@ def _personalization_status_locked(owner: Any) -> dict[str, Any]:
         )
         is not False,
     }
-    tracker = getattr(owner, "_knowledge_tracker", None)
-    gates = {
-        "projection_enabled": config_value(owner, "projection_enabled") is True,
-        "active_read_mode": config_value(owner, "read_mode", "off") == "active",
-        "intent_policy_on": config_value(owner, "intent_policy", "off") == "on",
-        "shadow_enabled": config_value(owner, "strategy_shadow_enabled") is True,
-        "compatible_version_set": config_value(owner, "version_set", "") == VERSION_SET,
-        "tracker_shadow_enabled": getattr(tracker, "cognitive_strategy_shadow_enabled", False) is True,
-        "tracker_version_compatible": getattr(tracker, "_cognitive_version_set_id", "") == VERSION_SET,
+    gate_aliases = {
+        "projection_enabled": "projection_enabled",
+        "active_read_mode": "read_active",
+        "intent_policy_on": "intent_on",
+        "shadow_enabled": "strategy_shadow_enabled",
+        "compatible_version_set": "version_supported",
+        "tracker_shadow_enabled": "tracker_shadow_enabled",
+        "tracker_version_compatible": "tracker_version_compatible",
     }
-    effective = personalization_enabled(owner)
     try:
         ledger = personalization_runtime_ledger_status(
             owner._store,
@@ -86,11 +93,15 @@ def _personalization_status_locked(owner: Any) -> dict[str, Any]:
         warning = getattr(logger, "warning", None)
         if callable(warning):
             warning("cognitive personalization status unavailable: {}", exc)
+        gate_snapshot = runtime_gates(owner, ledger_readable=False)
         return {
             "status": "degraded",
             "switches": switches,
-            "gates": gates,
-            "effective_enabled": effective,
+            "gate_schema_version": 1,
+            "gates": {key: gate_snapshot.effective_gates[value] for key, value in gate_aliases.items()},
+            "effective_enabled": gate_snapshot.effective_enabled,
+            "effective_gates": dict(gate_snapshot.effective_gates),
+            "disabled_reasons": list(gate_snapshot.disabled_reasons),
             "current_strategy": "baseline",
             "current_repair_strategy": "complete_inner_derivative",
             "last_delivered_strategy": "baseline",
@@ -102,6 +113,8 @@ def _personalization_status_locked(owner: Any) -> dict[str, Any]:
             "stopped": switches["strategy_personalization_stopped"],
             "error": "strategy_ledger_unavailable",
         }
+    gate_snapshot = runtime_gates(owner)
+    effective = gate_snapshot.effective_enabled
     last_reason = str(ledger["decision_reason"])
     reason = last_reason
     if switches["strategy_personalization_stopped"]:
@@ -132,7 +145,10 @@ def _personalization_status_locked(owner: Any) -> dict[str, Any]:
     return {
         "status": status,
         "switches": switches,
-        "gates": gates,
+        "gate_schema_version": 1,
+        "gates": {key: gate_snapshot.effective_gates[value] for key, value in gate_aliases.items()},
+        "effective_gates": dict(gate_snapshot.effective_gates),
+        "disabled_reasons": list(gate_snapshot.disabled_reasons),
         "effective_enabled": effective,
         **ledger,
         "current_strategy": current_strategy,

@@ -136,6 +136,8 @@ def _ui_enabled(owner: object, topic_id: str) -> bool:
     if not (
         _config_value(config, "projection_enabled", False) is True
         and _config_value(config, "ui_enabled", False) is True
+        and _config_value(config, "strategy_personalization_stopped", False)
+        is False
         and str(_config_value(config, "read_mode", "off")).strip().lower() in {"shadow", "active"}
     ):
         return False

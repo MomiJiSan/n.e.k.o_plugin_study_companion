@@ -74,7 +74,8 @@ max_prerequisite_topics = 5
 auto_generate_next_question = false
 
 # Cognitive Evidence Engine V2. Projection, reading, question intent, and UI
-# are independent opt-ins and remain fail closed by default.
+# are independently gated. This release enables the validated v2.1-1 path;
+# the explicit stop switch and unsupported versions remain fail closed.
 [cognitive]
 projection_enabled = true
 read_mode = "active" # off / shadow / active
