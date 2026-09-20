@@ -44,6 +44,7 @@ _PUBLIC_EVENT_FIELDS: dict[str, frozenset[str]] = {
     "boss_defeated": frozenset(("type", "node_id", "permanent_reward")),
     "run_abandoned": frozenset(("type", "reason")),
     "run_finished": frozenset(("type", "permanent_reward", "learning_fact_written")),
+    "revive_used": frozenset(("type", "encounter_id", "hp_restored")),
 }
 _SENSITIVE_KEYS = frozenset(
     (

@@ -18,7 +18,14 @@ from .bridge_contracts import (
     PerformActionRequest,
     require_identifier,
 )
-from .contracts import PROTOCOL_VERSION, VersionBundle, canonical_json, canonical_sha256
+from .contracts import (
+    PROTOCOL_VERSION,
+    VersionBundle,
+    canonical_json,
+    canonical_sha256,
+    validate_card_lifecycle,
+    validate_card_ownership_generation,
+)
 from .engine import KnowledgeDungeonEngine
 from .persistence import DungeonRunStore
 from .public_projection import project_public_run
@@ -49,6 +56,10 @@ def parse_live_request(operation: str, payload: object) -> dict[str, Any]:
         "create_run": {"game_session_id", "request_id", "subject_id", "scenario_id"},
         "get_run": {"game_session_id", "run_id"},
         "perform_action": {"game_session_id", "run_id", "request_id", "expected_state_version", "action_id"},
+        "revive": {
+            "game_session_id", "run_id", "request_id", "encounter_id",
+            "expected_state_version", "expected_wallet_version",
+        },
     }
     if operation not in fields or not isinstance(payload, Mapping):
         raise BridgeContractError("invalid_request", "invalid live operation")
@@ -66,6 +77,13 @@ def parse_live_request(operation: str, payload: object) -> dict[str, Any]:
         CreateRunRequest(**{k: result[k] for k in ("request_id", "subject_id", "scenario_id")})
     if operation == "perform_action":
         PerformActionRequest(**{k: result[k] for k in ("request_id", "expected_state_version", "action_id")})
+    if operation == "revive":
+        for key in ("encounter_id",):
+            require_identifier(result[key], key)
+        for key in ("expected_state_version", "expected_wallet_version"):
+            if type(result[key]) is not int or result[key] < 0:
+                raise BridgeContractError("invalid_request", f"{key} must be a non-negative integer")
+        require_identifier(result["request_id"], "request_id")
     if operation == "select_deck":
         ids = result["card_ids"]
         if (
@@ -96,6 +114,16 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
             raise ValueError("snapshot time must include a timezone")
     except ValueError as exc:
         raise ApplicationServiceError("learning_unavailable", "invalid snapshot time") from exc
+    # Providers may attach a content hash so the bridge can reject a corrupted
+    # or tampered snapshot before projecting any cards.  The hash is computed
+    # over the payload without the self-referential field.
+    supplied_hash = raw.get("snapshot_hash")
+    if supplied_hash is not None:
+        if not isinstance(supplied_hash, str) or len(supplied_hash) != 64:
+            raise ApplicationServiceError("learning_unavailable", "invalid snapshot hash")
+        expected_hash = canonical_sha256({key: value for key, value in raw.items() if key != "snapshot_hash"})
+        if supplied_hash != expected_hash:
+            raise ApplicationServiceError("learning_unavailable", "snapshot hash mismatch")
     starter = asdict(_starter_card())
     starter.update(name="红葉的怜悯", available_in_run=True, topic_id=None, mastery=None, generation=0)
     cards = [starter]
@@ -118,6 +146,10 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
         ):
             raise ApplicationServiceError("learning_unavailable", "invalid learning topic state")
         seen.add(tid)
+        try:
+            validate_card_ownership_generation(owned, generation, status=topic["status"])
+        except ValueError as exc:
+            raise ApplicationServiceError("learning_unavailable", str(exc)) from exc
         if (
             (owned and (mastery is None or mastery < 0.001 or generation < 1 or topic["status"] != "active"))
             or (not owned and topic["status"] == "active")
@@ -133,6 +165,13 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(name, str) or not name.strip():
             raise ApplicationServiceError("learning_unavailable", "missing topic name")
         require_identifier(subject, "subject")
+        lifecycle_state = str(topic.get("lifecycle_state") or "active")
+        freshness_bps = topic.get("freshness_bps", 10_000)
+        available_in_run = topic.get("available_in_run", lifecycle_state != "dormant")
+        try:
+            validate_card_lifecycle(lifecycle_state, freshness_bps, available_in_run)
+        except ValueError as exc:
+            raise ApplicationServiceError("learning_unavailable", str(exc)) from exc
         cards.append(
             dict(
                 card_id=LEGACY_IDS.get(tid, "knowledge." + tid),
@@ -140,12 +179,12 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
                 subject_id=subject,
                 base_damage=6,
                 energy_cost=1,
-                freshness_bps=10000,
-                lifecycle_state="active",
+                freshness_bps=freshness_bps,
+                lifecycle_state=lifecycle_state,
                 rules_text="",
                 flavor_text="",
                 starter=False,
-                available_in_run=True,
+                available_in_run=available_in_run,
                 topic_id=tid,
                 mastery=mastery,
                 generation=generation,
@@ -155,8 +194,13 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 class LiveLearningService:
-    def __init__(self, store: DungeonRunStore, provider: Callable[[], Mapping[str, Any]] | None) -> None:
-        self.store, self.provider = store, provider
+    def __init__(
+        self,
+        store: DungeonRunStore,
+        provider: Callable[[], Mapping[str, Any]] | None,
+        revive_service: Any | None = None,
+    ) -> None:
+        self.store, self.provider, self.revive_service = store, provider, revive_service
         self.engine = KnowledgeDungeonEngine(store)
         with store.locked_connection("initialize learning sessions") as db:
             db.executescript("""
@@ -220,6 +264,32 @@ class LiveLearningService:
             )
             events = response["events"]
             state = self.engine.get_state(state.run_id)
+        elif operation == "revive":
+            if self.revive_service is None:
+                raise ApplicationServiceError("revive_unavailable", "revive service unavailable")
+            try:
+                revive = self.revive_service.revive(
+                    run_id=state.run_id,
+                    request_id=request["request_id"],
+                    encounter_id=request["encounter_id"],
+                    expected_state_version=request["expected_state_version"],
+                    expected_wallet_version=request["expected_wallet_version"],
+                )
+                refreshed = self.engine.get_state(state.run_id)
+                result = self.project(
+                    refreshed,
+                    session,
+                    [{"type": "revive_used", "encounter_id": request["encounter_id"], "hp_restored": revive["hp_restored"]}],
+                )
+                result["revive"] = revive
+                return result
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                if code in {"concurrent_state_change", "revive_encounter_conflict"}:
+                    raise ApplicationServiceError(code, "revive request is stale") from exc
+                if exc.__class__.__name__ in {"ReviveUnavailable", "WalletError"}:
+                    raise ApplicationServiceError("revive_unavailable", "revive is unavailable") from exc
+                raise
         return self.project(state, session, events)
 
     def load(self, client: str, sid: str) -> dict[str, Any]:
@@ -256,7 +326,9 @@ class LiveLearningService:
                         **LIVE_VERSIONS,
                         "game_session_id": sid,
                         "dataset_id": raw["dataset_id"],
-                        "snapshot_id": canonical_sha256(raw),
+                        "snapshot_id": canonical_sha256(
+                            {key: value for key, value in raw.items() if key != "snapshot_hash"}
+                        ),
                         "captured_at": raw["as_of"],
                         "policy_version": raw["model_version"],
                         "selection_version": 0,

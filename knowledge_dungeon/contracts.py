@@ -16,8 +16,35 @@ CONTENT_PACK_VERSION = "calculus-v0.1.0"
 ENGINE_VERSION = "knowledge-dungeon-v0.1.0"
 CARD_POLICY_VERSION = "knowledge-cards-v1"
 RNG_ALGORITHM = "pcg32-v1"
+CARD_LIFECYCLE_STATES = frozenset(("active", "fading_light", "fading_heavy", "dormant"))
+CARD_FRESHNESS_BY_LIFECYCLE = {
+    "active": 10_000,
+    "fading_light": 8_000,
+    "fading_heavy": 5_000,
+    "dormant": 0,
+}
 
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+
+
+def validate_card_lifecycle(lifecycle_state: str, freshness_bps: int, available_in_run: bool) -> None:
+    if lifecycle_state not in CARD_LIFECYCLE_STATES:
+        raise ValueError("invalid card lifecycle state")
+    if type(freshness_bps) is not int or freshness_bps != CARD_FRESHNESS_BY_LIFECYCLE[lifecycle_state]:
+        raise ValueError("invalid card freshness for lifecycle state")
+    if type(available_in_run) is not bool or available_in_run != (lifecycle_state != "dormant"):
+        raise ValueError("invalid card availability for lifecycle state")
+
+
+def validate_card_ownership_generation(owned: bool, generation: int, *, status: str) -> None:
+    if type(owned) is not bool or type(generation) is not int or generation < 0:
+        raise ValueError("invalid card ownership generation")
+    if owned and (generation < 1 or status != "active"):
+        raise ValueError("owned card must have an active positive generation")
+    if not owned and status == "forgotten" and generation < 1:
+        raise ValueError("forgotten card must retain its prior generation")
+    if not owned and status in {"unassessed", "learning"} and generation != 0:
+        raise ValueError("unowned card without an incarnation must use generation zero")
 
 
 def _require_text(value: str, field_name: str, *, identifier: bool = False) -> str:

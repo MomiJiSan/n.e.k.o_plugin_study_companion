@@ -360,3 +360,39 @@ async def test_document_job_timeout_failure_expiry_and_shutdown(
             runner=pending_runner,
         )
     assert raised.value.diagnostic == "document_job_busy"
+
+
+@pytest.mark.asyncio
+async def test_document_job_shutdown_discards_late_committed_result(
+    document_modules: Any,
+) -> None:
+    jobs = document_modules.jobs
+    manager = jobs.DocumentAnalysisJobManager()
+    entered = asyncio.Event()
+    callback_results: list[dict[str, Any]] = []
+
+    async def runner(_update: Any) -> dict[str, Any]:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            return {
+                jobs.DOCUMENT_JOB_COMMITTED_RESULT_KEY: True,
+                "reply": "late",
+            }
+
+    started = await manager.start(
+        owner_id="owner",
+        analysis_mode="direct",
+        document={},
+        total_chunks=1,
+        runner=runner,
+        on_completed=callback_results.append,
+    )
+    await entered.wait()
+    await manager.shutdown()
+
+    assert callback_results == []
+    assert manager._jobs == {}
+    with pytest.raises(jobs.DocumentAnalysisJobError):
+        await manager.status(started["job_id"], owner_id="owner")

@@ -61,6 +61,7 @@ def _generated_contents() -> str:
         "  var exports = {};\n"
         f"{transpiled}"
         "  global.StudyCompanionUiContracts = Object.freeze({\n"
+        "    contractVersion: exports.STUDY_UI_CONTRACT_VERSION,\n"
         "    errorCode: exports.knowledgeMapErrorCode,\n"
         "    errorMessage: exports.knowledgeMapErrorMessage,\n"
         "    isCursorStale: exports.isKnowledgeMapCursorStale,\n"

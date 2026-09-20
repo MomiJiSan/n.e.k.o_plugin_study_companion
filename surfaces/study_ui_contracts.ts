@@ -8,6 +8,8 @@
 
 export type KnowledgeMapNodeLike = Record<string, unknown>;
 export type KnowledgeMapEdgeLike = Record<string, unknown>;
+/** Bump when the shared Hosted/static payload helpers change shape or semantics. */
+export const STUDY_UI_CONTRACT_VERSION = 1;
 export type KnowledgeMapPageLike = Record<string, unknown> & {
   nodes?: KnowledgeMapNodeLike[];
   edges?: KnowledgeMapEdgeLike[];

@@ -25,7 +25,8 @@ read_model = "v1"
 model_version = "mastery-v2-shadow-1"
 
 # Cognitive Evidence Engine V2. Every behavioral surface is independently
-# disabled by default. V2 is bounded to one server-validated concept cluster.
+# enabled for the validated v2.1-1 path. Unsupported versions remain fail
+# closed, and the explicit stop switch can disable personalization at runtime.
 [cognitive]
 projection_enabled = true
 read_mode = "active" # off / shadow / active

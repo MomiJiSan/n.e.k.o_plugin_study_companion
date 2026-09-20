@@ -37,6 +37,9 @@ jobs:
           --profile ci
           --report-dir "${{ runner.temp }}/cognitive-acceptance"
 
+      - name: Run release gate contract tests
+        run: uv run --locked python -m pytest -q tests/test_cognitive_release_gates.py tests/test_cognitive_release_gate_cli.py
+
       - name: Upload cognitive V2 acceptance reports
         if: always()
         uses: actions/upload-artifact@v4

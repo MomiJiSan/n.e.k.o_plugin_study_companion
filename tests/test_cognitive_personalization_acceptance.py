@@ -19,7 +19,8 @@ def test_personalization_acceptance_is_deterministic_and_writes_both_reports(tmp
     assert result == repeated
     assert result["summary"]["status"] == "PASS"
     assert set(result["checks"]["cases"]) == REQUIRED_CASES
-    assert result["checks"]["production_defaults_closed"] is True
+    assert result["checks"]["production_defaults_match_manifest"] is True
+    assert result["checks"]["all_surfaces_disabled_equivalent"] is True
     assert result["checks"]["canonical_question_recorded"] is True
     assert result["checks"]["canonical_answer_recorded"] is True
     assert result["checks"]["outcome_projection_updated"] is True

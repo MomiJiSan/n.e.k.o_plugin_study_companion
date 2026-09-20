@@ -10,11 +10,14 @@
  * legacy workspace scripts.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.STUDY_UI_CONTRACT_VERSION = void 0;
 exports.knowledgeMapErrorCode = knowledgeMapErrorCode;
 exports.knowledgeMapErrorMessage = knowledgeMapErrorMessage;
 exports.isKnowledgeMapCursorStale = isKnowledgeMapCursorStale;
 exports.isScopeKnowledgeNode = isScopeKnowledgeNode;
 exports.mergeKnowledgeMapPage = mergeKnowledgeMapPage;
+/** Bump when the shared Hosted/static payload helpers change shape or semantics. */
+exports.STUDY_UI_CONTRACT_VERSION = 1;
 function knowledgeMapErrorCode(error) {
     if (error && typeof error === 'object' && 'code' in error) {
         return String(error.code || '').trim().toUpperCase();
@@ -141,6 +144,7 @@ function mergeKnowledgeMapPage(current, page) {
     };
 }
   global.StudyCompanionUiContracts = Object.freeze({
+    contractVersion: exports.STUDY_UI_CONTRACT_VERSION,
     errorCode: exports.knowledgeMapErrorCode,
     errorMessage: exports.knowledgeMapErrorMessage,
     isCursorStale: exports.isKnowledgeMapCursorStale,

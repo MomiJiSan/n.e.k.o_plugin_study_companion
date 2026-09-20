@@ -320,16 +320,40 @@ def _uncertain(snapshot: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _production_defaults_are_closed() -> bool:
+def _production_defaults_match_manifest() -> bool:
     fields = (
         "strategy_personalization_enabled",
         "strategy_personalization_exploration_enabled",
         "strategy_personalization_stopped",
     )
-    config = _models.CognitiveConfig()
     manifest = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))[
         "cognitive"
     ]
+    config = _models.build_cognitive_config({"cognitive": manifest})
+    tracker = SimpleNamespace(
+        cognitive_strategy_shadow_enabled=True,
+        _cognitive_version_set_id=VERSION_SET,
+    )
+    owner = SimpleNamespace(
+        _cfg=SimpleNamespace(cognitive=config),
+        _knowledge_tracker=tracker,
+    )
+    return (
+        all(
+            getattr(config, field) is (field != "strategy_personalization_stopped")
+            for field in fields
+        )
+        and all(
+            manifest.get(field) is (field != "strategy_personalization_stopped")
+            for field in fields
+        )
+        and _runtime.personalization_enabled(owner) is True
+    )
+
+
+def _all_surfaces_disabled_are_equivalent() -> bool:
+    """The explicit all-off configuration must still fail closed."""
+    config = _models.CognitiveConfig()
     tracker = SimpleNamespace(
         cognitive_strategy_shadow_enabled=False,
         _cognitive_version_set_id=VERSION_SET,
@@ -338,11 +362,7 @@ def _production_defaults_are_closed() -> bool:
         _cfg=SimpleNamespace(cognitive=config),
         _knowledge_tracker=tracker,
     )
-    return (
-        all(getattr(config, field) is False for field in fields)
-        and all(manifest.get(field) is False for field in fields)
-        and _runtime.personalization_enabled(owner) is False
-    )
+    return _runtime.personalization_enabled(owner) is False
 
 
 def _personalized_question_event(
@@ -598,7 +618,8 @@ def run_acceptance(*, report_dir: Path) -> dict[str, Any]:
                 "user_stop": ("baseline", "user_stopped"),
             }
             checks = {
-                "production_defaults_closed": _production_defaults_are_closed(),
+                "production_defaults_match_manifest": _production_defaults_match_manifest(),
+                "all_surfaces_disabled_equivalent": _all_surfaces_disabled_are_equivalent(),
                 "ledger_exposure_n": len(snapshot["exposures"]),
                 "decision_snapshot_fenced": (
                     len(str(audit.get("snapshot_sha256") or "")) == 64
@@ -637,7 +658,8 @@ def run_acceptance(*, report_dir: Path) -> dict[str, Any]:
                 and all(
                     checks[name] is True
                     for name in (
-                        "production_defaults_closed",
+                        "production_defaults_match_manifest",
+                        "all_surfaces_disabled_equivalent",
                         "decision_snapshot_fenced",
                         "canonical_question_recorded",
                         "canonical_answer_recorded",
