@@ -48,6 +48,25 @@ LEGACY_IDS = {
 }
 
 
+def _review_marks(source: Mapping[str, Any], *, required: bool) -> dict[str, Any]:
+    review_due = source.get("review_due", False)
+    count = source.get("wrong_question_count", 0)
+    valid = type(review_due) is bool and type(count) is int and count >= 0
+    if required and not valid:
+        raise ApplicationServiceError("learning_unavailable", "invalid learning topic state")
+    return dict(review_due=review_due if type(review_due) is bool else False, wrong_question_count=count if valid else 0)
+
+
+def _learning_facts(source: Mapping[str, Any], *, required: bool = False) -> dict[str, Any]:
+    generation = source.get("generation", 0)
+    return dict(
+        topic_id=source.get("topic_id"),
+        mastery=source.get("mastery"),
+        generation=generation if type(generation) is int and not isinstance(generation, bool) and generation >= 0 else 0,
+        **_review_marks(source, required=required),
+    )
+
+
 def parse_live_request(operation: str, payload: object) -> dict[str, Any]:
     fields = {
         "bootstrap": set(),
@@ -125,7 +144,7 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
         if supplied_hash != expected_hash:
             raise ApplicationServiceError("learning_unavailable", "snapshot hash mismatch")
     starter = asdict(_starter_card())
-    starter.update(name="红葉的怜悯", available_in_run=True, topic_id=None, mastery=None, generation=0)
+    starter.update(name="红葉的怜悯", available_in_run=True, **_learning_facts({"topic_id": None, "mastery": None, "generation": 0}))
     cards = [starter]
     seen: set[str] = set()
     for topic in raw["topics"]:
@@ -188,6 +207,7 @@ def collection_from_snapshot(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
                 topic_id=tid,
                 mastery=mastery,
                 generation=generation,
+                **_review_marks(topic, required=True),
             )
         )
     return cards
@@ -443,7 +463,7 @@ class LiveLearningService:
         return dict(
             game_session_id=session["game_session_id"],
             dataset_id=session["dataset_id"],
-            cards={c["card_id"]: {k: c[k] for k in ("topic_id", "mastery", "generation")} for c in cards},
+            cards={c["card_id"]: _learning_facts(c) for c in cards},
         )
 
     def reconcile(self, context: Any, session: dict[str, Any], state: Any) -> Any:
@@ -479,8 +499,9 @@ class LiveLearningService:
         from .serializer import state_hash
 
         result.update(LIVE_VERSIONS, game_session_id=session["game_session_id"], state_hash=state_hash(state))
+        overlays = learning.get("cards", {})
         for card in result["run"]["cards"]:
-            card.update(learning.get("cards", {}).get(card["card_id"], dict(topic_id=None, mastery=None, generation=0)))
+            card.update(_learning_facts(overlays.get(card["card_id"], {})))
             if card["starter"]:
                 card["name"] = "红葉的怜悯"
         return result
