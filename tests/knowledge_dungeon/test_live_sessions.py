@@ -377,16 +377,46 @@ def test_collection_preserves_review_projection_metadata_and_rejects_invalid_val
         lifecycle_state="fading_light",
         freshness_bps=8000,
         available_in_run=True,
-        fsrs_due_at="2026-09-21T00:00:00+00:00",
+        review_due=True,
         wrong_question_count=2,
     )
-    card = collection_from_snapshot(raw)[1]
+    cards = collection_from_snapshot(raw)
+    card = cards[1]
     assert card["lifecycle_state"] == "fading_light"
     assert card["freshness_bps"] == 8000
+    assert card["review_due"] is True
+    assert card["wrong_question_count"] == 2
+    assert cards[0]["review_due"] is False
+    assert cards[0]["wrong_question_count"] == 0
 
+    raw["topics"][0]["wrong_question_count"] = -1
+    with pytest.raises(ApplicationServiceError):
+        collection_from_snapshot(raw)
+
+    raw["topics"][0]["wrong_question_count"] = 2
+    raw["topics"][0]["review_due"] = "yes"
+    with pytest.raises(ApplicationServiceError):
+        collection_from_snapshot(raw)
+
+    raw["topics"][0]["review_due"] = True
     raw["topics"][0]["freshness_bps"] = 10001
     with pytest.raises(ApplicationServiceError):
         collection_from_snapshot(raw)
+
+
+@pytest.mark.asyncio
+async def test_run_projection_carries_frozen_review_marks_without_changing_combat(tmp_path):
+    raw = snapshot()
+    raw["topics"][0].update(review_due=True, wrong_question_count=3)
+    adapter = KnowledgeDungeonHostAdapter(tmp_path / "runs.db", learning_snapshot_provider=lambda: deepcopy(raw))
+    run = await start(adapter)
+    card = next(item for item in run["run"]["cards"] if item["card_id"] == CARD)
+    starter = next(item for item in run["run"]["cards"] if item["starter"])
+    assert card["review_due"] is True
+    assert card["wrong_question_count"] == 3
+    assert starter["review_due"] is False
+    assert starter["wrong_question_count"] == 0
+    assert card["base_damage"] == 6
 
 
 def test_snapshot_hash_is_verified_before_card_projection():

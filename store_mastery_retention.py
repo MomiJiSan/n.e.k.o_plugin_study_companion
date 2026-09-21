@@ -20,6 +20,7 @@ from .adaptive_learning.mastery_retention import (
     feedback_half_life,
     finite_fraction,
 )
+from .fsrs_bridge import get_due_reviews
 
 
 def utc_timestamp() -> float:
@@ -233,6 +234,31 @@ def _view(state: dict, mastery: float, now: float) -> dict:
                 model_version=MODEL_VERSION, updated_at=_iso(state["anchor"]), as_of=_iso(now))
 
 
+def _topic_review_status(conn: sqlite3.Connection, topic_id: str, now: float) -> tuple[bool, int]:
+    # FSRS is only a scheduler. Missing or unreadable cards never mean forgotten.
+    review_due = False
+    fsrs_row = conn.execute("SELECT card_data FROM fsrs_cards WHERE topic_id = ?", (topic_id,)).fetchone()
+    if fsrs_row is not None:
+        try:
+            fsrs_card = json.loads(str(fsrs_row["card_data"] or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            fsrs_card = {}
+        if isinstance(fsrs_card, dict) and fsrs_card.get("due"):
+            try:
+                review_due = bool(get_due_reviews([fsrs_card], now=datetime.fromtimestamp(now, timezone.utc)))
+            except (TypeError, ValueError, KeyError):
+                review_due = False
+    wrong_row = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM wrong_questions
+        WHERE topic_id = ? AND status IN ('active', 'retrying')
+        """,
+        (topic_id,),
+    ).fetchone()
+    return review_due, int(wrong_row["count"] if wrong_row else 0)
+
+
 def get_learning_card_snapshot(self) -> dict[str, Any]:
     with self._lock:
         conn = self._require_conn()
@@ -245,6 +271,8 @@ def get_learning_card_snapshot(self) -> dict[str, Any]:
                 view = (_view(state, _expire(conn, state, now), now) if state else
                         dict(topic_id=topic["id"], mastery=None, owned=False, generation=0, status="unassessed"))
                 view.update(name=topic["name"], subject=topic["subject"] or "")
+                review_due, wrong_question_count = _topic_review_status(conn, topic["id"], now)
+                view.update(review_due=review_due, wrong_question_count=wrong_question_count)
                 topics.append(view)
             identity = conn.execute("SELECT * FROM mastery_retention_identity WHERE singleton=1").fetchone()
             result = dict(dataset_id=identity["dataset_id"], model_version=MODEL_VERSION,

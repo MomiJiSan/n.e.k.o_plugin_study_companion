@@ -14,7 +14,7 @@
 
 ## 游戏接口与会话
 
-插件启动时将 `KnowledgeTracker.get_learning_card_snapshot` 传给 `KnowledgeDungeonPrivateBridge`。快照包含数据集身份、版本、时间和所有学科的知识点掌握度、持有状态与代次。收藏覆盖已掌握的各学科知识点；地图内容仍受现有场景支持范围限制。
+插件启动时将 `KnowledgeTracker.get_learning_card_snapshot` 传给 `KnowledgeDungeonPrivateBridge`。快照包含数据集身份、版本、时间和所有学科的知识点掌握度、持有状态、代次，以及冻结当下的 `review_due` / `wrong_question_count`。这两项只供游戏展示，不改变拥有权、掌握度或伤害。收藏覆盖已掌握的各学科知识点；地图内容仍受现有场景支持范围限制。
 
 私有连接认证继续使用 v1；真实学习领域请求使用 v2：
 

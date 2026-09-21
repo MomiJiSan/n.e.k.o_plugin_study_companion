@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import math
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -305,3 +306,42 @@ def test_real_tracker_answer_keeps_public_mastery_contract(runtime):
                                  "evaluator_type": "llm_rubric", "confidence": 1},
                                  mode="companion", session_id="s", attempt_id="a", used_hint=False)
     assert {"topic_id", "mastery", "accuracy", "recency", "consistency", "confidence", "level", "attempts", "flags"} <= repeated["mastery"].keys()
+
+
+def test_learning_snapshot_marks_due_and_wrong_questions_without_changing_ownership(runtime):
+    store, clock, module = runtime
+    answer(store, attempt="correct")
+    first = topic(store)
+    assert first["owned"] is True
+    assert first["review_due"] is False
+    assert first["wrong_question_count"] == 0
+
+    fsrs = importlib.import_module(module.__package__ + ".fsrs_bridge")
+    as_of = datetime.fromtimestamp(clock[0], timezone.utc)
+    due_card = fsrs.create_card("topic", now=as_of).to_dict()
+    due_card["due"] = datetime.fromtimestamp(clock[0] - 86400, timezone.utc).isoformat()
+    store.upsert_fsrs_card(topic_id="topic", card=due_card, last_rating=3)
+    due = topic(store)
+    assert due["owned"] is True
+    assert due["review_due"] is True
+    assert due["wrong_question_count"] == 0
+
+    later_card = fsrs.create_card("topic", now=as_of).to_dict()
+    later_card["due"] = datetime.fromtimestamp(clock[0] + 7 * 86400, timezone.utc).isoformat()
+    store.upsert_fsrs_card(topic_id="topic", card=later_card, last_rating=3)
+    later = topic(store)
+    assert later["owned"] is True
+    assert later["review_due"] is False
+
+    store.add_wrong_question(
+        topic_id="topic",
+        question={"question_id": "wrong", "question": "2 + 3?"},
+        user_answer="5?",
+        expected_answer="5",
+        error_type="calculation",
+        verdict="wrong",
+    )
+    counted = topic(store)
+    assert counted["wrong_question_count"] == 1
+    assert counted["owned"] is True
+    assert counted["review_due"] is False
